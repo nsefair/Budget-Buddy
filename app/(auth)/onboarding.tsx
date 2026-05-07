@@ -1,357 +1,316 @@
-import React, { useState, useRef } from "react";
-import {
-  View,
-  Text,
-  Pressable,
-  StyleSheet,
-  Dimensions,
-  ScrollView,
-  TextInput,
-  Animated,
-} from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
+/**
+ * Onboarding Container
+ *
+ * Implements the 9-step flow specified in Section 4 of the developer review:
+ *
+ *   0. Welcome             — Bud hero moment
+ *   1. Profile             — name + age + life situation
+ *   2. Goals               — pick 1–3 goal kinds
+ *   3. Why                 — emotional anchor
+ *   4. Bank                — Plaid connect (skippable)
+ *   5. Pricing             — tier select + monthly/annual + lifetime
+ *   6. First Goal          — concrete target + deadline + reason
+ *   7. First Quest + Streak — Bud assigns + flame ignites
+ *   8. Buds Share          — opt-in starting moment
+ *
+ * Architecture:
+ *   • Each step is a self-contained component in src/features/onboarding/steps/.
+ *   • Draft state lives in useOnboardingStore (zustand).
+ *   • All API/IO goes through onboardingService — never touched directly here.
+ *   • Final submission is one atomic call to onboardingService.complete(draft).
+ *
+ * Backend integration:
+ *   When EXPO_PUBLIC_USE_MOCK=false the service flips to real endpoints.
+ *   Nothing in this file changes.
+ */
+
+import React, { useEffect, useMemo, useState } from "react";
+import { Alert } from "react-native";
 import { router } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Colors } from "@/constants/colors";
-import { useUser, useAuthActions } from "@/hooks/useAuth";
 import * as Haptics from "expo-haptics";
 
-const TOTAL_STEPS = 5;
+import { OnboardingShell } from "@/features/onboarding/components/OnboardingShell";
+import { PrimaryButton, SecondaryButton } from "@/features/onboarding/components/PrimaryButton";
 
-const GOALS = [
-  { id: "emergency", emoji: "🛡️", label: "Build an emergency fund", sub: "3–6 months of protection" },
-  { id: "debt", emoji: "⚔️", label: "Pay off debt", sub: "Break free from what's holding you back" },
-  { id: "overspend", emoji: "🎯", label: "Stop overspending", sub: "Build real awareness of where it goes" },
-  { id: "save", emoji: "✈️", label: "Save for something specific", sub: "Travel, car, home, whatever matters" },
-  { id: "invest", emoji: "📈", label: "Start investing", sub: "Make your money work for you" },
-  { id: "other", emoji: "✍️", label: "Something else", sub: "Tell Bud what you're working toward" },
-];
+import { StepWelcome } from "@/features/onboarding/steps/StepWelcome";
+import { StepProfile } from "@/features/onboarding/steps/StepProfile";
+import { StepGoals } from "@/features/onboarding/steps/StepGoals";
+import { StepWhy } from "@/features/onboarding/steps/StepWhy";
+import { StepBank } from "@/features/onboarding/steps/StepBank";
+import { StepPricing } from "@/features/onboarding/steps/StepPricing";
+import { StepFirstGoal } from "@/features/onboarding/steps/StepFirstGoal";
+import { StepFirstQuest } from "@/features/onboarding/steps/StepFirstQuest";
+import { StepShare } from "@/features/onboarding/steps/StepShare";
 
-const WHY_OPTIONS = [
-  { id: "freedom", emoji: "🔓", label: "Financial freedom", sub: "Stop stressing about money" },
-  { id: "family", emoji: "❤️", label: "Retire my parents", sub: "Give back to those who sacrificed" },
-  { id: "wealth", emoji: "📈", label: "Build wealth young", sub: "Start now, win later" },
-  { id: "debt", emoji: "⚔️", label: "Destroy my debt", sub: "Break free from what holds me back" },
-  { id: "dream", emoji: "✈️", label: "Fund my dream life", sub: "Travel, experiences, the life I want" },
-  { id: "legacy", emoji: "🏛️", label: "Leave a legacy", sub: "Build something that outlasts me" },
-];
+import { WHY_OPTIONS, GOAL_OPTIONS } from "@/features/onboarding/data";
+import { onboardingService } from "@/services/onboardingService";
+
+import {
+  useDraft,
+  useDraftActions,
+  useOnboardingStore,
+} from "@/stores/onboardingStore";
+import { useUser, useAuthActions } from "@/hooks/useAuth";
+
+const TOTAL_STEPS = 9;
 
 export default function OnboardingScreen() {
-  const insets = useSafeAreaInsets();
   const user = useUser();
-  const { setOnboardingComplete, updateUser } = useAuthActions();
+  const { updateUser, setOnboardingComplete } = useAuthActions();
 
-  const [step, setStep] = useState(0);
-  const [selectedGoals, setSelectedGoals] = useState<string[]>([]);
-  const [selectedWhy, setSelectedWhy] = useState<string | null>(null);
-  const [customWhy, setCustomWhy] = useState("");
+  const draft = useDraft();
+  const { patch, reset } = useDraftActions();
+  const step = useOnboardingStore((s) => s.step);
+  const setStep = useOnboardingStore((s) => s.setStep);
 
-  // Progress bar — useNativeDriver: false because we animate width (layout prop)
-  const progressAnim = useRef(new Animated.Value(0)).current;
+  const [submitting, setSubmitting] = useState(false);
 
-  const goToStep = (next: number) => {
+  // Pre-fill the draft with the registered user's first name once on mount.
+  useEffect(() => {
+    if (user?.firstName && !draft.firstName) {
+      patch({ firstName: user.firstName });
+    }
+    // We intentionally only run this once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ─── Per-step "can advance" gates ──────────────────────────────────────────
+  const canAdvance = useMemo(() => {
+    switch (step) {
+      case 0:
+        return true;
+      case 1:
+        return Boolean(draft.firstName.trim() && draft.ageRange && draft.situation);
+      case 2:
+        if (draft.goalKinds.length === 0) return false;
+        if (draft.goalKinds.includes("custom") && !draft.customGoalLabel.trim()) {
+          return false;
+        }
+        return true;
+      case 3:
+        if (!draft.whyId) return false;
+        if (draft.whyId === "custom" && !draft.whyText.trim()) return false;
+        return true;
+      case 4:
+        // Bank step is skippable — always allow advance
+        return true;
+      case 5:
+        return Boolean(draft.plan.tier);
+      case 6:
+        return Boolean(
+          draft.firstGoal &&
+            draft.firstGoal.name.trim() &&
+            draft.firstGoal.targetAmount > 0
+        );
+      case 7:
+        return Boolean(draft.firstQuest);
+      case 8:
+        return true;
+      default:
+        return false;
+    }
+  }, [step, draft]);
+
+  // ─── Navigation ────────────────────────────────────────────────────────────
+  const goNext = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Animated.timing(progressAnim, {
-      toValue: next / (TOTAL_STEPS - 1),
-      duration: 400,
-      useNativeDriver: false, // width is a layout property — native driver not supported
-    }).start();
-    setStep(next);
+    if (step < TOTAL_STEPS - 1) setStep(step + 1);
   };
-
-  const toggleGoal = (id: string) => {
+  const goBack = () => {
+    if (step === 0) return;
     Haptics.selectionAsync();
-    setSelectedGoals((prev) =>
-      prev.includes(id) ? prev.filter((g) => g !== id) : [...prev, id].slice(0, 3)
-    );
+    setStep(step - 1);
   };
 
+  // Resolve the final "why" string + emoji from the user's selection.
+  const resolveWhy = () => {
+    if (draft.whyId === "custom") {
+      return { text: draft.whyText, emoji: "✨" };
+    }
+    const found = WHY_OPTIONS.find((w) => w.id === draft.whyId);
+    return { text: found?.label ?? "", emoji: found?.emoji ?? "✨" };
+  };
+
+  // ─── Final submission ──────────────────────────────────────────────────────
   const handleFinish = async () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    const why =
-      selectedWhy === "other"
-        ? customWhy
-        : WHY_OPTIONS.find((w) => w.id === selectedWhy)?.label ?? "";
-    const whyEmoji = WHY_OPTIONS.find((w) => w.id === selectedWhy)?.emoji ?? "✨";
-    updateUser({ why, whyEmoji });
-    await setOnboardingComplete();
-    router.replace("/(tabs)/today");
+    setSubmitting(true);
+    try {
+      const { text, emoji } = resolveWhy();
+      const finalDraft = { ...draft, whyText: text, whyEmoji: emoji };
+      patch({ whyText: text, whyEmoji: emoji });
+
+      // Send everything to the backend in one atomic call.
+      await onboardingService.complete(finalDraft);
+
+      // Update the local user with the bits the home screen reads.
+      updateUser({
+        firstName: finalDraft.firstName,
+        why: text,
+        whyEmoji: emoji,
+        subscriptionTier: finalDraft.plan.tier,
+        streak: 1,
+      });
+
+      await setOnboardingComplete();
+      reset();
+      router.replace("/(tabs)/today");
+    } catch (e) {
+      Alert.alert(
+        "Couldn't save your setup",
+        "Bud will keep your answers ready. Let's try that again in a moment."
+      );
+      setSubmitting(false);
+    }
   };
 
-  const progressWidth = progressAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0%", "100%"],
-  });
-
-  const steps = [
-    <StepWelcome key="welcome" name={user?.firstName ?? "there"} onNext={() => goToStep(1)} />,
-    <StepGoals key="goals" goals={GOALS} selected={selectedGoals} onToggle={toggleGoal} onNext={() => goToStep(2)} onBack={() => goToStep(0)} />,
-    <StepWhy key="why" options={WHY_OPTIONS} selected={selectedWhy} customWhy={customWhy} onSelect={setSelectedWhy} onCustom={setCustomWhy} onNext={() => goToStep(3)} onBack={() => goToStep(1)} />,
-    <StepStreak key="streak" onNext={() => goToStep(4)} onBack={() => goToStep(2)} />,
-    <StepReady key="ready" name={user?.firstName ?? "there"} onFinish={handleFinish} onBack={() => goToStep(3)} />,
-  ];
+  // ─── Footer (next / skip / finish) ─────────────────────────────────────────
+  const footer = (() => {
+    if (step === 0) {
+      return <PrimaryButton label="Let's start" onPress={goNext} />;
+    }
+    if (step === 4) {
+      // Bank step has its own connect button inline. Footer offers Continue + Skip.
+      return (
+        <>
+          <PrimaryButton
+            label={draft.bankConnected ? "Continue" : "Continue without connecting"}
+            onPress={goNext}
+          />
+          {!draft.bankConnected && (
+            <SecondaryButton label="I'll connect later" onPress={goNext} />
+          )}
+        </>
+      );
+    }
+    if (step === 7) {
+      return <PrimaryButton label="Sounds good" onPress={goNext} />;
+    }
+    if (step === TOTAL_STEPS - 1) {
+      return (
+        <PrimaryButton
+          label={
+            draft.shareToBuds ? "Post & enter Budget Buddy" : "Enter Budget Buddy"
+          }
+          onPress={handleFinish}
+          loading={submitting}
+        />
+      );
+    }
+    return (
+      <PrimaryButton
+        label="Continue"
+        onPress={goNext}
+        disabled={!canAdvance}
+      />
+    );
+  })();
 
   return (
-    <LinearGradient colors={["#0E1926", "#1B2B4B"]} style={{ flex: 1 }}>
-      {/* Progress bar */}
-      <View style={[styles.progressContainer, { paddingTop: insets.top + 16 }]}>
-        <Text style={styles.stepLabel}>{step + 1} of {TOTAL_STEPS}</Text>
-        <View style={styles.progressTrack}>
-          <Animated.View style={[styles.progressFill, { width: progressWidth }]} />
-        </View>
-      </View>
+    <OnboardingShell
+      step={step}
+      totalSteps={TOTAL_STEPS}
+      onBack={step === 0 ? undefined : goBack}
+      hideProgress={step === 0}
+      centerContent={step === 0}
+      footer={footer}
+    >
+      {step === 0 && (
+        <StepWelcome firstName={draft.firstName || user?.firstName || ""} onNext={goNext} />
+      )}
 
-      <View style={[styles.stepContainer, { paddingBottom: insets.bottom + 24 }]}>
-        {steps[step]}
-      </View>
-    </LinearGradient>
-  );
-}
-
-// ─── Step Components ──────────────────────────────────────────────────────────
-
-function StepWelcome({ name, onNext }: { name: string; onNext: () => void }) {
-  return (
-    <ScrollView contentContainerStyle={styles.stepContent} showsVerticalScrollIndicator={false}>
-      <Text style={styles.budLabel}>👋 Bud says</Text>
-      <Text style={styles.stepTitle}>Hey {name}, let's get you set up.</Text>
-      <Text style={styles.stepBody}>
-        Bud is your AI financial guide. In the next few minutes, I'll learn what you're working
-        toward so I can make this personal from day one.
-      </Text>
-      <Text style={styles.stepBody}>
-        No judgement. Just your situation, your goals, and a plan that actually fits you.
-      </Text>
-      <NextButton label="Let's go →" onPress={onNext} />
-    </ScrollView>
-  );
-}
-
-function StepGoals({ goals, selected, onToggle, onNext, onBack }: {
-  goals: typeof GOALS; selected: string[]; onToggle: (id: string) => void; onNext: () => void; onBack: () => void;
-}) {
-  return (
-    <ScrollView contentContainerStyle={styles.stepContent} showsVerticalScrollIndicator={false}>
-      <Text style={styles.stepTitle}>What are you working toward?</Text>
-      <Text style={styles.stepSubtitle}>Pick up to 3. This shapes your quests and advice.</Text>
-      <View style={styles.optionGrid}>
-        {goals.map((g) => {
-          const isSel = selected.includes(g.id);
-          return (
-            <Pressable
-              key={g.id}
-              style={[styles.optionCard, isSel && styles.optionCardSelected]}
-              onPress={() => onToggle(g.id)}
-            >
-              <Text style={styles.optionEmoji}>{g.emoji}</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.optionLabel, isSel && styles.optionLabelSelected]}>{g.label}</Text>
-                <Text style={styles.optionSub}>{g.sub}</Text>
-              </View>
-              {isSel && <Text style={styles.checkmark}>✓</Text>}
-            </Pressable>
-          );
-        })}
-      </View>
-      <View style={styles.navRow}>
-        <BackButton onPress={onBack} />
-        <NextButton label={`Continue (${selected.length})`} onPress={onNext} disabled={selected.length === 0} />
-      </View>
-    </ScrollView>
-  );
-}
-
-function StepWhy({ options, selected, customWhy, onSelect, onCustom, onNext, onBack }: {
-  options: typeof WHY_OPTIONS; selected: string | null; customWhy: string;
-  onSelect: (id: string) => void; onCustom: (v: string) => void; onNext: () => void; onBack: () => void;
-}) {
-  return (
-    <ScrollView contentContainerStyle={styles.stepContent} showsVerticalScrollIndicator={false}>
-      <Text style={styles.stepTitle}>What's your real reason?</Text>
-      <Text style={styles.stepSubtitle}>
-        Bud will remind you of this every day. Be honest — it's just for you.
-      </Text>
-      <View style={styles.optionGrid}>
-        {options.map((w) => {
-          const isSel = selected === w.id;
-          return (
-            <Pressable
-              key={w.id}
-              style={[styles.optionCard, isSel && styles.optionCardSelected]}
-              onPress={() => onSelect(w.id)}
-            >
-              <Text style={styles.optionEmoji}>{w.emoji}</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.optionLabel, isSel && styles.optionLabelSelected]}>{w.label}</Text>
-                <Text style={styles.optionSub}>{w.sub}</Text>
-              </View>
-              {isSel && <Text style={styles.checkmark}>✓</Text>}
-            </Pressable>
-          );
-        })}
-      </View>
-      {selected === "other" && (
-        <TextInput
-          style={styles.whyInput}
-          value={customWhy}
-          onChangeText={onCustom}
-          placeholder="Write your real reason..."
-          placeholderTextColor={Colors.muted}
-          multiline
-          numberOfLines={3}
+      {step === 1 && (
+        <StepProfile
+          firstName={draft.firstName}
+          ageRange={draft.ageRange}
+          situation={draft.situation}
+          onChangeName={(v) => patch({ firstName: v })}
+          onChangeAge={(v) => patch({ ageRange: v })}
+          onChangeSituation={(v) => patch({ situation: v })}
         />
       )}
-      <View style={styles.navRow}>
-        <BackButton onPress={onBack} />
-        <NextButton label="Continue →" onPress={onNext} disabled={!selected} />
-      </View>
-    </ScrollView>
+
+      {step === 2 && (
+        <StepGoals
+          selected={draft.goalKinds}
+          customLabel={draft.customGoalLabel}
+          onToggle={(kind) => {
+            const has = draft.goalKinds.includes(kind);
+            const next = has
+              ? draft.goalKinds.filter((g) => g !== kind)
+              : [...draft.goalKinds, kind].slice(0, 3);
+            patch({ goalKinds: next });
+          }}
+          onChangeCustom={(v) => patch({ customGoalLabel: v })}
+        />
+      )}
+
+      {step === 3 && (
+        <StepWhy
+          selectedId={draft.whyId}
+          customText={draft.whyText}
+          onSelect={(id) => {
+            const opt = WHY_OPTIONS.find((w) => w.id === id);
+            patch({
+              whyId: id,
+              // Keep the canonical label in whyText unless they're typing custom.
+              whyText: id === "custom" ? draft.whyText : opt?.label ?? "",
+              whyEmoji: opt?.emoji ?? "✨",
+            });
+          }}
+          onChangeCustom={(v) => patch({ whyText: v })}
+        />
+      )}
+
+      {step === 4 && (
+        <StepBank
+          bankConnected={draft.bankConnected}
+          onConnected={() => patch({ bankConnected: true })}
+        />
+      )}
+
+      {step === 5 && (
+        <StepPricing
+          selectedTier={draft.plan.tier}
+          cycle={draft.plan.cycle}
+          isLifetime={draft.plan.isLifetime}
+          onChangeTier={(tier) =>
+            patch({ plan: { ...draft.plan, tier } })
+          }
+          onChangeCycle={(cycle) =>
+            patch({ plan: { ...draft.plan, cycle } })
+          }
+          onChangeLifetime={(isLifetime) =>
+            patch({ plan: { ...draft.plan, isLifetime } })
+          }
+        />
+      )}
+
+      {step === 6 && (
+        <StepFirstGoal
+          goalKind={draft.goalKinds[0] ?? "custom"}
+          customGoalLabel={draft.customGoalLabel}
+          goal={draft.firstGoal}
+          onChange={(g) => patch({ firstGoal: g })}
+        />
+      )}
+
+      {step === 7 && (
+        <StepFirstQuest
+          goalKinds={draft.goalKinds.length ? draft.goalKinds : ["custom"]}
+          quest={draft.firstQuest}
+          onLoaded={(q) => patch({ firstQuest: q })}
+        />
+      )}
+
+      {step === 8 && (
+        <StepShare
+          firstName={draft.firstName}
+          whyEmoji={draft.whyEmoji}
+          share={draft.shareToBuds}
+          onChangeShare={(v) => patch({ shareToBuds: v })}
+        />
+      )}
+    </OnboardingShell>
   );
 }
-
-function StepStreak({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
-  return (
-    <ScrollView contentContainerStyle={styles.stepContent} showsVerticalScrollIndicator={false}>
-      <View style={styles.streakOrb}>
-        <Text style={styles.streakFlame}>🔥</Text>
-        <Text style={styles.streakDay}>Day 1</Text>
-      </View>
-      <Text style={styles.stepTitle}>Your streak starts now.</Text>
-      <Text style={styles.stepBody}>
-        Open Budget Buddy every day to keep your flame alive. Miss a day and it resets.
-        This is how Duolingo built 500 million habits — and it works for money too.
-      </Text>
-      <Text style={styles.stepBody}>
-        Your streak is visible to your Buds. It signals discipline. That's real social currency.
-      </Text>
-      <View style={styles.navRow}>
-        <BackButton onPress={onBack} />
-        <NextButton label="I'm ready 🔥" onPress={onNext} />
-      </View>
-    </ScrollView>
-  );
-}
-
-function StepReady({ name, onFinish, onBack }: { name: string; onFinish: () => void; onBack: () => void }) {
-  return (
-    <ScrollView contentContainerStyle={styles.stepContent} showsVerticalScrollIndicator={false}>
-      <Text style={{ fontSize: 64, textAlign: "center", marginBottom: 16 }}>⚡</Text>
-      <Text style={styles.stepTitle}>{name}, you're set up.</Text>
-      <Text style={styles.stepBody}>
-        Bud has your goals, your why, and your first quest ready. Your financial life starts
-        the moment you walk through that door.
-      </Text>
-      <Text style={[styles.stepBody, { color: Colors.gold }]}>
-        This is the step most people never take.
-      </Text>
-      <View style={styles.navRow}>
-        <BackButton onPress={onBack} />
-        <NextButton label="Enter Budget Buddy →" onPress={onFinish} />
-      </View>
-    </ScrollView>
-  );
-}
-
-function NextButton({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      style={({ pressed }) => [
-        styles.nextBtn,
-        disabled && { opacity: 0.4 },
-        pressed && { opacity: 0.8 },
-      ]}
-    >
-      <LinearGradient
-        colors={[Colors.gold, "#E08A10"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        style={styles.nextBtnGradient}
-      >
-        <Text style={styles.nextBtnText}>{label}</Text>
-      </LinearGradient>
-    </Pressable>
-  );
-}
-
-function BackButton({ onPress }: { onPress: () => void }) {
-  return (
-    <Pressable onPress={onPress} style={styles.backBtn}>
-      <Text style={styles.backBtnText}>← Back</Text>
-    </Pressable>
-  );
-}
-
-const styles = StyleSheet.create({
-  progressContainer: { paddingHorizontal: 24, paddingBottom: 16 },
-  stepLabel: { fontSize: 12, color: Colors.muted, fontWeight: "500", marginBottom: 8, letterSpacing: 0.5 },
-  progressTrack: { height: 3, backgroundColor: "rgba(255,255,255,0.1)", borderRadius: 2 },
-  progressFill: { height: 3, backgroundColor: Colors.gold, borderRadius: 2 },
-  stepContainer: { flex: 1, paddingHorizontal: 24 },
-  stepContent: { paddingTop: 16, paddingBottom: 32 },
-  budLabel: { fontSize: 13, color: Colors.gold, fontWeight: "600", marginBottom: 12, letterSpacing: 0.3 },
-  stepTitle: { fontSize: 28, fontWeight: "800", color: "#FFF", letterSpacing: -0.5, lineHeight: 36, marginBottom: 16 },
-  stepSubtitle: { fontSize: 15, color: Colors.muted, marginBottom: 24, lineHeight: 22 },
-  stepBody: { fontSize: 15, color: Colors.muted, lineHeight: 24, marginBottom: 16 },
-  optionGrid: { gap: 10, marginBottom: 24 },
-  optionCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.08)",
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  optionCardSelected: { borderColor: Colors.gold, backgroundColor: "rgba(244,168,50,0.1)" },
-  optionEmoji: { fontSize: 24 },
-  optionLabel: { fontSize: 15, fontWeight: "600", color: "#FFF" },
-  optionLabelSelected: { color: Colors.gold },
-  optionSub: { fontSize: 12, color: Colors.muted, marginTop: 2 },
-  checkmark: { fontSize: 16, color: Colors.gold, fontWeight: "700" },
-  navRow: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 8 },
-  nextBtn: {
-    flex: 1,
-    borderRadius: 14,
-    overflow: "hidden",
-    shadowColor: Colors.gold,
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
-  },
-  nextBtnGradient: { paddingVertical: 16, alignItems: "center" },
-  nextBtnText: { fontSize: 16, fontWeight: "700", color: Colors.navy },
-  backBtn: { paddingHorizontal: 16, paddingVertical: 16 },
-  backBtnText: { fontSize: 15, color: Colors.muted, fontWeight: "500" },
-  whyInput: {
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 15,
-    color: "#FFF",
-    marginBottom: 24,
-    minHeight: 88,
-    textAlignVertical: "top",
-  },
-  streakOrb: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: "rgba(244,168,50,0.12)",
-    alignSelf: "center",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 24,
-    borderWidth: 1.5,
-    borderColor: "rgba(244,168,50,0.3)",
-  },
-  streakFlame: { fontSize: 40 },
-  streakDay: { fontSize: 16, fontWeight: "700", color: Colors.gold, marginTop: 2 },
-});
