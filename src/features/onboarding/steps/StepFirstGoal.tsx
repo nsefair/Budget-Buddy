@@ -22,6 +22,7 @@ import { Headline, Subheadline } from "../components/Headline";
 import { GOAL_OPTIONS } from "../data";
 import type { FirstGoal, GoalKind } from "../types";
 import { Colors } from "@/constants/colors";
+import { Icon } from "@/components/Icon";
 
 interface Props {
   goalKind: GoalKind;
@@ -185,9 +186,12 @@ export function StepFirstGoal({
 
       {/* Goal title */}
       <View>
-        <Text style={styles.fieldLabel}>
-          {goalMeta?.emoji} Name your goal
-        </Text>
+        <View style={styles.fieldLabelRow}>
+          {goalMeta?.icon && (
+            <Icon name={goalMeta.icon} size={13} color={Colors.gold} strokeWidth={2.4} />
+          )}
+          <Text style={[styles.fieldLabel, { marginBottom: 0 }]}>Name your goal</Text>
+        </View>
         <TextInput
           value={current.name}
           onChangeText={(v) => setField("name", v)}
@@ -292,6 +296,12 @@ export function StepFirstGoal({
 }
 
 const styles = StyleSheet.create({
+  fieldLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 10,
+  },
   fieldLabel: {
     fontSize: 13,
     fontWeight: "700",

@@ -5,8 +5,12 @@
  * will see in production, not test data. The backend may eventually serve
  * these dynamically — when that happens, replace the imports with a
  * service call inside onboardingService.getContent().
+ *
+ * Note: every option is paired with a Lucide icon name (typed via IconName)
+ * — no emojis. Keeps the brand professional, finance-app-grade.
  */
 
+import type { IconName } from "@/components/Icon";
 import type {
   AgeRange,
   GoalKind,
@@ -26,37 +30,37 @@ export const AGE_RANGES: { id: AgeRange; label: string }[] = [
 
 export const SITUATIONS: {
   id: LifeSituation;
-  emoji: string;
+  icon: IconName;
   label: string;
   sub: string;
 }[] = [
   {
     id: "college_student",
-    emoji: "🎓",
+    icon: "layers",
     label: "College student",
     sub: "Studying, maybe a part-time gig",
   },
   {
     id: "first_job",
-    emoji: "💼",
+    icon: "wallet",
     label: "First real job",
     sub: "Figuring out the paycheck thing",
   },
   {
     id: "side_hustle",
-    emoji: "⚡",
+    icon: "zap",
     label: "Side hustle",
     sub: "Mixing income from a few sources",
   },
   {
     id: "established_career",
-    emoji: "🚀",
+    icon: "trending-up",
     label: "Established career",
     sub: "Steady income, ready to optimize",
   },
   {
     id: "between_jobs",
-    emoji: "🌱",
+    icon: "activity",
     label: "Between things",
     sub: "Resetting and rebuilding",
   },
@@ -66,49 +70,49 @@ export const SITUATIONS: {
 
 export const GOAL_OPTIONS: {
   id: GoalKind;
-  emoji: string;
+  icon: IconName;
   label: string;
   sub: string;
 }[] = [
   {
     id: "emergency_fund",
-    emoji: "🛡️",
+    icon: "shield",
     label: "Build an emergency fund",
     sub: "3–6 months of breathing room",
   },
   {
     id: "debt_payoff",
-    emoji: "⚔️",
+    icon: "credit-card",
     label: "Pay off debt",
     sub: "Free up the money you already earn",
   },
   {
     id: "stop_overspending",
-    emoji: "🎯",
+    icon: "target",
     label: "Stop overspending",
     sub: "Know where it goes before it's gone",
   },
   {
     id: "savings_target",
-    emoji: "✈️",
+    icon: "piggy-bank",
     label: "Save for something specific",
     sub: "A trip, a car, a move, a milestone",
   },
   {
     id: "invest",
-    emoji: "📈",
+    icon: "trending-up",
     label: "Start investing",
     sub: "Put your money to work for you",
   },
   {
     id: "income_growth",
-    emoji: "💰",
+    icon: "banknote",
     label: "Grow my income",
     sub: "Track and lift what you earn",
   },
   {
     id: "custom",
-    emoji: "✨",
+    icon: "sparkles",
     label: "Something else",
     sub: "Tell Bud what you're working toward",
   },
@@ -118,56 +122,55 @@ export const GOAL_OPTIONS: {
 
 export const WHY_OPTIONS: {
   id: string;
-  emoji: string;
+  icon: IconName;
   label: string;
   sub: string;
 }[] = [
   {
     id: "freedom",
-    emoji: "🔓",
+    icon: "shield-check",
     label: "Stop stressing about money",
     sub: "I want peace, not panic, when I check my balance",
   },
   {
     id: "family",
-    emoji: "❤️",
+    icon: "users",
     label: "Take care of my family",
     sub: "The people who showed up for me",
   },
   {
     id: "wealth",
-    emoji: "🌱",
+    icon: "trending-up",
     label: "Build wealth early",
     sub: "Start now so future me has options",
   },
   {
     id: "debt",
-    emoji: "⚔️",
+    icon: "minus",
     label: "Get out of debt",
     sub: "Stop renting my paychecks to a lender",
   },
   {
     id: "dream",
-    emoji: "🌍",
+    icon: "star",
     label: "Fund the life I actually want",
     sub: "Travel, experiences, the version I picture",
   },
   {
     id: "legacy",
-    emoji: "🏛️",
+    icon: "trophy",
     label: "Build something that lasts",
     sub: "Beyond me — for the people next",
   },
   {
     id: "custom",
-    emoji: "✍️",
+    icon: "sparkles",
     label: "Mine is different",
     sub: "Write your own — only you'll see it",
   },
 ];
 
 // ─── Pricing tiers ───────────────────────────────────────────────────────────
-// Prices match Section 5 of the developer review.
 
 export const PRICING: {
   id: SubscriptionTier;
@@ -230,13 +233,11 @@ export const PRICING: {
   },
 ];
 
-// Founders' lifetime offer — surfaced on pricing screen
 export const LIFETIME_OFFER = {
   name: "Founders' Lifetime",
   blurb: "Pay once. Elite access for life. Limited spots.",
-  spotsRemaining: 312, // mock — backend will own this counter
+  spotsRemaining: 312,
   freeTrialDays: 14,
 };
 
-// Default 14-day free trial wording for paid tiers
 export const FREE_TRIAL_DAYS = 14;

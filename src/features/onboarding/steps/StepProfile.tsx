@@ -83,7 +83,7 @@ export function StepProfile({
           {SITUATIONS.map((s) => (
             <OptionCard
               key={s.id}
-              emoji={s.emoji}
+              icon={s.icon}
               label={s.label}
               sub={s.sub}
               selected={situation === s.id}

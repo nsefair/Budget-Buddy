@@ -12,6 +12,7 @@ import { create } from "zustand";
 import { TokenStore, IS_MOCK } from "@/api/client";
 import { authService, type LoginPayload, type RegisterPayload } from "@/services/authService";
 import { MOCK_USER, MOCK_TOKEN } from "@/mock/user";
+import type { IconName } from "@/components/Icon";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 // User is the normalised internal shape — screens always work with this,
@@ -33,7 +34,7 @@ export interface User {
   subscriptionTier: "free" | "premium" | "elite";
   onboardingComplete: boolean;
   why: string;
-  whyEmoji: string;
+  whyIcon: IconName;
   joinedAt: string;
 }
 

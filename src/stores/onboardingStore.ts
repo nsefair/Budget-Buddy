@@ -24,7 +24,7 @@ const INITIAL_DRAFT: OnboardingDraft = {
   customGoalLabel: "",
   whyId: null,
   whyText: "",
-  whyEmoji: "✨",
+  whyIcon: "sparkles",
   bankConnected: false,
   plan: { tier: "free", cycle: "monthly", isLifetime: false },
   firstGoal: null,

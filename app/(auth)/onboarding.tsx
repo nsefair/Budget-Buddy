@@ -42,8 +42,9 @@ import { StepFirstGoal } from "@/features/onboarding/steps/StepFirstGoal";
 import { StepFirstQuest } from "@/features/onboarding/steps/StepFirstQuest";
 import { StepShare } from "@/features/onboarding/steps/StepShare";
 
-import { WHY_OPTIONS, GOAL_OPTIONS } from "@/features/onboarding/data";
+import { WHY_OPTIONS } from "@/features/onboarding/data";
 import { onboardingService } from "@/services/onboardingService";
+import type { IconName } from "@/components/Icon";
 
 import {
   useDraft,
@@ -122,13 +123,16 @@ export default function OnboardingScreen() {
     setStep(step - 1);
   };
 
-  // Resolve the final "why" string + emoji from the user's selection.
-  const resolveWhy = () => {
+  // Resolve the final "why" string + icon from the user's selection.
+  const resolveWhy = (): { text: string; icon: IconName } => {
     if (draft.whyId === "custom") {
-      return { text: draft.whyText, emoji: "✨" };
+      return { text: draft.whyText, icon: "sparkles" };
     }
     const found = WHY_OPTIONS.find((w) => w.id === draft.whyId);
-    return { text: found?.label ?? "", emoji: found?.emoji ?? "✨" };
+    return {
+      text: found?.label ?? "",
+      icon: (found?.icon as IconName) ?? "sparkles",
+    };
   };
 
   // ─── Final submission ──────────────────────────────────────────────────────
@@ -136,9 +140,9 @@ export default function OnboardingScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setSubmitting(true);
     try {
-      const { text, emoji } = resolveWhy();
-      const finalDraft = { ...draft, whyText: text, whyEmoji: emoji };
-      patch({ whyText: text, whyEmoji: emoji });
+      const { text, icon } = resolveWhy();
+      const finalDraft = { ...draft, whyText: text, whyIcon: icon };
+      patch({ whyText: text, whyIcon: icon });
 
       // Send everything to the backend in one atomic call.
       await onboardingService.complete(finalDraft);
@@ -147,7 +151,7 @@ export default function OnboardingScreen() {
       updateUser({
         firstName: finalDraft.firstName,
         why: text,
-        whyEmoji: emoji,
+        whyIcon: icon,
         subscriptionTier: finalDraft.plan.tier,
         streak: 1,
       });
@@ -155,7 +159,7 @@ export default function OnboardingScreen() {
       await setOnboardingComplete();
       reset();
       router.replace("/(tabs)/today");
-    } catch (e) {
+    } catch {
       Alert.alert(
         "Couldn't save your setup",
         "Bud will keep your answers ready. Let's try that again in a moment."
@@ -255,7 +259,7 @@ export default function OnboardingScreen() {
               whyId: id,
               // Keep the canonical label in whyText unless they're typing custom.
               whyText: id === "custom" ? draft.whyText : opt?.label ?? "",
-              whyEmoji: opt?.emoji ?? "✨",
+              whyIcon: (opt?.icon as IconName) ?? "sparkles",
             });
           }}
           onChangeCustom={(v) => patch({ whyText: v })}
@@ -306,7 +310,7 @@ export default function OnboardingScreen() {
       {step === 8 && (
         <StepShare
           firstName={draft.firstName}
-          whyEmoji={draft.whyEmoji}
+          whyIcon={draft.whyIcon}
           share={draft.shareToBuds}
           onChangeShare={(v) => patch({ shareToBuds: v })}
         />

@@ -36,7 +36,7 @@ export function StepWhy({ selectedId, customText, onSelect, onChangeCustom }: Pr
         {WHY_OPTIONS.map((w) => (
           <OptionCard
             key={w.id}
-            emoji={w.emoji}
+            icon={w.icon}
             label={w.label}
             sub={w.sub}
             selected={selectedId === w.id}

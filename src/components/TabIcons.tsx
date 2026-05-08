@@ -1,5 +1,5 @@
 import React from "react";
-import Svg, { Path, Circle, Rect, G, Polygon } from "react-native-svg";
+import Svg, { Path, Circle, Rect } from "react-native-svg";
 
 interface IconProps {
   color: string;
@@ -84,16 +84,30 @@ export function BudIcon({ color, size = 24, filled }: IconProps) {
   );
 }
 
-export function QuestsIcon({ color, size = 24, filled }: IconProps) {
+export function GoalsIcon({ color, size = 24, filled }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Polygon
-        points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"
+      <Circle
+        cx="12"
+        cy="12"
+        r="9"
         stroke={color}
         strokeWidth={filled ? 0 : 2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
         fill={filled ? color : "none"}
+      />
+      <Circle
+        cx="12"
+        cy="12"
+        r="5"
+        stroke={filled ? "rgba(27,43,75,0.85)" : color}
+        strokeWidth={2}
+        fill="none"
+      />
+      <Circle
+        cx="12"
+        cy="12"
+        r="1.6"
+        fill={filled ? "rgba(27,43,75,0.95)" : color}
       />
     </Svg>
   );

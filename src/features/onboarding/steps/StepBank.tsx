@@ -22,6 +22,7 @@ import { BudBubble } from "../components/BudBubble";
 import { Headline, Subheadline } from "../components/Headline";
 import { onboardingService } from "@/services/onboardingService";
 import { Colors } from "@/constants/colors";
+import { Icon, type IconName } from "@/components/Icon";
 
 interface Props {
   bankConnected: boolean;
@@ -62,15 +63,17 @@ export function StepBank({ bankConnected, onConnected }: Props) {
 
       {/* Trust strip */}
       <View style={styles.trustCard}>
-        <TrustRow icon="🔒" text="Bank-level encryption — your credentials never touch our servers." />
-        <TrustRow icon="👁️" text="Read-only access. We can see, never move money." />
-        <TrustRow icon="🔌" text="Disconnect any time from settings." />
+        <TrustRow icon="lock" text="Bank-level encryption — your credentials never touch our servers." />
+        <TrustRow icon="eye" text="Read-only access. We can see, never move money." />
+        <TrustRow icon="x" text="Disconnect any time from settings." />
       </View>
 
       {/* Connect / connected state */}
       {bankConnected ? (
         <View style={styles.successCard}>
-          <Text style={styles.successCheck}>✓</Text>
+          <View style={styles.successCheck}>
+            <Icon name="check" size={18} color="#FFFFFF" strokeWidth={3} />
+          </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.successTitle}>You're connected</Text>
             <Text style={styles.successSub}>
@@ -95,7 +98,7 @@ export function StepBank({ bankConnected, onConnected }: Props) {
             </>
           ) : (
             <>
-              <Text style={styles.connectIcon}>🏦</Text>
+              <Icon name="building" size={20} color={Colors.gold} strokeWidth={2.4} />
               <Text style={styles.connectText}>Connect with Plaid</Text>
             </>
           )}
@@ -107,10 +110,12 @@ export function StepBank({ bankConnected, onConnected }: Props) {
   );
 }
 
-function TrustRow({ icon, text }: { icon: string; text: string }) {
+function TrustRow({ icon, text }: { icon: IconName; text: string }) {
   return (
     <View style={styles.trustRow}>
-      <Text style={styles.trustIcon}>{icon}</Text>
+      <View style={styles.trustIconBox}>
+        <Icon name={icon} size={14} color={Colors.gold} strokeWidth={2.4} />
+      </View>
       <Text style={styles.trustText}>{text}</Text>
     </View>
   );
@@ -125,8 +130,17 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
   },
-  trustRow: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
-  trustIcon: { fontSize: 18, marginTop: -2 },
+  trustRow: { flexDirection: "row", gap: 12, alignItems: "center" },
+  trustIconBox: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: "rgba(244,168,50,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(244,168,50,0.3)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   trustText: {
     flex: 1,
     fontSize: 13,
@@ -149,7 +163,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(244,168,50,0.06)",
     borderColor: "rgba(244,168,50,0.4)",
   },
-  connectIcon: { fontSize: 22 },
   connectText: {
     fontSize: 16,
     fontWeight: "700",
@@ -178,12 +191,8 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 18,
     backgroundColor: Colors.emerald,
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "800",
-    textAlign: "center",
-    lineHeight: 36,
-    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
   },
   successTitle: {
     fontSize: 15,

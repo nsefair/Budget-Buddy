@@ -6,6 +6,8 @@
  * `toDraft` / `fromDraft` mappers and nothing else needs to move.
  */
 
+import type { IconName } from "@/components/Icon";
+
 export type GoalKind =
   | "emergency_fund"
   | "debt_payoff"
@@ -64,7 +66,8 @@ export interface OnboardingDraft {
   customGoalLabel: string; // when they pick "custom"
   whyId: string | null; // preset emotional why id, or "custom"
   whyText: string; // resolved label, or their custom text
-  whyEmoji: string;
+  /** Lucide icon name representing the why visually. */
+  whyIcon: IconName;
   bankConnected: boolean;
   plan: PlanSelection;
   firstGoal: FirstGoal | null;

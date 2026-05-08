@@ -61,3 +61,93 @@ export const MOCK_BUDGET_OVERVIEW: BudgetOverview = {
   avgDailySpend: 68.5,
   categories: MOCK_BUDGET_CATEGORIES,
 };
+
+// ─── Daily snapshot (Today tab) ──────────────────────────────────────────────
+export interface DailySnapshot {
+  spentToday: number;
+  dailyBudget: number;
+  topMerchant: string;
+  topMerchantAmount: number;
+  topMerchantPctOfBudget: number;
+}
+
+export const MOCK_DAILY_SNAPSHOT: DailySnapshot = {
+  spentToday: 68,
+  dailyBudget: 80,
+  topMerchant: "Walmart",
+  topMerchantAmount: 68,
+  topMerchantPctOfBudget: 85,
+};
+
+// ─── Upcoming bills (Today tab) ──────────────────────────────────────────────
+export interface UpcomingBill {
+  id: string;
+  merchant: string;
+  amount: number;
+  dueAt: string;       // ISO
+  category: string;
+  isCovered: boolean;
+}
+
+export const MOCK_UPCOMING_BILLS: UpcomingBill[] = [
+  {
+    id: "bill_rent",
+    merchant: "Rent",
+    amount: 1000,
+    dueAt: new Date(Date.now() + 2 * 24 * 3600 * 1000).toISOString(),
+    category: "Housing",
+    isCovered: true,
+  },
+  {
+    id: "bill_netflix",
+    merchant: "Netflix",
+    amount: 15.99,
+    dueAt: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+    category: "Entertainment",
+    isCovered: true,
+  },
+  {
+    id: "bill_cc",
+    merchant: "Credit Card Statement",
+    amount: 258,
+    dueAt: new Date(Date.now() + 2 * 24 * 3600 * 1000).toISOString(),
+    category: "Debt Payments",
+    isCovered: false,
+  },
+];
+
+// ─── Investments (Budget tab) ────────────────────────────────────────────────
+export interface InvestmentHolding {
+  id: string;
+  ticker: string;
+  name: string;
+  value: number;
+  shares: number;
+  changePct: number;
+}
+
+export const MOCK_HOLDINGS: InvestmentHolding[] = [
+  { id: "h_voo", ticker: "VOO", name: "S&P 500 ETF", value: 2800, shares: 6.4, changePct: 3.21 },
+  { id: "h_aapl", ticker: "AAPL", name: "Apple Inc.", value: 1100, shares: 5, changePct: -0.8 },
+  { id: "h_btc", ticker: "BTC", name: "Bitcoin", value: 680, shares: 0.012, changePct: 7.1 },
+];
+
+export const MOCK_INVESTMENT_SUMMARY = {
+  totalValue: MOCK_HOLDINGS.reduce((s, h) => s + h.value, 0),
+};
+
+// ─── Accounts (Budget tab) ───────────────────────────────────────────────────
+export interface AccountSummary {
+  id: string;
+  name: string;
+  kind: "checking" | "savings" | "credit" | "investment";
+  balance: number;       // signed — credit balances are stored as negative
+  institution?: string;
+}
+
+export const MOCK_ACCOUNTS: AccountSummary[] = [
+  { id: "acc_chk", name: "Checking", kind: "checking", balance: 6848, institution: "Chase" },
+  { id: "acc_cc", name: "Credit Balance", kind: "credit", balance: -1050, institution: "Amex" },
+  { id: "acc_sav", name: "Savings", kind: "savings", balance: 10100, institution: "Ally" },
+  { id: "acc_inv", name: "Investments", kind: "investment", balance: 5000, institution: "Fidelity" },
+];

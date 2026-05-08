@@ -1,239 +1,701 @@
-import React, { useState } from "react";
+/**
+ * Budget Tab — Money Truth + Investments + Accounts
+ *
+ * Matches the CEO's drawing:
+ *   • Top 4 stat cards (Income, Spent, Saving Rate, Avg Daily Spend)
+ *   • Spending Breakdown (donut substitute via segmented bar)
+ *   • Trends placeholder + Budget Detail (category fill bars)
+ *   • Recent | Upcoming transactions (segmented)
+ *   • Investment Portfolio (holdings)
+ *   • Accounts list (checking / credit / savings / investments + Net Cash)
+ *
+ * No emojis anywhere — every glyph is a Lucide icon. Numbers are the heroes.
+ */
+
+import React, { useMemo, useState } from "react";
 import {
-  View,
-  Text,
-  ScrollView,
   Pressable,
+  ScrollView,
   StyleSheet,
+  Text,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { LinearGradient } from "expo-linear-gradient";
+import * as Haptics from "expo-haptics";
+
 import { Colors } from "@/constants/colors";
-import { MOCK_BUDGET_OVERVIEW, MOCK_TRANSACTIONS } from "@/mock/budget";
+import { Icon, type IconName } from "@/components/Icon";
+import {
+  MOCK_BUDGET_OVERVIEW,
+  MOCK_TRANSACTIONS,
+  MOCK_HOLDINGS,
+  MOCK_INVESTMENT_SUMMARY,
+  MOCK_ACCOUNTS,
+  MOCK_UPCOMING_BILLS,
+  type BudgetCategory,
+} from "@/mock/budget";
+import { formatCurrency } from "@/utils/security";
 
 const TAB_BAR_HEIGHT = 80;
 
+// Map category id → curated icon for a pro look.
+const CATEGORY_ICON: Record<string, IconName> = {
+  food: "receipt",
+  transport: "activity",
+  shopping: "wallet",
+  housing: "home",
+  entertainment: "star",
+  health: "shield",
+  personal: "user",
+  education: "layers",
+};
+
 export default function BudgetScreen() {
   const insets = useSafeAreaInsets();
-  const [selectedMonth, setSelectedMonth] = useState("May 2026");
+  const [txnTab, setTxnTab] = useState<"recent" | "upcoming">("recent");
 
-  const { totalBudget, totalSpent, income, savingsRate, avgDailySpend, categories } = MOCK_BUDGET_OVERVIEW;
-  const remaining = totalBudget - totalSpent;
-  const spentPct = Math.min((totalSpent / totalBudget) * 100, 100);
+  const overview = MOCK_BUDGET_OVERVIEW;
+  const savingsRate = Math.round(overview.savingsRate);
+  const recent = MOCK_TRANSACTIONS.slice(0, 4);
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <LinearGradient
-        colors={["#0E1926", "#1B2B4B"]}
-        style={[styles.header, { paddingTop: insets.top + 12 }]}
-      >
-        <Text style={styles.wordmark}>Budget Buddy</Text>
-        <Text style={styles.headerTitle}>Budget</Text>
-
-        {/* Month selector */}
-        <View style={styles.monthSelector}>
-          <Pressable style={styles.monthArrow}>
-            <Text style={styles.monthArrowText}>‹</Text>
-          </Pressable>
-          <Text style={styles.monthText}>{selectedMonth}</Text>
-          <Pressable style={styles.monthArrow}>
-            <Text style={styles.monthArrowText}>›</Text>
-          </Pressable>
-        </View>
-
-        {/* Overview stats */}
-        <View style={styles.overviewRow}>
-          <View style={styles.overviewStat}>
-            <Text style={styles.overviewStatLabel}>Income</Text>
-            <Text style={[styles.overviewStatValue, { color: Colors.emerald }]}>
-              ${income.toLocaleString()}
-            </Text>
-          </View>
-          <View style={styles.overviewStatDivider} />
-          <View style={styles.overviewStat}>
-            <Text style={styles.overviewStatLabel}>Spent</Text>
-            <Text style={[styles.overviewStatValue, { color: Colors.coral }]}>
-              ${totalSpent.toLocaleString()}
-            </Text>
-          </View>
-          <View style={styles.overviewStatDivider} />
-          <View style={styles.overviewStat}>
-            <Text style={styles.overviewStatLabel}>Remaining</Text>
-            <Text style={[styles.overviewStatValue, { color: remaining > 0 ? "#FFF" : Colors.coral }]}>
-              ${remaining.toLocaleString()}
-            </Text>
-          </View>
-        </View>
-
-        {/* Main progress bar */}
-        <View style={styles.mainProgressTrack}>
-          <View style={[styles.mainProgressFill, { width: `${spentPct}%`, backgroundColor: spentPct > 90 ? Colors.coral : spentPct > 75 ? Colors.amber : Colors.emerald }]} />
-        </View>
-        <Text style={styles.progressLabel}>{Math.round(spentPct)}% of monthly budget used</Text>
-      </LinearGradient>
-
       <ScrollView
         contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 24 },
+          styles.scroll,
+          { paddingTop: insets.top + 16, paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 24 },
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Quick stats */}
-        <View style={styles.quickStats}>
-          <View style={styles.quickStat}>
-            <Text style={styles.quickStatValue}>{savingsRate}%</Text>
-            <Text style={styles.quickStatLabel}>Savings Rate</Text>
-          </View>
-          <View style={styles.quickStatDivider} />
-          <View style={styles.quickStat}>
-            <Text style={styles.quickStatValue}>${avgDailySpend}</Text>
-            <Text style={styles.quickStatLabel}>Avg Daily Spend</Text>
-          </View>
-          <View style={styles.quickStatDivider} />
-          <View style={styles.quickStat}>
-            <Text style={[styles.quickStatValue, { color: Colors.emerald }]}>
-              ${(income - totalSpent).toLocaleString()}
-            </Text>
-            <Text style={styles.quickStatLabel}>Net Cash Flow</Text>
-          </View>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.eyebrow}>{overview.month.toUpperCase()}</Text>
+          <Text style={styles.title}>Budget</Text>
         </View>
 
-        {/* Category breakdown */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Categories</Text>
-          <Pressable>
-            <Text style={styles.sectionAction}>Edit Budget</Text>
-          </Pressable>
+        {/* 4 stat tiles */}
+        <View style={styles.statGrid}>
+          <StatTile
+            label="Monthly income"
+            value={formatCurrency(overview.income, { compact: true })}
+            icon="banknote"
+            tint={Colors.emerald}
+          />
+          <StatTile
+            label="Total spent"
+            value={formatCurrency(overview.totalSpent, { compact: true })}
+            sub={`of ${formatCurrency(overview.totalBudget, { compact: true })}`}
+            icon="receipt"
+            tint={Colors.gold}
+          />
+          <StatTile
+            label="Saving rate"
+            value={`${savingsRate}%`}
+            sub={`${formatCurrency((overview.income * savingsRate) / 100, { compact: true })}/mo`}
+            icon="piggy-bank"
+            tint={Colors.teal}
+          />
+          <StatTile
+            label="Avg daily spend"
+            value={formatCurrency(overview.avgDailySpend)}
+            sub="this week"
+            icon="line-chart"
+            tint={Colors.navyMuted}
+          />
         </View>
 
-        <View style={styles.categoriesContainer}>
-          {categories.map((cat) => {
-            const pct = Math.min((cat.spent / cat.budgetLimit) * 100, 100);
-            const isOver = cat.spent > cat.budgetLimit;
-            const isNear = pct > 80 && !isOver;
-            const barColor = isOver ? Colors.coral : isNear ? Colors.amber : Colors.emerald;
+        {/* Spending breakdown — segmented bar */}
+        <Card>
+          <CardHeader title="Spending breakdown" hint="By category" />
+          <SegmentedBar categories={overview.categories} totalSpent={overview.totalSpent} />
+          <View style={styles.legend}>
+            {overview.categories.slice(0, 6).map((c) => (
+              <View key={c.id} style={styles.legendItem}>
+                <View style={[styles.legendSwatch, { backgroundColor: c.color }]} />
+                <Text style={styles.legendText} numberOfLines={1}>
+                  {c.name}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </Card>
 
-            return (
-              <Pressable key={cat.id} style={styles.categoryCard}>
-                <View style={styles.categoryRow}>
-                  <View style={styles.categoryLeft}>
-                    <Text style={styles.categoryIcon}>{cat.icon}</Text>
-                    <View>
-                      <Text style={styles.categoryName}>{cat.name}</Text>
-                      {isOver && (
-                        <Text style={styles.overspendBadge}>
-                          ${(cat.spent - cat.budgetLimit).toFixed(0)} over
-                        </Text>
-                      )}
-                    </View>
-                  </View>
-                  <View style={styles.categoryAmounts}>
-                    <Text style={[styles.categorySpent, isOver && { color: Colors.coral }]}>
-                      ${cat.spent}
-                    </Text>
-                    <Text style={styles.categoryLimit}> / ${cat.budgetLimit}</Text>
-                  </View>
-                </View>
-                <View style={styles.categoryTrack}>
-                  <View
-                    style={[
-                      styles.categoryFill,
-                      { width: `${pct}%`, backgroundColor: barColor },
-                    ]}
+        {/* Budget detail — category fill bars */}
+        <Card>
+          <CardHeader title="Budget detail" hint="Per category" />
+          <View style={{ gap: 12 }}>
+            {overview.categories.map((c) => (
+              <CategoryRow key={c.id} category={c} />
+            ))}
+          </View>
+        </Card>
+
+        {/* Transactions — Recent | Upcoming */}
+        <Card>
+          <CardHeader title="Transactions" />
+          <View style={styles.txnTabs}>
+            <TabPill label="Recent" active={txnTab === "recent"} onPress={() => setTxnTab("recent")} />
+            <TabPill label="Upcoming" active={txnTab === "upcoming"} onPress={() => setTxnTab("upcoming")} />
+          </View>
+
+          {txnTab === "recent" ? (
+            <View style={styles.txnList}>
+              {recent.map((t, i) => (
+                <React.Fragment key={t.id}>
+                  <TransactionRow
+                    merchant={t.merchant}
+                    sub={`${t.category}${t.isRecurring ? " · Recurring" : ""}`}
+                    amount={-t.amount}
                   />
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
+                  {i < recent.length - 1 && <View style={styles.txnDivider} />}
+                </React.Fragment>
+              ))}
+            </View>
+          ) : (
+            <View style={styles.txnList}>
+              {MOCK_UPCOMING_BILLS.map((b, i) => {
+                const days = Math.max(
+                  0,
+                  Math.ceil((new Date(b.dueAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+                );
+                return (
+                  <React.Fragment key={b.id}>
+                    <TransactionRow
+                      merchant={b.merchant}
+                      sub={`${b.category} · ${days === 0 ? "Today" : days === 1 ? "Tomorrow" : `In ${days} days`}`}
+                      amount={-b.amount}
+                    />
+                    {i < MOCK_UPCOMING_BILLS.length - 1 && <View style={styles.txnDivider} />}
+                  </React.Fragment>
+                );
+              })}
+            </View>
+          )}
+        </Card>
 
-        {/* Recent Transactions */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Transactions</Text>
-          <Pressable>
-            <Text style={styles.sectionAction}>+ Add Manual</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.transactionsList}>
-          {MOCK_TRANSACTIONS.map((txn, idx) => (
-            <React.Fragment key={txn.id}>
-              <Pressable style={styles.txnRow}>
-                <View style={styles.txnLeft}>
-                  <View style={[styles.txnDot, { backgroundColor: categories.find(c => c.id === txn.categoryId)?.color ?? Colors.muted }]} />
-                  <View>
-                    <Text style={styles.txnMerchant}>{txn.merchant}</Text>
-                    <Text style={styles.txnMeta}>
-                      {txn.category}{txn.isRecurring ? " · Recurring" : ""}{txn.isManual ? " · Manual" : ""}
-                    </Text>
-                  </View>
+        {/* Investment portfolio */}
+        <Card>
+          <CardHeader
+            title="Investment portfolio"
+            right={
+              <Text style={styles.totalValue}>
+                {formatCurrency(MOCK_INVESTMENT_SUMMARY.totalValue, { compact: true })}
+              </Text>
+            }
+          />
+          <View style={{ gap: 10 }}>
+            {MOCK_HOLDINGS.map((h) => (
+              <View key={h.id} style={styles.holdingRow}>
+                <View style={styles.tickerBadge}>
+                  <Text style={styles.tickerText}>{h.ticker}</Text>
                 </View>
-                <View style={styles.txnRight}>
-                  <Text style={styles.txnAmount}>-${txn.amount.toFixed(2)}</Text>
-                  <Text style={styles.txnDate}>
-                    {new Date(txn.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.holdingName}>{h.name}</Text>
+                  <Text style={styles.holdingShares}>
+                    {h.shares} {h.shares === 1 ? "share" : "shares"}
                   </Text>
                 </View>
-              </Pressable>
-              {idx < MOCK_TRANSACTIONS.length - 1 && (
-                <View style={styles.txnDivider} />
-              )}
-            </React.Fragment>
-          ))}
-        </View>
+                <View style={{ alignItems: "flex-end" }}>
+                  <Text style={styles.holdingValue}>{formatCurrency(h.value)}</Text>
+                  <View style={styles.holdingChange}>
+                    <Icon
+                      name={h.changePct >= 0 ? "trending-up" : "trending-down"}
+                      size={11}
+                      color={h.changePct >= 0 ? Colors.emerald : Colors.coral}
+                    />
+                    <Text
+                      style={[
+                        styles.holdingChangeText,
+                        { color: h.changePct >= 0 ? Colors.emerald : Colors.coral },
+                      ]}
+                    >
+                      {h.changePct >= 0 ? "+" : ""}
+                      {h.changePct.toFixed(2)}%
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            ))}
+          </View>
+        </Card>
+
+        {/* Accounts */}
+        <Card>
+          <CardHeader title="Accounts" />
+          <AccountsBlock />
+        </Card>
       </ScrollView>
     </View>
   );
 }
 
+// ─── Reusable building blocks ────────────────────────────────────────────────
+
+function Card({ children }: { children: React.ReactNode }) {
+  return <View style={styles.card}>{children}</View>;
+}
+
+function CardHeader({
+  title,
+  hint,
+  right,
+}: {
+  title: string;
+  hint?: string;
+  right?: React.ReactNode;
+}) {
+  return (
+    <View style={styles.cardHeader}>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.cardTitle}>{title}</Text>
+        {hint && <Text style={styles.cardHint}>{hint}</Text>}
+      </View>
+      {right}
+    </View>
+  );
+}
+
+function StatTile({
+  label,
+  value,
+  sub,
+  icon,
+  tint,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  icon: IconName;
+  tint: string;
+}) {
+  return (
+    <View style={styles.statTile}>
+      <View style={[styles.statIcon, { backgroundColor: `${tint}1A`, borderColor: `${tint}55` }]}>
+        <Icon name={icon} size={14} color={tint} strokeWidth={2.4} />
+      </View>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+      {sub && <Text style={styles.statSub}>{sub}</Text>}
+    </View>
+  );
+}
+
+function SegmentedBar({
+  categories,
+  totalSpent,
+}: {
+  categories: BudgetCategory[];
+  totalSpent: number;
+}) {
+  return (
+    <View style={styles.segmentedBar}>
+      {categories.map((c) => {
+        const w = (c.spent / totalSpent) * 100;
+        if (w <= 0) return null;
+        return (
+          <View
+            key={c.id}
+            style={{
+              width: `${w}%`,
+              height: "100%",
+              backgroundColor: c.color,
+            }}
+          />
+        );
+      })}
+    </View>
+  );
+}
+
+function CategoryRow({ category }: { category: BudgetCategory }) {
+  const pct = useMemo(() => {
+    if (category.budgetLimit === 0) return 0;
+    return Math.min(1.2, category.spent / category.budgetLimit);
+  }, [category]);
+  const over = pct > 1;
+  const fillColor = over
+    ? Colors.coral
+    : pct > 0.85
+    ? Colors.amber
+    : category.color;
+
+  const iconName = CATEGORY_ICON[category.id] ?? "wallet";
+
+  return (
+    <View>
+      <View style={styles.catRow}>
+        <View style={styles.catLeft}>
+          <View style={[styles.catIcon, { borderColor: `${category.color}55`, backgroundColor: `${category.color}15` }]}>
+            <Icon name={iconName} size={13} color={category.color} strokeWidth={2.4} />
+          </View>
+          <Text style={styles.catName}>{category.name}</Text>
+        </View>
+        <Text style={styles.catNumbers}>
+          {formatCurrency(category.spent, { compact: true })}{" "}
+          <Text style={styles.catBudget}>
+            / {formatCurrency(category.budgetLimit, { compact: true })}
+          </Text>
+        </Text>
+      </View>
+      <View style={styles.catTrack}>
+        <View
+          style={[
+            styles.catFill,
+            {
+              width: `${Math.min(100, pct * 100)}%`,
+              backgroundColor: fillColor,
+            },
+          ]}
+        />
+      </View>
+    </View>
+  );
+}
+
+function TabPill({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={() => {
+        Haptics.selectionAsync();
+        onPress();
+      }}
+      style={[styles.tabPill, active && styles.tabPillActive]}
+    >
+      <Text style={[styles.tabPillText, active && styles.tabPillTextActive]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function TransactionRow({
+  merchant,
+  sub,
+  amount,
+}: {
+  merchant: string;
+  sub: string;
+  amount: number;
+}) {
+  return (
+    <View style={styles.txnRow}>
+      <View style={styles.txnLeft}>
+        <View style={styles.txnIconBox}>
+          <Icon
+            name={amount < 0 ? "arrow-down-right" : "arrow-up-right"}
+            size={13}
+            color={amount < 0 ? Colors.muted : Colors.emerald}
+          />
+        </View>
+        <View>
+          <Text style={styles.txnMerchant}>{merchant}</Text>
+          <Text style={styles.txnSub}>{sub}</Text>
+        </View>
+      </View>
+      <Text
+        style={[
+          styles.txnAmount,
+          { color: amount < 0 ? Colors.navy : Colors.emerald },
+        ]}
+      >
+        {formatCurrency(amount, { sign: true })}
+      </Text>
+    </View>
+  );
+}
+
+function AccountsBlock() {
+  const totalAssets = MOCK_ACCOUNTS
+    .filter((a) => a.kind !== "credit")
+    .reduce((s, a) => s + a.balance, 0);
+  const totalDebts = Math.abs(
+    MOCK_ACCOUNTS.filter((a) => a.kind === "credit").reduce((s, a) => s + a.balance, 0)
+  );
+  const netCash = totalAssets - totalDebts;
+
+  const iconForKind: Record<string, IconName> = {
+    checking: "wallet",
+    savings: "piggy-bank",
+    credit: "credit-card",
+    investment: "trending-up",
+  };
+
+  return (
+    <View style={{ gap: 8 }}>
+      {MOCK_ACCOUNTS.map((a) => (
+        <View key={a.id} style={styles.accountRow}>
+          <View style={styles.accountLeft}>
+            <View style={styles.accountIconBox}>
+              <Icon name={iconForKind[a.kind]} size={13} color={Colors.navyMuted} strokeWidth={2.2} />
+            </View>
+            <View>
+              <Text style={styles.accountName}>{a.name}</Text>
+              {a.institution && <Text style={styles.accountInst}>{a.institution}</Text>}
+            </View>
+          </View>
+          <Text
+            style={[
+              styles.accountAmount,
+              a.balance < 0 ? { color: Colors.coral } : null,
+            ]}
+          >
+            {a.balance < 0
+              ? `−${formatCurrency(Math.abs(a.balance))}`
+              : formatCurrency(a.balance)}
+          </Text>
+        </View>
+      ))}
+      <View style={styles.netCashRow}>
+        <View style={styles.accountLeft}>
+          <View style={[styles.accountIconBox, { backgroundColor: Colors.gold50, borderColor: Colors.gold }]}>
+            <Icon name="badge-check" size={13} color={Colors.gold} strokeWidth={2.4} />
+          </View>
+          <Text style={styles.netCashLabel}>Net cash</Text>
+        </View>
+        <Text style={styles.netCashAmount}>{formatCurrency(netCash)}</Text>
+      </View>
+    </View>
+  );
+}
+
+// ─── Styles ─────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.surface },
-  header: { paddingHorizontal: 20, paddingBottom: 20 },
-  wordmark: { fontSize: 13, fontWeight: "600", color: "rgba(255,255,255,0.4)", letterSpacing: 2, textTransform: "uppercase", textAlign: "center", marginBottom: 4 },
-  headerTitle: { fontSize: 28, fontWeight: "800", color: "#FFF", letterSpacing: -0.5, marginBottom: 12 },
-  monthSelector: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 },
-  monthArrow: { padding: 8 },
-  monthArrowText: { fontSize: 22, color: Colors.gold, fontWeight: "300" },
-  monthText: { fontSize: 16, fontWeight: "700", color: "#FFF", flex: 1, textAlign: "center" },
-  overviewRow: { flexDirection: "row", alignItems: "center", marginBottom: 16 },
-  overviewStat: { flex: 1, alignItems: "center" },
-  overviewStatLabel: { fontSize: 11, color: Colors.muted, fontWeight: "500", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 },
-  overviewStatValue: { fontSize: 20, fontWeight: "800" },
-  overviewStatDivider: { width: 1, height: 36, backgroundColor: "rgba(255,255,255,0.1)" },
-  mainProgressTrack: { height: 6, backgroundColor: "rgba(255,255,255,0.1)", borderRadius: 3, marginBottom: 6 },
-  mainProgressFill: { height: 6, borderRadius: 3 },
-  progressLabel: { fontSize: 11, color: Colors.muted, textAlign: "right" },
-  scrollContent: { paddingHorizontal: 20, gap: 0 },
-  quickStats: { flexDirection: "row", backgroundColor: Colors.card, borderRadius: 16, marginTop: 16, marginBottom: 8, overflow: "hidden", shadowColor: Colors.navy, shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
-  quickStat: { flex: 1, alignItems: "center", paddingVertical: 16 },
-  quickStatValue: { fontSize: 18, fontWeight: "800", color: Colors.navy, marginBottom: 3 },
-  quickStatLabel: { fontSize: 11, color: Colors.muted, fontWeight: "500" },
-  quickStatDivider: { width: 1, backgroundColor: Colors.border, marginVertical: 12 },
-  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 20, marginBottom: 10 },
-  sectionTitle: { fontSize: 16, fontWeight: "700", color: Colors.navy },
-  sectionAction: { fontSize: 13, color: Colors.gold, fontWeight: "600" },
-  categoriesContainer: { gap: 8 },
-  categoryCard: { backgroundColor: Colors.card, borderRadius: 14, padding: 14, gap: 10, shadowColor: Colors.navy, shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
-  categoryRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  categoryLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
-  categoryIcon: { fontSize: 22, width: 32, textAlign: "center" },
-  categoryName: { fontSize: 14, fontWeight: "600", color: Colors.navy },
-  overspendBadge: { fontSize: 11, color: Colors.coral, fontWeight: "600", marginTop: 2 },
-  categoryAmounts: { flexDirection: "row", alignItems: "baseline" },
-  categorySpent: { fontSize: 15, fontWeight: "700", color: Colors.navy },
-  categoryLimit: { fontSize: 12, color: Colors.muted },
-  categoryTrack: { height: 4, backgroundColor: Colors.border, borderRadius: 2 },
-  categoryFill: { height: 4, borderRadius: 2 },
-  transactionsList: { backgroundColor: Colors.card, borderRadius: 16, overflow: "hidden", shadowColor: Colors.navy, shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
-  txnRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 13 },
-  txnLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
-  txnDot: { width: 10, height: 10, borderRadius: 5 },
-  txnMerchant: { fontSize: 14, fontWeight: "600", color: Colors.navy },
-  txnMeta: { fontSize: 11, color: Colors.muted, marginTop: 2 },
-  txnRight: { alignItems: "flex-end" },
-  txnAmount: { fontSize: 14, fontWeight: "700", color: Colors.navy },
-  txnDate: { fontSize: 11, color: Colors.muted, marginTop: 2 },
-  txnDivider: { height: 1, backgroundColor: Colors.border, marginHorizontal: 16 },
+  scroll: { paddingHorizontal: 18, gap: 12 },
+
+  header: { marginBottom: 14 },
+  eyebrow: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Colors.gold,
+    letterSpacing: 1.6,
+    marginBottom: 6,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: Colors.navy,
+    letterSpacing: -0.6,
+  },
+
+  statGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: 12,
+  },
+  statTile: {
+    flexBasis: "48%",
+    flexGrow: 1,
+    backgroundColor: Colors.card,
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    gap: 4,
+  },
+  statIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    marginBottom: 4,
+  },
+  statValue: {
+    fontSize: 19,
+    fontWeight: "800",
+    color: Colors.navy,
+    letterSpacing: -0.4,
+  },
+  statLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Colors.navyMuted,
+    letterSpacing: 0.4,
+  },
+  statSub: { fontSize: 10, color: Colors.muted, marginTop: 1 },
+
+  card: {
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: 12,
+  },
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 14,
+  },
+  cardTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: Colors.navy,
+    letterSpacing: -0.2,
+  },
+  cardHint: { fontSize: 11, color: Colors.muted, marginTop: 2 },
+
+  // Segmented bar
+  segmentedBar: {
+    flexDirection: "row",
+    height: 14,
+    borderRadius: 7,
+    overflow: "hidden",
+    backgroundColor: Colors.border,
+    marginBottom: 14,
+  },
+  legend: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  legendItem: { flexDirection: "row", alignItems: "center", gap: 6 },
+  legendSwatch: { width: 8, height: 8, borderRadius: 2 },
+  legendText: { fontSize: 11, color: Colors.navyMuted, fontWeight: "600" },
+
+  // Category row
+  catRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  catLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
+  catIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+  catName: { fontSize: 13, fontWeight: "700", color: Colors.navy },
+  catNumbers: { fontSize: 13, fontWeight: "700", color: Colors.navy },
+  catBudget: { color: Colors.muted, fontWeight: "600" },
+  catTrack: {
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: Colors.border,
+    overflow: "hidden",
+  },
+  catFill: { height: 5, borderRadius: 3 },
+
+  // Tabs
+  txnTabs: {
+    flexDirection: "row",
+    backgroundColor: Colors.surface,
+    borderRadius: 999,
+    padding: 4,
+    marginBottom: 10,
+    alignSelf: "flex-start",
+  },
+  tabPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 999,
+  },
+  tabPillActive: { backgroundColor: Colors.navy },
+  tabPillText: { fontSize: 12, fontWeight: "700", color: Colors.navyMuted },
+  tabPillTextActive: { color: "#FFFFFF" },
+
+  txnList: { gap: 0 },
+  txnRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+  },
+  txnLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
+  txnIconBox: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: Colors.navy50,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  txnMerchant: { fontSize: 13, fontWeight: "700", color: Colors.navy },
+  txnSub: { fontSize: 11, color: Colors.muted, marginTop: 1 },
+  txnAmount: { fontSize: 14, fontWeight: "700" },
+  txnDivider: { height: 1, backgroundColor: Colors.border },
+
+  // Holdings
+  totalValue: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: Colors.navy,
+    letterSpacing: -0.3,
+  },
+  holdingRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  tickerBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: Colors.navy,
+  },
+  tickerText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Colors.gold,
+    letterSpacing: 0.6,
+  },
+  holdingName: { fontSize: 13, fontWeight: "700", color: Colors.navy },
+  holdingShares: { fontSize: 11, color: Colors.muted, marginTop: 1 },
+  holdingValue: { fontSize: 14, fontWeight: "800", color: Colors.navy },
+  holdingChange: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 2 },
+  holdingChangeText: { fontSize: 11, fontWeight: "700" },
+
+  // Accounts
+  accountRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 8,
+  },
+  accountLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
+  accountIconBox: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: Colors.navy50,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  accountName: { fontSize: 13, fontWeight: "700", color: Colors.navy },
+  accountInst: { fontSize: 11, color: Colors.muted, marginTop: 1 },
+  accountAmount: { fontSize: 14, fontWeight: "700", color: Colors.navy },
+
+  netCashRow: {
+    marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: Colors.gold50,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "rgba(244,168,50,0.3)",
+  },
+  netCashLabel: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Colors.navy,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  netCashAmount: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: Colors.navy,
+    letterSpacing: -0.3,
+  },
 });

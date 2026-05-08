@@ -20,6 +20,7 @@ import { Headline } from "../components/Headline";
 import { onboardingService } from "@/services/onboardingService";
 import type { FirstQuest, GoalKind } from "../types";
 import { Colors } from "@/constants/colors";
+import { Icon } from "@/components/Icon";
 
 interface Props {
   goalKinds: GoalKind[];
@@ -102,8 +103,8 @@ export function StepFirstQuest({ goalKinds, quest, onLoaded }: Props) {
 
       {/* Streak ignition */}
       <View style={styles.streakBox}>
-        <Animated.View style={{ transform: [{ scale: flameScale }] }}>
-          <Text style={styles.flame}>🔥</Text>
+        <Animated.View style={[styles.flameWell, { transform: [{ scale: flameScale }] }]}>
+          <Icon name="flame" size={28} color={Colors.gold} strokeWidth={2.4} />
         </Animated.View>
         <View style={{ flex: 1 }}>
           <Text style={styles.streakTitle}>Day 1 streak — alive.</Text>
@@ -193,7 +194,16 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 16,
   },
-  flame: { fontSize: 44 },
+  flameWell: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: "rgba(244,168,50,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(244,168,50,0.4)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   streakTitle: {
     fontSize: 16,
     fontWeight: "800",

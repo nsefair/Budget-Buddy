@@ -20,6 +20,7 @@ import {
   BudProfile,
 } from "@/mock/buds";
 import * as Haptics from "expo-haptics";
+import { Icon } from "@/components/Icon";
 
 const TAB_BAR_HEIGHT = 80;
 
@@ -76,7 +77,10 @@ export default function BudsScreen() {
               </View>
               <View style={styles.profileStatDivider} />
               <View style={styles.profileStat}>
-                <Text style={styles.profileStatValue}>{user?.streak}🔥</Text>
+                <View style={styles.streakInline}>
+                  <Icon name="flame" size={12} color={Colors.gold} strokeWidth={2.4} />
+                  <Text style={styles.profileStatValue}>{user?.streak}</Text>
+                </View>
                 <Text style={styles.profileStatLabel}>Streak</Text>
               </View>
               <View style={styles.profileStatDivider} />
@@ -122,8 +126,9 @@ export default function BudsScreen() {
           <>
             {/* Privacy note */}
             <View style={styles.privacyNote}>
+              <Icon name="lock" size={13} color={Colors.emerald} strokeWidth={2.4} />
               <Text style={styles.privacyText}>
-                🔒 No financial data is ever shared. Only progress, milestones, and wins.
+                No financial data is ever shared. Only progress, milestones, and wins.
               </Text>
             </View>
 
@@ -166,7 +171,10 @@ export default function BudsScreen() {
 
             {/* Phase 2 teaser */}
             <View style={styles.phase2Card}>
-              <Text style={styles.phase2Title}>🌐 Community Feed</Text>
+              <View style={styles.phase2TitleRow}>
+                <Icon name="users" size={16} color={Colors.gold} strokeWidth={2.2} />
+                <Text style={styles.phase2Title}>Community Feed</Text>
+              </View>
               <Text style={styles.phase2Sub}>
                 A curated feed of financial wins and community highlights activates at 5,000 users. 
                 Help us get there — invite your people.
@@ -215,7 +223,10 @@ function FeedCard({ post, onFistBump }: { post: FeedPost; onFistBump: (id: strin
               <Text style={styles.feedLevelText}>Lv {post.user.level}</Text>
             </View>
           </View>
-          <Text style={styles.feedStreak}>🔥 {post.user.streak}-day streak · {post.user.leagueTier}</Text>
+          <View style={styles.feedStreakRow}>
+            <Icon name="flame" size={11} color={Colors.gold} strokeWidth={2.4} />
+            <Text style={styles.feedStreak}>{post.user.streak}-day streak · {post.user.leagueTier}</Text>
+          </View>
         </View>
         <Text style={styles.feedTime}>{timeAgo(post.timestamp)}</Text>
       </View>
@@ -226,10 +237,21 @@ function FeedCard({ post, onFistBump }: { post: FeedPost; onFistBump: (id: strin
       </View>
 
       <View style={styles.feedFooter}>
-        <Pressable style={styles.fistBumpButton} onPress={handleBump}>
-          <Animated.Text style={[styles.fistBumpEmoji, { transform: [{ scale }] }]}>
-            {post.hasFistBumped ? "🤜" : "✊"}
-          </Animated.Text>
+        <Pressable
+          style={[
+            styles.fistBumpButton,
+            post.hasFistBumped && styles.fistBumpButtonActive,
+          ]}
+          onPress={handleBump}
+        >
+          <Animated.View style={{ transform: [{ scale }] }}>
+            <Icon
+              name="hand"
+              size={16}
+              color={post.hasFistBumped ? Colors.gold : Colors.navyMuted}
+              strokeWidth={2.2}
+            />
+          </Animated.View>
           <Text style={[styles.fistBumpCount, post.hasFistBumped && styles.fistBumpCountActive]}>
             {post.fistBumps}
           </Text>
@@ -249,9 +271,11 @@ function BudCard({ bud, showFollow }: { bud: BudProfile; showFollow?: boolean })
       </View>
       <View style={styles.budCardInfo}>
         <Text style={styles.budCardName}>{bud.displayName}</Text>
-        <Text style={styles.budCardStats}>
-          Lv {bud.level} · 🔥 {bud.streak}d · {bud.leagueTier} · {bud.badgeCount} badges
-        </Text>
+        <View style={styles.budCardStatsRow}>
+          <Text style={styles.budCardStats}>Lv {bud.level} · </Text>
+          <Icon name="flame" size={11} color={Colors.gold} strokeWidth={2.4} />
+          <Text style={styles.budCardStats}> {bud.streak}d · {bud.leagueTier} · {bud.badgeCount} badges</Text>
+        </View>
       </View>
       {showFollow && (
         <Pressable
@@ -293,8 +317,9 @@ const styles = StyleSheet.create({
   switchText: { fontSize: 12, color: Colors.muted, fontWeight: "500" },
   switchTextActive: { color: Colors.gold, fontWeight: "700" },
   scrollContent: { paddingHorizontal: 20, paddingTop: 16, gap: 12 },
-  privacyNote: { backgroundColor: "rgba(16,185,129,0.08)", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: "rgba(16,185,129,0.15)" },
-  privacyText: { fontSize: 12, color: Colors.emerald, fontWeight: "500", lineHeight: 17 },
+  privacyNote: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(16,185,129,0.08)", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: "rgba(16,185,129,0.15)" },
+  privacyText: { flex: 1, fontSize: 12, color: Colors.emerald, fontWeight: "500", lineHeight: 17 },
+  streakInline: { flexDirection: "row", alignItems: "center", gap: 4 },
   feedCard: { backgroundColor: Colors.card, borderRadius: 16, padding: 16, gap: 12, shadowColor: Colors.navy, shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   feedCardHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
   feedAvatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: Colors.navy50, alignItems: "center", justifyContent: "center" },
@@ -304,14 +329,15 @@ const styles = StyleSheet.create({
   feedName: { fontSize: 14, fontWeight: "700", color: Colors.navy },
   feedLevelBadge: { backgroundColor: Colors.navy50, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2 },
   feedLevelText: { fontSize: 10, fontWeight: "700", color: Colors.navyMuted },
-  feedStreak: { fontSize: 11, color: Colors.muted, marginTop: 2 },
+  feedStreakRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
+  feedStreak: { fontSize: 11, color: Colors.muted },
   feedTime: { fontSize: 11, color: Colors.muted },
   feedContent: { gap: 4 },
   feedTitle: { fontSize: 15, fontWeight: "700", color: Colors.navy },
   feedMessage: { fontSize: 13, color: Colors.navyMuted, lineHeight: 19 },
   feedFooter: { flexDirection: "row" },
-  fistBumpButton: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: Colors.surface },
-  fistBumpEmoji: { fontSize: 18 },
+  fistBumpButton: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
+  fistBumpButtonActive: { backgroundColor: "rgba(244,168,50,0.10)", borderColor: "rgba(244,168,50,0.4)" },
   fistBumpCount: { fontSize: 13, color: Colors.navyMuted, fontWeight: "600" },
   fistBumpCountActive: { color: Colors.gold },
   budsCount: { fontSize: 13, color: Colors.muted, fontWeight: "500", marginBottom: 4 },
@@ -320,6 +346,7 @@ const styles = StyleSheet.create({
   budCardInitials: { fontSize: 14, fontWeight: "700", color: Colors.navy },
   budCardInfo: { flex: 1 },
   budCardName: { fontSize: 14, fontWeight: "700", color: Colors.navy, marginBottom: 3 },
+  budCardStatsRow: { flexDirection: "row", alignItems: "center" },
   budCardStats: { fontSize: 11, color: Colors.muted },
   followButton: { backgroundColor: Colors.navy, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7 },
   followButtonActive: { backgroundColor: "rgba(27,43,75,0.12)", borderWidth: 1.5, borderColor: Colors.navy },
@@ -330,6 +357,7 @@ const styles = StyleSheet.create({
   discoverSectionTitle: { fontSize: 16, fontWeight: "700", color: Colors.navy, marginBottom: 4 },
   discoverSectionSub: { fontSize: 13, color: Colors.muted, marginBottom: 12 },
   phase2Card: { backgroundColor: Colors.card, borderRadius: 16, padding: 20, gap: 12, marginTop: 8, shadowColor: Colors.navy, shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+  phase2TitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   phase2Title: { fontSize: 16, fontWeight: "800", color: Colors.navy },
   phase2Sub: { fontSize: 13, color: Colors.muted, lineHeight: 19 },
   phase2Cta: { borderRadius: 12, overflow: "hidden", shadowColor: Colors.gold, shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 4 },

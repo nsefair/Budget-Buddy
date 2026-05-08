@@ -28,7 +28,7 @@ import {
   TodayIcon,
   BudgetIcon,
   BudIcon,
-  QuestsIcon,
+  GoalsIcon,
   BudsIcon,
 } from "@/components/TabIcons";
 
@@ -43,7 +43,7 @@ const ICON_MAP: Record<
   today: { label: "Today", Icon: TodayIcon },
   budget: { label: "Budget", Icon: BudgetIcon },
   bud: { label: "Bud", Icon: BudIcon },
-  quests: { label: "Quests", Icon: QuestsIcon },
+  goals: { label: "Goals", Icon: GoalsIcon },
   buds: { label: "Buds", Icon: BudsIcon },
 };
 

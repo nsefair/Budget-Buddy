@@ -24,8 +24,31 @@ import * as SecureStore from "expo-secure-store";
 // ─── Environment ──────────────────────────────────────────────────────────────
 // Set EXPO_PUBLIC_API_URL in your .env or app.config.js to point at any backend.
 // Changing this one value is all that's needed to switch servers.
-export const API_BASE_URL =
+const RAW_API_URL =
   process.env.EXPO_PUBLIC_API_URL ?? "https://api.budgetbuddy.app/v1";
+
+/**
+ * Cybersecurity guard: in production, refuse anything other than HTTPS.
+ * In dev, plain http://localhost is allowed for local backend work, but
+ * everything else must still be HTTPS — prevents accidental shipping of
+ * a non-TLS endpoint and the cleartext interception that comes with it.
+ */
+function assertSafeBaseUrl(url: string): string {
+  if (!__DEV__ && !url.startsWith("https://")) {
+    throw new Error(
+      "[Security] EXPO_PUBLIC_API_URL must use HTTPS in production builds."
+    );
+  }
+  if (__DEV__ && !url.startsWith("https://") && !/^http:\/\/(localhost|127\.0\.0\.1|10\.0\.2\.2)/.test(url)) {
+    // Loud in dev — quiet warning instead of throwing so simulator local
+    // dev keeps working with localhost variants.
+    // eslint-disable-next-line no-console
+    console.warn("[Security] Non-HTTPS API URL outside localhost is unsafe:", url);
+  }
+  return url;
+}
+
+export const API_BASE_URL = assertSafeBaseUrl(RAW_API_URL);
 
 export const IS_MOCK =
   process.env.EXPO_PUBLIC_USE_MOCK !== "false" && __DEV__;

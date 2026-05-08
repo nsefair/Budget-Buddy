@@ -1,17 +1,18 @@
 /**
  * OptionCard — selectable card used by goal / why / situation / age screens.
  *
- * Replaces dropdowns and form inputs everywhere — per the design mandate,
- * onboarding is built with cards, not selects.
+ * Per the design mandate, onboarding is built with cards, not selects, and
+ * never with emojis — every visual is a Lucide icon set against a tinted tile.
  */
 
 import React, { useEffect, useRef } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import * as Haptics from "expo-haptics";
+import { Icon, type IconName } from "@/components/Icon";
 import { Colors } from "@/constants/colors";
 
 interface Props {
-  emoji?: string;
+  icon?: IconName;
   label: string;
   sub?: string;
   selected: boolean;
@@ -20,7 +21,7 @@ interface Props {
   compact?: boolean;
 }
 
-export function OptionCard({ emoji, label, sub, selected, onPress, compact }: Props) {
+export function OptionCard({ icon, label, sub, selected, onPress, compact }: Props) {
   const scale = useRef(new Animated.Value(1)).current;
   const borderAnim = useRef(new Animated.Value(selected ? 1 : 0)).current;
 
@@ -29,7 +30,7 @@ export function OptionCard({ emoji, label, sub, selected, onPress, compact }: Pr
       toValue: selected ? 1 : 0,
       damping: 18,
       stiffness: 220,
-      useNativeDriver: false, // animating border color
+      useNativeDriver: false,
     }).start();
   }, [selected, borderAnim]);
 
@@ -62,10 +63,21 @@ export function OptionCard({ emoji, label, sub, selected, onPress, compact }: Pr
             { borderColor, backgroundColor: bgColor },
           ]}
         >
-          {emoji && (
-            <Text style={[styles.emoji, compact && styles.emojiCompact]}>
-              {emoji}
-            </Text>
+          {icon && (
+            <View
+              style={[
+                styles.iconBox,
+                compact && styles.iconBoxCompact,
+                selected && styles.iconBoxSelected,
+              ]}
+            >
+              <Icon
+                name={icon}
+                size={compact ? 14 : 18}
+                color={selected ? Colors.navy : Colors.gold}
+                strokeWidth={2.4}
+              />
+            </View>
           )}
           <View style={{ flex: 1 }}>
             <Text style={[styles.label, selected && styles.labelSelected]}>
@@ -74,7 +86,7 @@ export function OptionCard({ emoji, label, sub, selected, onPress, compact }: Pr
             {sub && !compact && <Text style={styles.sub}>{sub}</Text>}
           </View>
           <View style={[styles.check, selected && styles.checkActive]}>
-            {selected && <Text style={styles.checkmark}>✓</Text>}
+            {selected && <Icon name="check" size={12} color={Colors.navy} strokeWidth={3} />}
           </View>
         </Animated.View>
       </Pressable>
@@ -89,12 +101,25 @@ const styles = StyleSheet.create({
     gap: 14,
     borderWidth: 1.5,
     borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
   },
-  cardCompact: { paddingVertical: 12 },
-  emoji: { fontSize: 26 },
-  emojiCompact: { fontSize: 20 },
+  cardCompact: { paddingVertical: 11 },
+  iconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "rgba(244,168,50,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(244,168,50,0.3)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  iconBoxCompact: { width: 28, height: 28, borderRadius: 8 },
+  iconBoxSelected: {
+    backgroundColor: Colors.gold,
+    borderColor: Colors.gold,
+  },
   label: { fontSize: 15, fontWeight: "700", color: "#FFF", letterSpacing: -0.1 },
   labelSelected: { color: Colors.gold },
   sub: { fontSize: 12, color: Colors.muted, marginTop: 2, lineHeight: 17 },
@@ -111,5 +136,4 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.gold,
     borderColor: Colors.gold,
   },
-  checkmark: { fontSize: 12, fontWeight: "800", color: Colors.navy },
 });

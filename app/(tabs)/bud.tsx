@@ -14,6 +14,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "@/constants/colors";
 import { useUser } from "@/hooks/useAuth";
 import { MOCK_BUD_INSIGHT, MOCK_SESSIONS, MOCK_CHAT_HISTORY, BudMessage } from "@/mock/bud";
+import { Icon, type IconName } from "@/components/Icon";
 
 const TAB_BAR_HEIGHT = 80;
 
@@ -100,7 +101,10 @@ export default function BudScreen() {
         >
           {/* Today's Insight */}
           <View style={styles.insightCard}>
-            <Text style={styles.insightLabel}>💡 Today's Insight</Text>
+            <View style={styles.insightLabelRow}>
+              <Icon name="sparkles" size={13} color={Colors.gold} strokeWidth={2.4} />
+              <Text style={styles.insightLabel}>Today's insight</Text>
+            </View>
             <Text style={styles.insightText}>{MOCK_BUD_INSIGHT.message}</Text>
             <Text style={styles.insightTime}>Updated this morning</Text>
           </View>
@@ -108,19 +112,19 @@ export default function BudScreen() {
           {/* Action cards */}
           <View style={styles.actionCards}>
             <ActionCard
-              emoji="🎓"
+              icon="layers"
               title="Start a Session"
               sub="3–5 min financial lessons built for your situation"
               onPress={() => setView("sessions")}
             />
             <ActionCard
-              emoji="💬"
+              icon="message-circle"
               title="Ask Bud"
               sub="Plain-language answers grounded in your real data"
               onPress={() => setView("ask")}
             />
             <ActionCard
-              emoji="📊"
+              icon="bar-chart"
               title="Review My Week"
               sub="Bud's weekly breakdown — every Sunday"
               onPress={() => {}}
@@ -133,7 +137,9 @@ export default function BudScreen() {
           <View style={styles.scenarioCard}>
             <LinearGradient colors={[Colors.navy, "#0E1926"]} style={styles.scenarioGrad}>
               <View style={styles.scenarioHeader}>
-                <Text style={styles.scenarioEmoji}>⏳</Text>
+                <View style={styles.scenarioIconBox}>
+                  <Icon name="line-chart" size={18} color={Colors.gold} strokeWidth={2.2} />
+                </View>
                 <View style={styles.eliteBadge}>
                   <Text style={styles.eliteBadgeText}>Elite</Text>
                 </View>
@@ -150,17 +156,20 @@ export default function BudScreen() {
 
           {/* Bud Memory snippet */}
           <View style={styles.memoryCard}>
-            <Text style={styles.memoryTitle}>🧠 What Bud knows about you</Text>
+            <View style={styles.memoryTitleRow}>
+              <Icon name="info" size={13} color={Colors.gold} strokeWidth={2.4} />
+              <Text style={styles.memoryTitle}>What Bud knows about you</Text>
+            </View>
             <View style={styles.memoryItem}>
-              <Text style={styles.memoryDot}>·</Text>
+              <View style={styles.memoryBullet} />
               <Text style={styles.memoryText}>Emergency Fund goal at 22% — pace is behind by $40/month</Text>
             </View>
             <View style={styles.memoryItem}>
-              <Text style={styles.memoryDot}>·</Text>
+              <View style={styles.memoryBullet} />
               <Text style={styles.memoryText}>Shopping is your highest overspend category this month</Text>
             </View>
             <View style={styles.memoryItem}>
-              <Text style={styles.memoryDot}>·</Text>
+              <View style={styles.memoryBullet} />
               <Text style={styles.memoryText}>14-day streak — best ever was 21 days</Text>
             </View>
           </View>
@@ -289,10 +298,14 @@ export default function BudScreen() {
               <Text style={styles.sessionTitle}>{session.title}</Text>
               <Text style={styles.sessionWhy}>{session.whyItMattersNow}</Text>
               <View style={styles.sessionFooter}>
-                <Text style={styles.sessionDuration}>⏱ {session.duration}</Text>
+                <View style={styles.sessionDurationRow}>
+                  <Icon name="calendar" size={11} color={Colors.muted} strokeWidth={2.2} />
+                  <Text style={styles.sessionDuration}>{session.duration}</Text>
+                </View>
                 {session.completed ? (
                   <View style={styles.sessionDoneBadge}>
-                    <Text style={styles.sessionDoneText}>✓ Completed</Text>
+                    <Icon name="check" size={11} color={Colors.emerald} strokeWidth={3} />
+                    <Text style={styles.sessionDoneText}>Completed</Text>
                   </View>
                 ) : (
                   <Text style={styles.sessionStart}>Start →</Text>
@@ -306,8 +319,8 @@ export default function BudScreen() {
   );
 }
 
-function ActionCard({ emoji, title, sub, onPress, locked, lockReason }: {
-  emoji: string; title: string; sub: string; onPress: () => void; locked?: boolean; lockReason?: string;
+function ActionCard({ icon, title, sub, onPress, locked, lockReason }: {
+  icon: IconName; title: string; sub: string; onPress: () => void; locked?: boolean; lockReason?: string;
 }) {
   return (
     <Pressable
@@ -315,12 +328,18 @@ function ActionCard({ emoji, title, sub, onPress, locked, lockReason }: {
       onPress={!locked ? onPress : undefined}
       disabled={locked}
     >
-      <Text style={styles.actionEmoji}>{emoji}</Text>
+      <View style={styles.actionIconBox}>
+        <Icon name={icon} size={18} color={Colors.gold} strokeWidth={2.2} />
+      </View>
       <View style={styles.actionText}>
         <Text style={styles.actionTitle}>{title}</Text>
         <Text style={styles.actionSub}>{locked ? lockReason ?? sub : sub}</Text>
       </View>
-      <Text style={styles.actionArrow}>{locked ? "🔒" : "›"}</Text>
+      {locked ? (
+        <Icon name="lock" size={14} color={Colors.muted} strokeWidth={2} />
+      ) : (
+        <Icon name="chevron-right" size={16} color={Colors.muted} strokeWidth={2.2} />
+      )}
     </Pressable>
   );
 }
@@ -342,21 +361,21 @@ const styles = StyleSheet.create({
   switchTabTextActive: { color: Colors.gold, fontWeight: "700" },
   scrollContent: { padding: 20, gap: 14 },
   insightCard: { backgroundColor: "rgba(244,168,50,0.08)", borderRadius: 16, padding: 18, borderWidth: 1, borderColor: "rgba(244,168,50,0.2)" },
-  insightLabel: { fontSize: 13, color: Colors.gold, fontWeight: "700", marginBottom: 10 },
+  insightLabelRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
+  insightLabel: { fontSize: 12, color: Colors.gold, fontWeight: "800", letterSpacing: 0.6, textTransform: "uppercase" },
   insightText: { fontSize: 15, color: Colors.navyMuted, lineHeight: 22, fontWeight: "400" },
   insightTime: { fontSize: 11, color: Colors.muted, marginTop: 10 },
   actionCards: { gap: 10 },
   actionCard: { flexDirection: "row", alignItems: "center", backgroundColor: Colors.card, borderRadius: 14, padding: 16, gap: 14, shadowColor: Colors.navy, shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
   actionCardLocked: { opacity: 0.55 },
-  actionEmoji: { fontSize: 24, width: 32, textAlign: "center" },
+  actionIconBox: { width: 36, height: 36, borderRadius: 10, backgroundColor: "rgba(244,168,50,0.12)", borderWidth: 1, borderColor: "rgba(244,168,50,0.3)", alignItems: "center", justifyContent: "center" },
   actionText: { flex: 1 },
   actionTitle: { fontSize: 15, fontWeight: "700", color: Colors.navy, marginBottom: 2 },
   actionSub: { fontSize: 12, color: Colors.muted, lineHeight: 16 },
-  actionArrow: { fontSize: 18, color: Colors.muted },
   scenarioCard: { borderRadius: 16, overflow: "hidden" },
   scenarioGrad: { padding: 20 },
-  scenarioHeader: { flexDirection: "row", justifyContent: "space-between", marginBottom: 10 },
-  scenarioEmoji: { fontSize: 28 },
+  scenarioHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
+  scenarioIconBox: { width: 36, height: 36, borderRadius: 10, backgroundColor: "rgba(244,168,50,0.12)", borderWidth: 1, borderColor: "rgba(244,168,50,0.3)", alignItems: "center", justifyContent: "center" },
   eliteBadge: { backgroundColor: Colors.gold, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, alignSelf: "flex-start" },
   eliteBadgeText: { fontSize: 11, fontWeight: "700", color: Colors.navy },
   scenarioTitle: { fontSize: 18, fontWeight: "800", color: "#FFF", marginBottom: 6 },
@@ -364,9 +383,10 @@ const styles = StyleSheet.create({
   scenarioCta: { alignSelf: "flex-start" },
   scenarioCtaText: { fontSize: 13, color: Colors.gold, fontWeight: "700" },
   memoryCard: { backgroundColor: Colors.card, borderRadius: 16, padding: 16, gap: 10, shadowColor: Colors.navy, shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
-  memoryTitle: { fontSize: 14, fontWeight: "700", color: Colors.navy },
-  memoryItem: { flexDirection: "row", gap: 8 },
-  memoryDot: { fontSize: 18, color: Colors.gold, lineHeight: 20 },
+  memoryTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  memoryTitle: { fontSize: 13, fontWeight: "800", color: Colors.navy, letterSpacing: 0.4, textTransform: "uppercase" },
+  memoryItem: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
+  memoryBullet: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: Colors.gold, marginTop: 7 },
   memoryText: { fontSize: 13, color: Colors.navyMuted, flex: 1, lineHeight: 18 },
   chatContent: { padding: 20 },
   disclaimer: { backgroundColor: "rgba(244,168,50,0.07)", borderRadius: 10, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: "rgba(244,168,50,0.15)" },
@@ -401,8 +421,9 @@ const styles = StyleSheet.create({
   sessionTitle: { fontSize: 15, fontWeight: "700", color: Colors.navy, lineHeight: 20 },
   sessionWhy: { fontSize: 12, color: Colors.muted, lineHeight: 17 },
   sessionFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  sessionDurationRow: { flexDirection: "row", alignItems: "center", gap: 5 },
   sessionDuration: { fontSize: 12, color: Colors.muted },
-  sessionDoneBadge: { backgroundColor: "rgba(16,185,129,0.12)", borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  sessionDoneBadge: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "rgba(16,185,129,0.12)", borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   sessionDoneText: { fontSize: 12, color: Colors.emerald, fontWeight: "600" },
   sessionStart: { fontSize: 13, color: Colors.gold, fontWeight: "700" },
 });

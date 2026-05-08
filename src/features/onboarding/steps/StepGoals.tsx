@@ -37,7 +37,7 @@ export function StepGoals({ selected, customLabel, onToggle, onChangeCustom }: P
         {GOAL_OPTIONS.map((g) => (
           <OptionCard
             key={g.id}
-            emoji={g.emoji}
+            icon={g.icon}
             label={g.label}
             sub={g.sub}
             selected={selected.includes(g.id)}

@@ -19,6 +19,7 @@ import { api, IS_MOCK } from "@/api/client";
 import { ENDPOINTS } from "@/api/endpoints";
 import { MOCK_USER, MOCK_TOKEN } from "@/mock/user";
 import type { User } from "@/stores/authStore";
+import type { IconName } from "@/components/Icon";
 
 // ─── Request / Response types ─────────────────────────────────────────────────
 // These match your ASP.NET Core API contracts.
@@ -59,7 +60,8 @@ interface RawUser {
   subscriptionTier: "free" | "premium" | "elite";
   onboardingComplete: boolean;
   why: string;
-  whyEmoji: string;
+  /** Lucide icon name representing the user's why. */
+  whyIcon: IconName;
   joinedAt: string;
 }
 
@@ -83,7 +85,7 @@ function toUser(raw: RawUser): User {
     subscriptionTier: raw.subscriptionTier,
     onboardingComplete: raw.onboardingComplete,
     why: raw.why,
-    whyEmoji: raw.whyEmoji,
+    whyIcon: raw.whyIcon,
     joinedAt: raw.joinedAt,
   };
 }

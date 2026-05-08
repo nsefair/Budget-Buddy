@@ -28,6 +28,7 @@ import {
 } from "../data";
 import type { BillingCycle, SubscriptionTier } from "../types";
 import { Colors } from "@/constants/colors";
+import { Icon } from "@/components/Icon";
 
 interface Props {
   selectedTier: SubscriptionTier;
@@ -200,7 +201,7 @@ function PlanCard({
       <View style={styles.featureList}>
         {plan.features.slice(0, 4).map((f) => (
           <View key={f} style={styles.featureRow}>
-            <Text style={styles.featureCheck}>✓</Text>
+            <Icon name="check" size={12} color={Colors.gold} strokeWidth={3} />
             <Text style={styles.featureText}>{f}</Text>
           </View>
         ))}

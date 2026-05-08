@@ -111,7 +111,7 @@ interface ApiOnboardingPayload {
   goalKinds: string[];
   customGoalLabel?: string;
   why: string;
-  whyEmoji: string;
+  whyIcon: string; // Lucide icon name; backend stores it as-is
   bankConnected: boolean;
   plan: PlanSelection;
   firstGoal: FirstGoal | null;
@@ -126,7 +126,7 @@ function toApiOnboardingPayload(draft: OnboardingDraft): ApiOnboardingPayload {
     goalKinds: draft.goalKinds,
     customGoalLabel: draft.customGoalLabel || undefined,
     why: draft.whyText,
-    whyEmoji: draft.whyEmoji,
+    whyIcon: draft.whyIcon,
     bankConnected: draft.bankConnected,
     plan: draft.plan,
     firstGoal: draft.firstGoal,
