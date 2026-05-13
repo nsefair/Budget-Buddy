@@ -21,6 +21,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { Colors } from "@/constants/colors";
+import { BrandHeader } from "@/components/BrandLogo";
 import { Icon, type IconName } from "@/components/Icon";
 import { goalsService } from "@/services/goalsService";
 import {
@@ -98,6 +99,8 @@ export default function GoalsScreen() {
           />
         }
       >
+        <BrandHeader style={styles.brandHeader} />
+
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.eyebrow}>YOUR GOALS</Text>
@@ -275,6 +278,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.surface },
   scroll: { paddingHorizontal: 18 },
 
+  brandHeader: { marginBottom: 18 },
   header: { marginBottom: 18 },
   eyebrow: {
     fontSize: 11,
@@ -287,7 +291,7 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "800",
     color: Colors.navy,
-    letterSpacing: -0.6,
+    letterSpacing: 0,
   },
 
   summaryRow: {
@@ -317,7 +321,7 @@ const styles = StyleSheet.create({
     fontSize: 19,
     fontWeight: "800",
     color: Colors.navy,
-    letterSpacing: -0.3,
+    letterSpacing: 0,
   },
   summarySub: { fontSize: 11, color: Colors.muted, marginTop: 3 },
 
@@ -373,7 +377,7 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "800",
     color: Colors.navy,
-    letterSpacing: -0.3,
+    letterSpacing: 0,
   },
   durationLabel: {
     fontSize: 10,
@@ -385,7 +389,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "800",
     color: Colors.navy,
-    letterSpacing: -0.3,
+    letterSpacing: 0,
   },
 
   goalReason: {
@@ -397,7 +401,7 @@ const styles = StyleSheet.create({
   },
 
   amountRow: { flexDirection: "row", alignItems: "baseline", gap: 4, marginBottom: 8 },
-  amountSaved: { fontSize: 19, fontWeight: "800", color: Colors.navy, letterSpacing: -0.4 },
+  amountSaved: { fontSize: 19, fontWeight: "800", color: Colors.navy, letterSpacing: 0 },
   amountTarget: { fontSize: 13, fontWeight: "600", color: Colors.muted },
 
   barTrack: {
@@ -427,7 +431,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: Colors.navy,
-    letterSpacing: -0.1,
+    letterSpacing: 0,
   },
 
   emptyCard: {

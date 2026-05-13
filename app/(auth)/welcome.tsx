@@ -1,11 +1,10 @@
 import React, { useEffect, useRef } from "react";
-import { View, Text, Pressable, StyleSheet, Dimensions, Animated } from "react-native";
+import { View, Text, Pressable, StyleSheet, Animated } from "react-native";
 import { router } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors } from "@/constants/colors";
-
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+import { BrandLogo } from "@/components/BrandLogo";
 
 export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
@@ -53,23 +52,20 @@ export default function WelcomeScreen() {
       locations={[0, 0.5, 1]}
       style={styles.container}
     >
-      {/* Ambient glow spots */}
-      <View style={styles.glowTop} />
-      <View style={styles.glowBottom} />
-
       {/* Brand wordmark */}
       <Animated.View style={[styles.logoContainer, { opacity: logoOpacity, transform: [{ scale: logoScale }] }]}>
-        <Text style={styles.logoText}>Budget Buddy</Text>
-        <View style={styles.logoDivider} />
+        <BrandLogo
+          markSize={30}
+          textColor="rgba(255,255,255,0.82)"
+          textStyle={styles.logoText}
+        />
       </Animated.View>
 
-      {/* Bud orb */}
+      {/* Brand hero mark */}
       <View style={styles.orbSection}>
         <View style={styles.orbitRing} />
         <Animated.View style={[styles.budOrb, { transform: [{ scale: budPulse }] }]}>
-          <LinearGradient colors={[Colors.gold, "#E08A10"]} style={styles.budOrbGradient}>
-            <Text style={styles.budOrbText}>B</Text>
-          </LinearGradient>
+          <BrandLogo variant="mark" markSize={124} />
         </Animated.View>
       </View>
 
@@ -121,41 +117,13 @@ export default function WelcomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, alignItems: "center", justifyContent: "center" },
-  glowTop: {
-    position: "absolute",
-    top: -80,
-    left: SCREEN_WIDTH / 2 - 150,
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    backgroundColor: Colors.gold,
-    opacity: 0.04,
-  },
-  glowBottom: {
-    position: "absolute",
-    bottom: 100,
-    right: -60,
-    width: 250,
-    height: 250,
-    borderRadius: 125,
-    backgroundColor: Colors.teal,
-    opacity: 0.05,
-  },
   logoContainer: { alignItems: "center", marginBottom: 48 },
   logoText: {
     fontSize: 15,
-    fontWeight: "600",
-    color: Colors.muted,
+    fontWeight: "800",
+    color: "rgba(255,255,255,0.82)",
     letterSpacing: 3,
     textTransform: "uppercase",
-  },
-  logoDivider: {
-    width: 32,
-    height: 2,
-    backgroundColor: Colors.gold,
-    borderRadius: 1,
-    marginTop: 8,
-    opacity: 0.6,
   },
   orbSection: {
     width: 160,
@@ -170,26 +138,19 @@ const styles = StyleSheet.create({
     height: 148,
     borderRadius: 74,
     borderWidth: 1,
-    borderColor: "rgba(244, 168, 50, 0.2)",
+    borderColor: "rgba(0, 180, 166, 0.24)",
   },
   budOrb: {
-    width: 112,
-    height: 112,
-    borderRadius: 56,
-    shadowColor: Colors.gold,
+    width: 124,
+    height: 124,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: Colors.teal,
     shadowOpacity: 0.45,
     shadowRadius: 24,
     shadowOffset: { width: 0, height: 4 },
     elevation: 16,
   },
-  budOrbGradient: {
-    width: 112,
-    height: 112,
-    borderRadius: 56,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  budOrbText: { fontSize: 52, fontWeight: "800", color: Colors.navy, lineHeight: 60 },
   headlineContainer: { paddingHorizontal: 32, marginBottom: 16 },
   headline: {
     fontSize: 36,
@@ -197,7 +158,7 @@ const styles = StyleSheet.create({
     color: "#FFF",
     textAlign: "center",
     lineHeight: 44,
-    letterSpacing: -0.5,
+    letterSpacing: 0,
   },
   subtitle: {
     fontSize: 15,

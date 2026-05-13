@@ -14,6 +14,8 @@ import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "@/constants/colors";
+import { BrandHeader } from "@/components/BrandLogo";
+import { Icon } from "@/components/Icon";
 import { useAuthActions } from "@/hooks/useAuth";
 import * as Haptics from "expo-haptics";
 
@@ -63,11 +65,12 @@ export default function LoginScreen() {
         >
           {/* Back */}
           <Pressable onPress={() => router.back()} style={styles.backButton}>
-            <Text style={styles.backText}>← Back</Text>
+            <Icon name="arrow-left" size={17} color={Colors.muted} strokeWidth={2.4} />
+            <Text style={styles.backText}>Back</Text>
           </Pressable>
 
           {/* Header */}
-          <Text style={styles.wordmark}>Budget Buddy</Text>
+          <BrandHeader dark style={styles.brandHeader} />
           <Text style={styles.title}>Welcome back</Text>
           <Text style={styles.subtitle}>Sign in to continue your streak.</Text>
 
@@ -159,26 +162,23 @@ const styles = StyleSheet.create({
   },
   backButton: {
     marginBottom: 32,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    alignSelf: "flex-start",
   },
   backText: {
     color: Colors.muted,
     fontSize: 15,
     fontWeight: "500",
   },
-  wordmark: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: Colors.muted,
-    letterSpacing: 2.5,
-    textTransform: "uppercase",
-    marginBottom: 32,
-  },
+  brandHeader: { marginBottom: 32 },
   title: {
     fontSize: 32,
     fontWeight: "800",
     color: "#FFFFFF",
     marginBottom: 8,
-    letterSpacing: -0.5,
+    letterSpacing: 0,
   },
   subtitle: {
     fontSize: 15,

@@ -4,9 +4,9 @@
  */
 
 import React, { useEffect, useRef } from "react";
-import { View, Text, StyleSheet, Animated } from "react-native";
+import { StyleSheet, Animated } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { Colors } from "@/constants/colors";
+import { BrandLogo } from "@/components/BrandLogo";
 
 export function AppSplash() {
   const pulse = useRef(new Animated.Value(1)).current;
@@ -22,35 +22,24 @@ export function AppSplash() {
 
   return (
     <LinearGradient colors={["#0E1926", "#1B2B4B"]} style={styles.container}>
-      <Animated.View style={[styles.budOrb, { transform: [{ scale: pulse }] }]}>
-        <LinearGradient colors={[Colors.gold, "#E08A10"]} style={styles.budOrbGrad}>
-          <Text style={styles.budOrbText}>B</Text>
-        </LinearGradient>
+      <Animated.View style={{ transform: [{ scale: pulse }] }}>
+        <BrandLogo
+          direction="column"
+          markSize={96}
+          textColor="#FFFFFF"
+          textStyle={styles.wordmark}
+        />
       </Animated.View>
-      <Text style={styles.wordmark}>Budget Buddy</Text>
     </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, alignItems: "center", justifyContent: "center", gap: 24 },
-  budOrb: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    overflow: "hidden",
-    shadowColor: Colors.gold,
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 12,
-  },
-  budOrbGrad: { width: 96, height: 96, alignItems: "center", justifyContent: "center" },
-  budOrbText: { fontSize: 44, fontWeight: "800", color: Colors.navy, lineHeight: 52 },
   wordmark: {
     fontSize: 13,
-    fontWeight: "600",
-    color: Colors.muted,
+    fontWeight: "800",
+    color: "#FFFFFF",
     letterSpacing: 3,
     textTransform: "uppercase",
   },

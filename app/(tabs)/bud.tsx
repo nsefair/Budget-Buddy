@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "@/constants/colors";
 import { useUser } from "@/hooks/useAuth";
+import { BrandHeader, BrandLogo } from "@/components/BrandLogo";
 import { MOCK_BUD_INSIGHT, MOCK_SESSIONS, MOCK_CHAT_HISTORY, BudMessage } from "@/mock/bud";
 import { Icon, type IconName } from "@/components/Icon";
 
@@ -61,12 +62,10 @@ export default function BudScreen() {
         colors={["#0E1926", "#1B2B4B"]}
         style={[styles.header, { paddingTop: insets.top + 12 }]}
       >
-        <Text style={styles.wordmark}>Budget Buddy</Text>
+        <BrandHeader dark style={styles.brandHeader} />
         <View style={styles.headerRow}>
           <View style={styles.budHeaderOrb}>
-            <LinearGradient colors={[Colors.gold, "#E08A10"]} style={styles.budOrbGrad}>
-              <Text style={styles.budOrbLetter}>B</Text>
-            </LinearGradient>
+            <BrandLogo variant="mark" markSize={48} />
           </View>
           <View>
             <Text style={styles.headerTitle}>Bud</Text>
@@ -223,9 +222,7 @@ export default function BudScreen() {
                 >
                   {msg.role === "bud" && (
                     <View style={styles.budBubbleAvatar}>
-                      <LinearGradient colors={[Colors.gold, "#E08A10"]} style={styles.budMiniOrb}>
-                        <Text style={{ fontSize: 10, fontWeight: "800", color: Colors.navy }}>B</Text>
-                      </LinearGradient>
+                      <BrandLogo variant="mark" markSize={28} />
                     </View>
                   )}
                   <View style={[styles.bubbleContent, msg.role === "user" && styles.bubbleContentUser]}>
@@ -238,9 +235,7 @@ export default function BudScreen() {
               {isTyping && (
                 <View style={[styles.chatBubble, styles.chatBubbleBud]}>
                   <View style={styles.budBubbleAvatar}>
-                    <LinearGradient colors={[Colors.gold, "#E08A10"]} style={styles.budMiniOrb}>
-                      <Text style={{ fontSize: 10, fontWeight: "800", color: Colors.navy }}>B</Text>
-                    </LinearGradient>
+                    <BrandLogo variant="mark" markSize={28} />
                   </View>
                   <View style={styles.bubbleContent}>
                     <Text style={styles.typingText}>Bud is thinking…</Text>
@@ -347,12 +342,10 @@ function ActionCard({ icon, title, sub, onPress, locked, lockReason }: {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.surface },
   header: { paddingHorizontal: 20, paddingBottom: 0 },
-  wordmark: { fontSize: 13, fontWeight: "600", color: "rgba(255,255,255,0.4)", letterSpacing: 2, textTransform: "uppercase", textAlign: "center", marginBottom: 12 },
+  brandHeader: { marginBottom: 12 },
   headerRow: { flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 16 },
-  budHeaderOrb: { width: 44, height: 44, borderRadius: 22, overflow: "hidden" },
-  budOrbGrad: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
-  budOrbLetter: { fontSize: 22, fontWeight: "800", color: Colors.navy },
-  headerTitle: { fontSize: 24, fontWeight: "800", color: "#FFF", letterSpacing: -0.5 },
+  budHeaderOrb: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
+  headerTitle: { fontSize: 24, fontWeight: "800", color: "#FFF", letterSpacing: 0 },
   headerSub: { fontSize: 13, color: Colors.muted },
   viewSwitcher: { flexDirection: "row", borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.08)", marginTop: 4 },
   switchTab: { flex: 1, paddingVertical: 12, alignItems: "center" },
@@ -399,8 +392,7 @@ const styles = StyleSheet.create({
   chatBubble: { flexDirection: "row", gap: 10, alignItems: "flex-end" },
   chatBubbleUser: { flexDirection: "row-reverse" },
   chatBubbleBud: {},
-  budBubbleAvatar: { width: 28, height: 28, borderRadius: 14, overflow: "hidden", flexShrink: 0 },
-  budMiniOrb: { width: 28, height: 28, alignItems: "center", justifyContent: "center" },
+  budBubbleAvatar: { width: 28, height: 28, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   bubbleContent: { maxWidth: "78%", backgroundColor: Colors.card, borderRadius: 16, borderBottomLeftRadius: 4, padding: 14, shadowColor: Colors.navy, shadowOpacity: 0.05, shadowRadius: 4, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
   bubbleContentUser: { backgroundColor: Colors.navy, borderBottomLeftRadius: 16, borderBottomRightRadius: 4 },
   bubbleText: { fontSize: 14, color: Colors.navyMuted, lineHeight: 20 },

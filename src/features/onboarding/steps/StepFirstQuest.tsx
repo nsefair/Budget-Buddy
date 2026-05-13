@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "800",
     color: "#FFFFFF",
-    letterSpacing: -0.4,
+    letterSpacing: 0,
     lineHeight: 28,
     marginBottom: 14,
   },
@@ -209,7 +209,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#FFFFFF",
     marginBottom: 4,
-    letterSpacing: -0.2,
+    letterSpacing: 0,
   },
   streakSub: { fontSize: 13, color: "rgba(255,255,255,0.7)", lineHeight: 19 },
 });

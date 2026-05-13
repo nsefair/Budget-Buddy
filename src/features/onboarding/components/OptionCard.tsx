@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.gold,
     borderColor: Colors.gold,
   },
-  label: { fontSize: 15, fontWeight: "700", color: "#FFF", letterSpacing: -0.1 },
+  label: { fontSize: 15, fontWeight: "700", color: "#FFF", letterSpacing: 0 },
   labelSelected: { color: Colors.gold },
   sub: { fontSize: 12, color: Colors.muted, marginTop: 2, lineHeight: 17 },
   check: {

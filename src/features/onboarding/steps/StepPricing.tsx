@@ -325,11 +325,11 @@ const styles = StyleSheet.create({
   },
 
   planTop: { flexDirection: "row", alignItems: "flex-start", marginBottom: 14 },
-  planName: { fontSize: 20, fontWeight: "800", color: "#FFFFFF", letterSpacing: -0.4 },
+  planName: { fontSize: 20, fontWeight: "800", color: "#FFFFFF", letterSpacing: 0 },
   planTagline: { fontSize: 13, color: Colors.muted, marginTop: 4, lineHeight: 18 },
   priceCol: { alignItems: "flex-end" },
   priceFree: { fontSize: 22, fontWeight: "800", color: Colors.emerald },
-  priceMain: { fontSize: 28, fontWeight: "800", color: "#FFFFFF", letterSpacing: -1 },
+  priceMain: { fontSize: 28, fontWeight: "800", color: "#FFFFFF", letterSpacing: 0 },
   priceSub: { fontSize: 12, color: Colors.muted, marginTop: -2 },
   priceAnnual: { fontSize: 11, color: Colors.muted, marginTop: 4 },
 
@@ -379,7 +379,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "800",
     color: "#FFFFFF",
-    letterSpacing: -0.2,
+    letterSpacing: 0,
   },
   lifetimeBlurb: {
     fontSize: 12,

@@ -21,6 +21,7 @@ export interface Transaction {
 }
 
 export interface BudgetOverview {
+  monthId: string;
   month: string;
   totalBudget: number;
   totalSpent: number;
@@ -30,16 +31,123 @@ export interface BudgetOverview {
   categories: BudgetCategory[];
 }
 
-export const MOCK_BUDGET_CATEGORIES: BudgetCategory[] = [
-  { id: "food", name: "Food & Drink", icon: "🍔", budgetLimit: 400, spent: 312, color: "#F59E0B" },
-  { id: "transport", name: "Transportation", icon: "🚗", budgetLimit: 200, spent: 178, color: "#6366F1" },
-  { id: "shopping", name: "Shopping", icon: "🛍️", budgetLimit: 250, spent: 287, color: "#EF4444" },
-  { id: "housing", name: "Housing", icon: "🏠", budgetLimit: 1200, spent: 1200, color: "#1B2B4B" },
-  { id: "entertainment", name: "Entertainment", icon: "🎬", budgetLimit: 100, spent: 64, color: "#8B5CF6" },
-  { id: "health", name: "Health & Wellness", icon: "💊", budgetLimit: 80, spent: 45, color: "#10B981" },
-  { id: "personal", name: "Personal Care", icon: "✂️", budgetLimit: 60, spent: 38, color: "#F4A832" },
-  { id: "education", name: "Education", icon: "📚", budgetLimit: 50, spent: 0, color: "#00B4A6" },
+export interface BudgetMonthOption {
+  id: string;
+  label: string;
+  shortLabel: string;
+  totalSpent: number;
+  totalBudget: number;
+  isCurrent: boolean;
+}
+
+const CATEGORY_META: Array<Omit<BudgetCategory, "spent">> = [
+  { id: "food", name: "Food & Drink", icon: "receipt", budgetLimit: 400, color: "#F59E0B" },
+  { id: "transport", name: "Transportation", icon: "activity", budgetLimit: 200, color: "#6366F1" },
+  { id: "shopping", name: "Shopping", icon: "wallet", budgetLimit: 250, color: "#EF4444" },
+  { id: "housing", name: "Housing", icon: "home", budgetLimit: 1200, color: "#1B2B4B" },
+  { id: "entertainment", name: "Entertainment", icon: "star", budgetLimit: 100, color: "#8B5CF6" },
+  { id: "health", name: "Health & Wellness", icon: "shield", budgetLimit: 80, color: "#10B981" },
+  { id: "personal", name: "Personal Care", icon: "user", budgetLimit: 60, color: "#F4A832" },
+  { id: "education", name: "Education", icon: "layers", budgetLimit: 50, color: "#00B4A6" },
 ];
+
+function makeCategories(spend: Record<string, number>): BudgetCategory[] {
+  return CATEGORY_META.map((category) => ({
+    ...category,
+    spent: spend[category.id] ?? 0,
+  }));
+}
+
+function makeOverview({
+  monthId,
+  month,
+  income,
+  categories,
+}: {
+  monthId: string;
+  month: string;
+  income: number;
+  categories: BudgetCategory[];
+}): BudgetOverview {
+  const totalSpent = categories.reduce((sum, c) => sum + c.spent, 0);
+  const totalBudget = categories.reduce((sum, c) => sum + c.budgetLimit, 0);
+  const daysElapsed = monthId === "2026-05" ? 31 : 30;
+
+  return {
+    monthId,
+    month,
+    income,
+    categories,
+    totalSpent,
+    totalBudget,
+    savingsRate: Math.max(0, ((income - totalSpent) / income) * 100),
+    avgDailySpend: totalSpent / daysElapsed,
+  };
+}
+
+export const MOCK_BUDGET_MONTHS: BudgetOverview[] = [
+  makeOverview({
+    monthId: "2026-03",
+    month: "March 2026",
+    income: 3650,
+    categories: makeCategories({
+      food: 354,
+      transport: 142,
+      shopping: 186,
+      housing: 1200,
+      entertainment: 92,
+      health: 36,
+      personal: 52,
+      education: 28,
+    }),
+  }),
+  makeOverview({
+    monthId: "2026-04",
+    month: "April 2026",
+    income: 3750,
+    categories: makeCategories({
+      food: 438,
+      transport: 205,
+      shopping: 221,
+      housing: 1200,
+      entertainment: 118,
+      health: 42,
+      personal: 48,
+      education: 12,
+    }),
+  }),
+  makeOverview({
+    monthId: "2026-05",
+    month: "May 2026",
+    income: 3800,
+    categories: makeCategories({
+      food: 312,
+      transport: 178,
+      shopping: 287,
+      housing: 1200,
+      entertainment: 64,
+      health: 45,
+      personal: 38,
+      education: 0,
+    }),
+  }),
+];
+
+export const MOCK_BUDGET_OVERVIEW = MOCK_BUDGET_MONTHS[MOCK_BUDGET_MONTHS.length - 1];
+export const MOCK_BUDGET_CATEGORIES = MOCK_BUDGET_OVERVIEW.categories;
+
+export const MOCK_BUDGET_MONTH_OPTIONS: BudgetMonthOption[] = MOCK_BUDGET_MONTHS.map(
+  (overview, index) => ({
+    id: overview.monthId,
+    label: overview.month,
+    shortLabel: new Date(`${overview.monthId}-01T00:00:00`).toLocaleDateString("en-US", {
+      month: "short",
+    }),
+    totalSpent: overview.totalSpent,
+    totalBudget: overview.totalBudget,
+    isCurrent: index === MOCK_BUDGET_MONTHS.length - 1,
+  })
+);
 
 export const MOCK_TRANSACTIONS: Transaction[] = [
   { id: "txn_001", merchant: "Chipotle", category: "Food & Drink", categoryId: "food", amount: 14.75, date: "2026-05-06T12:30:00Z", isRecurring: false, isManual: false, isFlagged: false },
@@ -50,17 +158,17 @@ export const MOCK_TRANSACTIONS: Transaction[] = [
   { id: "txn_006", merchant: "Planet Fitness", category: "Health & Wellness", categoryId: "health", amount: 24.99, date: "2026-05-01T00:00:00Z", isRecurring: true, isManual: false, isFlagged: false },
   { id: "txn_007", merchant: "Starbucks", category: "Food & Drink", categoryId: "food", amount: 7.45, date: "2026-05-06T08:05:00Z", isRecurring: false, isManual: false, isFlagged: false },
   { id: "txn_008", merchant: "Shell Gas Station", category: "Transportation", categoryId: "transport", amount: 52.00, date: "2026-05-03T11:30:00Z", isRecurring: false, isManual: false, isFlagged: false },
+  { id: "txn_009", merchant: "Target", category: "Shopping", categoryId: "shopping", amount: 72.40, date: "2026-04-28T16:10:00Z", isRecurring: false, isManual: false, isFlagged: false },
+  { id: "txn_010", merchant: "Trader Joe's", category: "Food & Drink", categoryId: "food", amount: 84.10, date: "2026-04-24T21:14:00Z", isRecurring: false, isManual: false, isFlagged: false },
+  { id: "txn_011", merchant: "Spotify", category: "Entertainment", categoryId: "entertainment", amount: 10.99, date: "2026-04-18T00:00:00Z", isRecurring: true, isManual: false, isFlagged: false },
+  { id: "txn_012", merchant: "Lyft", category: "Transportation", categoryId: "transport", amount: 31.25, date: "2026-04-11T23:20:00Z", isRecurring: false, isManual: false, isFlagged: false },
+  { id: "txn_013", merchant: "Landlord", category: "Housing", categoryId: "housing", amount: 1200, date: "2026-04-01T09:00:00Z", isRecurring: true, isManual: false, isFlagged: false },
+  { id: "txn_014", merchant: "Sweetgreen", category: "Food & Drink", categoryId: "food", amount: 18.60, date: "2026-03-27T18:32:00Z", isRecurring: false, isManual: false, isFlagged: false },
+  { id: "txn_015", merchant: "Campus Bookstore", category: "Education", categoryId: "education", amount: 28.00, date: "2026-03-20T14:05:00Z", isRecurring: false, isManual: false, isFlagged: false },
+  { id: "txn_016", merchant: "AMC Theatres", category: "Entertainment", categoryId: "entertainment", amount: 27.50, date: "2026-03-15T02:18:00Z", isRecurring: false, isManual: false, isFlagged: false },
+  { id: "txn_017", merchant: "CVS Pharmacy", category: "Health & Wellness", categoryId: "health", amount: 36.00, date: "2026-03-08T13:46:00Z", isRecurring: false, isManual: false, isFlagged: false },
+  { id: "txn_018", merchant: "Landlord", category: "Housing", categoryId: "housing", amount: 1200, date: "2026-03-01T09:00:00Z", isRecurring: true, isManual: false, isFlagged: false },
 ];
-
-export const MOCK_BUDGET_OVERVIEW: BudgetOverview = {
-  month: "May 2026",
-  totalBudget: 2340,
-  totalSpent: 2124,
-  income: 3800,
-  savingsRate: 18.4,
-  avgDailySpend: 68.5,
-  categories: MOCK_BUDGET_CATEGORIES,
-};
 
 // ─── Daily snapshot (Today tab) ──────────────────────────────────────────────
 export interface DailySnapshot {

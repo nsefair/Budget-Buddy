@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: Colors.navy,
-    letterSpacing: -0.2,
+    letterSpacing: 0,
   },
   secondary: {
     paddingVertical: 14,

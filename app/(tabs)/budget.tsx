@@ -12,7 +12,7 @@
  * No emojis anywhere — every glyph is a Lucide icon. Numbers are the heroes.
  */
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Pressable,
   ScrollView,
@@ -24,17 +24,20 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 
 import { Colors } from "@/constants/colors";
+import { BrandHeader } from "@/components/BrandLogo";
 import { Icon, type IconName } from "@/components/Icon";
 import {
-  MOCK_BUDGET_OVERVIEW,
-  MOCK_TRANSACTIONS,
   MOCK_HOLDINGS,
   MOCK_INVESTMENT_SUMMARY,
   MOCK_ACCOUNTS,
   MOCK_UPCOMING_BILLS,
+  type BudgetOverview,
   type BudgetCategory,
+  type BudgetMonthOption,
+  type Transaction,
 } from "@/mock/budget";
-import { formatCurrency } from "@/utils/security";
+import { budgetService } from "@/services/budgetService";
+import { formatCurrency, secureLog } from "@/utils/security";
 
 const TAB_BAR_HEIGHT = 80;
 
@@ -53,10 +56,81 @@ const CATEGORY_ICON: Record<string, IconName> = {
 export default function BudgetScreen() {
   const insets = useSafeAreaInsets();
   const [txnTab, setTxnTab] = useState<"recent" | "upcoming">("recent");
+  const [months, setMonths] = useState<BudgetMonthOption[]>([]);
+  const [selectedMonthId, setSelectedMonthId] = useState("");
+  const [overview, setOverview] = useState<BudgetOverview | null>(null);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
 
-  const overview = MOCK_BUDGET_OVERVIEW;
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      try {
+        const availableMonths = await budgetService.getAvailableMonths();
+        if (!alive) return;
+
+        const currentMonth =
+          availableMonths.find((month) => month.isCurrent) ??
+          availableMonths[availableMonths.length - 1];
+        setMonths(availableMonths);
+        setSelectedMonthId((existing) => existing || currentMonth?.id || "");
+      } catch (error) {
+        secureLog.error("budget.months failed", error);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedMonthId) return;
+    let alive = true;
+
+    (async () => {
+      try {
+        const [nextOverview, nextTransactions] = await Promise.all([
+          budgetService.getOverview(selectedMonthId),
+          budgetService.getTransactions({ month: selectedMonthId, limit: 12 }),
+        ]);
+        if (!alive) return;
+        setOverview(nextOverview);
+        setTransactions(nextTransactions);
+      } catch (error) {
+        secureLog.error("budget.overview failed", error);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [selectedMonthId]);
+
+  const selectedMonthIndex = months.findIndex((month) => month.id === selectedMonthId);
+  const selectedMonth = selectedMonthIndex >= 0 ? months[selectedMonthIndex] : null;
+  const previousMonth = selectedMonthIndex > 0 ? months[selectedMonthIndex - 1] : null;
+
+  const setMonthByStep = (step: -1 | 1) => {
+    const next = months[selectedMonthIndex + step];
+    if (!next) return;
+    Haptics.selectionAsync();
+    setSelectedMonthId(next.id);
+  };
+
+  if (!overview) {
+    return (
+      <View style={styles.container}>
+        <View style={[styles.loadingState, { paddingTop: insets.top + 24 }]}>
+          <BrandHeader style={styles.brandHeader} />
+          <Text style={styles.loadingText}>Loading budget...</Text>
+        </View>
+      </View>
+    );
+  }
+
   const savingsRate = Math.round(overview.savingsRate);
-  const recent = MOCK_TRANSACTIONS.slice(0, 4);
+  const recent = transactions.slice(0, 4);
 
   return (
     <View style={styles.container}>
@@ -67,11 +141,36 @@ export default function BudgetScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
+        <BrandHeader style={styles.brandHeader} />
+
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.eyebrow}>{overview.month.toUpperCase()}</Text>
-          <Text style={styles.title}>Budget</Text>
+          <View>
+            <Text style={styles.eyebrow}>MONEY TRUTH</Text>
+            <Text style={styles.title}>Budget</Text>
+          </View>
+          <View style={styles.syncBadge}>
+            <Icon name="check-circle" size={13} color={Colors.teal} strokeWidth={2.4} />
+            <Text style={styles.syncBadgeText}>Synced</Text>
+          </View>
         </View>
+
+        <MonthNavigator
+          months={months}
+          selectedMonthId={selectedMonthId}
+          onSelect={(monthId) => {
+            Haptics.selectionAsync();
+            setSelectedMonthId(monthId);
+          }}
+          onPrevious={() => setMonthByStep(-1)}
+          onNext={() => setMonthByStep(1)}
+          canPrevious={selectedMonthIndex > 0}
+          canNext={selectedMonthIndex >= 0 && selectedMonthIndex < months.length - 1}
+        />
+
+        {selectedMonth && (
+          <MonthInsight current={selectedMonth} previous={previousMonth} />
+        )}
 
         {/* 4 stat tiles */}
         <View style={styles.statGrid}>
@@ -106,7 +205,7 @@ export default function BudgetScreen() {
 
         {/* Spending breakdown — segmented bar */}
         <Card>
-          <CardHeader title="Spending breakdown" hint="By category" />
+          <CardHeader title="Spending breakdown" hint={overview.month} />
           <SegmentedBar categories={overview.categories} totalSpent={overview.totalSpent} />
           <View style={styles.legend}>
             {overview.categories.slice(0, 6).map((c) => (
@@ -140,6 +239,9 @@ export default function BudgetScreen() {
 
           {txnTab === "recent" ? (
             <View style={styles.txnList}>
+              {recent.length === 0 && (
+                <Text style={styles.emptyTransactions}>No transactions for this month yet.</Text>
+              )}
               {recent.map((t, i) => (
                 <React.Fragment key={t.id}>
                   <TransactionRow
@@ -251,6 +353,118 @@ function CardHeader({
         {hint && <Text style={styles.cardHint}>{hint}</Text>}
       </View>
       {right}
+    </View>
+  );
+}
+
+function MonthNavigator({
+  months,
+  selectedMonthId,
+  canPrevious,
+  canNext,
+  onPrevious,
+  onNext,
+  onSelect,
+}: {
+  months: BudgetMonthOption[];
+  selectedMonthId: string;
+  canPrevious: boolean;
+  canNext: boolean;
+  onPrevious: () => void;
+  onNext: () => void;
+  onSelect: (monthId: string) => void;
+}) {
+  const selectedMonth = months.find((month) => month.id === selectedMonthId);
+
+  return (
+    <View style={styles.monthPanel}>
+      <View style={styles.monthPanelTop}>
+        <Pressable
+          disabled={!canPrevious}
+          onPress={onPrevious}
+          style={[styles.monthArrow, !canPrevious && styles.monthArrowDisabled]}
+        >
+          <Icon name="arrow-left" size={16} color={canPrevious ? Colors.navy : Colors.muted} />
+        </Pressable>
+        <View style={styles.monthTitleWrap}>
+          <Text style={styles.monthTitle}>{selectedMonth?.label ?? "This month"}</Text>
+          <Text style={styles.monthSubtitle}>Switch months to spot spending patterns</Text>
+        </View>
+        <Pressable
+          disabled={!canNext}
+          onPress={onNext}
+          style={[styles.monthArrow, !canNext && styles.monthArrowDisabled]}
+        >
+          <Icon name="chevron-right" size={17} color={canNext ? Colors.navy : Colors.muted} />
+        </Pressable>
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.monthChips}
+      >
+        {months.map((month) => {
+          const active = month.id === selectedMonthId;
+          return (
+            <Pressable
+              key={month.id}
+              onPress={() => onSelect(month.id)}
+              style={[styles.monthChip, active && styles.monthChipActive]}
+            >
+              <Text style={[styles.monthChipText, active && styles.monthChipTextActive]}>
+                {month.shortLabel}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
+
+function MonthInsight({
+  current,
+  previous,
+}: {
+  current: BudgetMonthOption;
+  previous: BudgetMonthOption | null;
+}) {
+  const spentRatio = current.totalSpent / current.totalBudget;
+
+  if (!previous) {
+    return (
+      <View style={styles.monthInsight}>
+        <Icon name="sparkles" size={15} color={Colors.teal} strokeWidth={2.4} />
+        <Text style={styles.monthInsightText}>
+          First month in this view. Future months will compare against it.
+        </Text>
+      </View>
+    );
+  }
+
+  const difference = current.totalSpent - previous.totalSpent;
+  const isLower = difference < 0;
+  const same = Math.abs(difference) < 1;
+
+  return (
+    <View style={styles.monthInsight}>
+      <Icon
+        name={same ? "sparkles" : isLower ? "trending-down" : "trending-up"}
+        size={15}
+        color={same ? Colors.teal : isLower ? Colors.teal : Colors.gold}
+        strokeWidth={2.4}
+      />
+      <Text style={styles.monthInsightText}>
+        {same
+          ? `Spending is about the same as ${previous.shortLabel}.`
+          : `${formatCurrency(Math.abs(difference), { compact: true })} ${
+              isLower ? "less" : "more"
+            } than ${previous.shortLabel}.`}
+        <Text style={styles.monthInsightMuted}>
+          {` ${Math.round(spentRatio * 100)}% of budget used.`}
+        </Text>
+      </Text>
     </View>
   );
 }
@@ -469,8 +683,26 @@ function AccountsBlock() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.surface },
   scroll: { paddingHorizontal: 18, gap: 12 },
+  loadingState: {
+    flex: 1,
+    paddingHorizontal: 18,
+  },
+  loadingText: {
+    marginTop: 18,
+    textAlign: "center",
+    fontSize: 13,
+    fontWeight: "700",
+    color: Colors.navyMuted,
+  },
 
-  header: { marginBottom: 14 },
+  brandHeader: { marginBottom: 18 },
+  header: {
+    marginBottom: 14,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
   eyebrow: {
     fontSize: 11,
     fontWeight: "800",
@@ -482,7 +714,111 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "800",
     color: Colors.navy,
-    letterSpacing: -0.6,
+    letterSpacing: 0,
+  },
+  syncBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,180,166,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(0,180,166,0.22)",
+  },
+  syncBadgeText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Colors.teal,
+  },
+
+  monthPanel: {
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: 12,
+  },
+  monthPanelTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 10,
+  },
+  monthArrow: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.navy50,
+  },
+  monthArrowDisabled: {
+    opacity: 0.4,
+  },
+  monthTitleWrap: { flex: 1, alignItems: "center" },
+  monthTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: Colors.navy,
+    letterSpacing: 0,
+  },
+  monthSubtitle: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: "600",
+    color: Colors.muted,
+  },
+  monthChips: {
+    gap: 8,
+    paddingHorizontal: 2,
+  },
+  monthChip: {
+    minWidth: 64,
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  monthChipActive: {
+    backgroundColor: Colors.navy,
+    borderColor: Colors.navy,
+  },
+  monthChipText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Colors.navyMuted,
+  },
+  monthChipTextActive: {
+    color: "#FFFFFF",
+  },
+  monthInsight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: "rgba(0,180,166,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(0,180,166,0.16)",
+    marginBottom: 12,
+  },
+  monthInsightText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "700",
+    color: Colors.navy,
+    lineHeight: 17,
+  },
+  monthInsightMuted: {
+    color: Colors.navyMuted,
+    fontWeight: "600",
   },
 
   statGrid: {
@@ -514,7 +850,7 @@ const styles = StyleSheet.create({
     fontSize: 19,
     fontWeight: "800",
     color: Colors.navy,
-    letterSpacing: -0.4,
+    letterSpacing: 0,
   },
   statLabel: {
     fontSize: 11,
@@ -542,7 +878,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
     color: Colors.navy,
-    letterSpacing: -0.2,
+    letterSpacing: 0,
   },
   cardHint: { fontSize: 11, color: Colors.muted, marginTop: 2 },
 
@@ -606,6 +942,13 @@ const styles = StyleSheet.create({
   tabPillTextActive: { color: "#FFFFFF" },
 
   txnList: { gap: 0 },
+  emptyTransactions: {
+    paddingVertical: 14,
+    fontSize: 13,
+    fontWeight: "600",
+    color: Colors.muted,
+    textAlign: "center",
+  },
   txnRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -631,7 +974,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "800",
     color: Colors.navy,
-    letterSpacing: -0.3,
+    letterSpacing: 0,
   },
   holdingRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   tickerBadge: {
@@ -696,6 +1039,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "800",
     color: Colors.navy,
-    letterSpacing: -0.3,
+    letterSpacing: 0,
   },
 });

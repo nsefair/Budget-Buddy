@@ -21,13 +21,13 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { Colors } from "@/constants/colors";
+import { Icon } from "@/components/Icon";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -84,7 +84,7 @@ export function OnboardingShell({
               style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.5 }]}
               hitSlop={12}
             >
-              <Text style={styles.backArrow}>←</Text>
+              <Icon name="arrow-left" size={18} color="#FFFFFF" strokeWidth={2.4} />
             </Pressable>
           )}
         </View>
@@ -170,6 +170,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 12,
     paddingBottom: 8,
+    zIndex: 2,
   },
   backSlot: { width: 44, alignItems: "flex-start", justifyContent: "center" },
   backBtn: {
@@ -180,7 +181,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.06)",
   },
-  backArrow: { fontSize: 18, color: "#FFF", fontWeight: "600", marginTop: -1 },
 
   progressWrap: { flex: 1, alignItems: "center" },
   dots: { flexDirection: "row", gap: 6 },
@@ -193,12 +193,13 @@ const styles = StyleSheet.create({
   dotActive: { backgroundColor: Colors.gold, width: 28 },
   dotPast: { backgroundColor: "rgba(244,168,50,0.45)" },
 
-  content: { paddingHorizontal: 24, paddingTop: 16, flexGrow: 1 },
+  content: { paddingHorizontal: 24, paddingTop: 16, flexGrow: 1, zIndex: 1 },
   contentCentered: { justifyContent: "center" },
 
   footer: {
     paddingHorizontal: 24,
     paddingTop: 12,
     backgroundColor: "transparent",
+    zIndex: 2,
   },
 });

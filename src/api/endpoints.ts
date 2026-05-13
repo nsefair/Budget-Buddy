@@ -45,6 +45,7 @@ export const ENDPOINTS = {
 
   // ── Budget ──────────────────────────────────────────────────────────────────
   BUDGET: {
+    MONTHS: "/budget/months",
     OVERVIEW: "/budget/overview",
     CATEGORIES: "/budget/categories",
     CATEGORY_DETAIL: (id: string) => `/budget/categories/${id}`,

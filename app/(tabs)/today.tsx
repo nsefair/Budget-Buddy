@@ -35,6 +35,7 @@ import * as Haptics from "expo-haptics";
 
 import { Colors } from "@/constants/colors";
 import { useUser } from "@/hooks/useAuth";
+import { BrandHeader, BrandLogo } from "@/components/BrandLogo";
 import { Icon } from "@/components/Icon";
 import {
   MOCK_TRANSACTIONS,
@@ -121,12 +122,10 @@ export default function TodayScreen() {
           >
             <View style={{ paddingTop: insets.top + 12 }}>
               <View style={styles.headerBlock}>
-                <Text style={styles.wordmark}>BUDGET BUDDY</Text>
+                <BrandHeader dark style={styles.brandHeader} />
                 <View style={styles.greetingRow}>
                   <View style={styles.budAvatar}>
-                    <LinearGradient colors={[Colors.gold400, Colors.gold600]} style={styles.budAvatarGradient}>
-                      <Text style={styles.budAvatarText}>B</Text>
-                    </LinearGradient>
+                    <BrandLogo variant="mark" markSize={42} />
                   </View>
                   <Text style={styles.greetingText}>{greeting}</Text>
                 </View>
@@ -484,23 +483,9 @@ const styles = StyleSheet.create({
   },
 
   headerBlock: { paddingBottom: 16, paddingTop: 0 },
-  wordmark: {
-    fontSize: 11,
-    color: "rgba(255,255,255,0.55)",
-    letterSpacing: 3,
-    fontWeight: "700",
-    textAlign: "center",
-    marginBottom: 18,
-  },
+  brandHeader: { marginBottom: 18 },
   greetingRow: { flexDirection: "row", gap: 12, alignItems: "center" },
-  budAvatar: { width: 38, height: 38, borderRadius: 19, overflow: "hidden" },
-  budAvatarGradient: {
-    width: 38,
-    height: 38,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  budAvatarText: { fontSize: 18, fontWeight: "800", color: Colors.navy },
+  budAvatar: { width: 42, height: 42, alignItems: "center", justifyContent: "center" },
   greetingText: {
     flex: 1,
     fontSize: 14,
@@ -562,7 +547,7 @@ const styles = StyleSheet.create({
     fontSize: 26,
     fontWeight: "800",
     color: Colors.navy,
-    letterSpacing: -0.6,
+    letterSpacing: 0,
   },
   netWorthChange: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
   netWorthChangeText: { fontSize: 11, fontWeight: "600", color: Colors.emerald },
@@ -585,7 +570,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "800",
     color: Colors.navy,
-    letterSpacing: -0.4,
+    letterSpacing: 0,
     marginTop: 1,
   },
 
@@ -606,7 +591,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "800",
     color: Colors.navy,
-    letterSpacing: -0.4,
+    letterSpacing: 0,
   },
   levelLabel: {
     fontSize: 9,
@@ -631,7 +616,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "800",
     color: Colors.navy,
-    letterSpacing: -0.3,
+    letterSpacing: 0,
   },
   statsCellLabel: { fontSize: 10, color: Colors.muted, fontWeight: "600", marginTop: 1 },
 
@@ -654,7 +639,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
     color: Colors.navy,
-    letterSpacing: -0.2,
+    letterSpacing: 0,
   },
   statusPill: {
     flexDirection: "row",
@@ -671,7 +656,7 @@ const styles = StyleSheet.create({
     fontSize: 26,
     fontWeight: "800",
     color: Colors.navy,
-    letterSpacing: -0.5,
+    letterSpacing: 0,
     marginBottom: 8,
   },
   dailyAmountLight: { fontSize: 16, color: Colors.muted, fontWeight: "600" },
@@ -733,7 +718,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
     color: Colors.navy,
-    letterSpacing: -0.2,
+    letterSpacing: 0,
   },
   sectionAction: { fontSize: 12, color: Colors.gold, fontWeight: "700" },
 
@@ -786,13 +771,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "800",
     color: Colors.navy,
-    letterSpacing: -0.3,
+    letterSpacing: 0,
   },
   goalCardPct: {
     fontSize: 16,
     fontWeight: "800",
     color: Colors.gold,
-    letterSpacing: -0.3,
+    letterSpacing: 0,
   },
   goalCardReason: {
     fontSize: 13,

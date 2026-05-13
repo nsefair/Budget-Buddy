@@ -14,6 +14,8 @@ import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "@/constants/colors";
+import { BrandHeader } from "@/components/BrandLogo";
+import { Icon } from "@/components/Icon";
 import { useAuthActions } from "@/hooks/useAuth";
 import * as Haptics from "expo-haptics";
 
@@ -65,10 +67,11 @@ export default function RegisterScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <Pressable onPress={() => router.back()} style={styles.backButton}>
-            <Text style={styles.backText}>← Back</Text>
+            <Icon name="arrow-left" size={17} color={Colors.muted} strokeWidth={2.4} />
+            <Text style={styles.backText}>Back</Text>
           </Pressable>
 
-          <Text style={styles.wordmark}>Budget Buddy</Text>
+          <BrandHeader dark style={styles.brandHeader} />
           <Text style={styles.title}>Create your account</Text>
           <Text style={styles.subtitle}>
             Takes 60 seconds. No credit card needed.
@@ -181,17 +184,16 @@ export default function RegisterScreen() {
 
 const styles = StyleSheet.create({
   container: { flexGrow: 1, paddingHorizontal: 24 },
-  backButton: { marginBottom: 32 },
-  backText: { color: Colors.muted, fontSize: 15, fontWeight: "500" },
-  wordmark: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: Colors.muted,
-    letterSpacing: 2.5,
-    textTransform: "uppercase",
+  backButton: {
     marginBottom: 32,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    alignSelf: "flex-start",
   },
-  title: { fontSize: 32, fontWeight: "800", color: "#FFF", marginBottom: 8, letterSpacing: -0.5 },
+  backText: { color: Colors.muted, fontSize: 15, fontWeight: "500" },
+  brandHeader: { marginBottom: 32 },
+  title: { fontSize: 32, fontWeight: "800", color: "#FFF", marginBottom: 8, letterSpacing: 0 },
   subtitle: { fontSize: 15, color: Colors.muted, marginBottom: 40 },
   form: { gap: 20, marginBottom: 32 },
   row: { flexDirection: "row", gap: 12 },

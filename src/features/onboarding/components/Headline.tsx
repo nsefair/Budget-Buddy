@@ -43,7 +43,7 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "800",
     color: "#FFFFFF",
-    letterSpacing: -0.6,
+    letterSpacing: 0,
     lineHeight: 36,
     marginBottom: 12,
   },

@@ -9,41 +9,86 @@ import { api, IS_MOCK } from "@/api/client";
 import { ENDPOINTS } from "@/api/endpoints";
 import {
   MOCK_BUDGET_OVERVIEW,
+  MOCK_BUDGET_MONTH_OPTIONS,
+  MOCK_BUDGET_MONTHS,
   MOCK_TRANSACTIONS,
   type BudgetOverview,
   type BudgetCategory,
+  type BudgetMonthOption,
   type Transaction,
 } from "@/mock/budget";
 
 export const BUDGET_KEYS = {
   all: ["budget"] as const,
+  months: () => [...BUDGET_KEYS.all, "months"] as const,
   overview: (month: string) => [...BUDGET_KEYS.all, "overview", month] as const,
   category: (id: string) => [...BUDGET_KEYS.all, "category", id] as const,
   transactions: (filters?: Record<string, unknown>) =>
     [...BUDGET_KEYS.all, "transactions", filters] as const,
 };
 
+function isTransactionInMonth(transaction: Transaction, month: string) {
+  return transaction.date.startsWith(month);
+}
+
+function sortTransactionsNewestFirst(transactions: Transaction[]) {
+  return [...transactions].sort(
+    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+  );
+}
+
 export const budgetService = {
+  getAvailableMonths: async (): Promise<BudgetMonthOption[]> => {
+    if (IS_MOCK) return MOCK_BUDGET_MONTH_OPTIONS;
+    return api.get<BudgetMonthOption[]>(ENDPOINTS.BUDGET.MONTHS);
+  },
+
   getOverview: async (month: string): Promise<BudgetOverview> => {
-    if (IS_MOCK) return { ...MOCK_BUDGET_OVERVIEW, month };
+    if (IS_MOCK) {
+      return (
+        MOCK_BUDGET_MONTHS.find((overview) => overview.monthId === month) ??
+        MOCK_BUDGET_MONTHS.find((overview) => overview.month === month) ??
+        MOCK_BUDGET_OVERVIEW
+      );
+    }
     return api.get<BudgetOverview>(ENDPOINTS.BUDGET.OVERVIEW, { month });
   },
 
-  getCategories: async (): Promise<BudgetCategory[]> => {
-    if (IS_MOCK) return MOCK_BUDGET_OVERVIEW.categories;
-    return api.get<BudgetCategory[]>(ENDPOINTS.BUDGET.CATEGORIES);
+  getCategories: async (month = MOCK_BUDGET_OVERVIEW.monthId): Promise<BudgetCategory[]> => {
+    if (IS_MOCK) return (await budgetService.getOverview(month)).categories;
+    return api.get<BudgetCategory[]>(ENDPOINTS.BUDGET.CATEGORIES, { month });
   },
 
-  getCategoryTransactions: async (categoryId: string): Promise<Transaction[]> => {
+  getCategoryTransactions: async (
+    categoryId: string,
+    month = MOCK_BUDGET_OVERVIEW.monthId
+  ): Promise<Transaction[]> => {
     if (IS_MOCK) {
-      return MOCK_TRANSACTIONS.filter((t) => t.categoryId === categoryId);
+      return sortTransactionsNewestFirst(
+        MOCK_TRANSACTIONS.filter(
+          (t) => t.categoryId === categoryId && isTransactionInMonth(t, month)
+        )
+      );
     }
-    return api.get<Transaction[]>(ENDPOINTS.BUDGET.CATEGORY_DETAIL(categoryId));
+    return api.get<Transaction[]>(ENDPOINTS.BUDGET.CATEGORY_DETAIL(categoryId), { month });
   },
 
-  getTransactions: async (page = 1, limit = 20): Promise<Transaction[]> => {
-    if (IS_MOCK) return MOCK_TRANSACTIONS;
-    return api.get<Transaction[]>(ENDPOINTS.BUDGET.TRANSACTIONS, { page, limit });
+  getTransactions: async ({
+    page = 1,
+    limit = 20,
+    month,
+  }: {
+    page?: number;
+    limit?: number;
+    month?: string;
+  } = {}): Promise<Transaction[]> => {
+    if (IS_MOCK) {
+      const scoped = month
+        ? MOCK_TRANSACTIONS.filter((t) => isTransactionInMonth(t, month))
+        : MOCK_TRANSACTIONS;
+      return sortTransactionsNewestFirst(scoped).slice((page - 1) * limit, page * limit);
+    }
+    return api.get<Transaction[]>(ENDPOINTS.BUDGET.TRANSACTIONS, { page, limit, month });
   },
 
   addManualTransaction: async (
@@ -66,9 +111,14 @@ export const budgetService = {
       queryFn: () => budgetService.getOverview(month),
       staleTime: 1000 * 60 * 5,
     }),
-    transactions: () => ({
-      queryKey: BUDGET_KEYS.transactions(),
-      queryFn: () => budgetService.getTransactions(),
+    months: () => ({
+      queryKey: BUDGET_KEYS.months(),
+      queryFn: () => budgetService.getAvailableMonths(),
+      staleTime: 1000 * 60 * 30,
+    }),
+    transactions: (month?: string) => ({
+      queryKey: BUDGET_KEYS.transactions({ month }),
+      queryFn: () => budgetService.getTransactions({ month }),
       staleTime: 1000 * 60 * 2,
     }),
   },

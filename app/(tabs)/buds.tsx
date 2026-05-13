@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "@/constants/colors";
 import { useUser } from "@/hooks/useAuth";
+import { BrandHeader } from "@/components/BrandLogo";
 import {
   MOCK_FEED,
   MOCK_BUDS_PROFILES,
@@ -57,7 +58,7 @@ export default function BudsScreen() {
         colors={["#0E1926", "#1B2B4B"]}
         style={[styles.header, { paddingTop: insets.top + 12 }]}
       >
-        <Text style={styles.wordmark}>Budget Buddy</Text>
+        <BrandHeader dark style={styles.brandHeader} />
 
         {/* My profile strip */}
         <View style={styles.profileStrip}>
@@ -297,7 +298,7 @@ function BudCard({ bud, showFollow }: { bud: BudProfile; showFollow?: boolean })
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.surface },
   header: { paddingHorizontal: 20, paddingBottom: 0 },
-  wordmark: { fontSize: 13, fontWeight: "600", color: "rgba(255,255,255,0.4)", letterSpacing: 2, textTransform: "uppercase", textAlign: "center", marginBottom: 12 },
+  brandHeader: { marginBottom: 12 },
   profileStrip: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 },
   myAvatar: { width: 44, height: 44, borderRadius: 22, overflow: "hidden" },
   myAvatarGrad: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
