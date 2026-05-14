@@ -87,7 +87,7 @@ export function StepFirstQuest({ goalKinds, quest, onLoaded }: Props) {
 
       {/* Quest card */}
       <LinearGradient
-        colors={["rgba(244,168,50,0.18)", "rgba(244,168,50,0.06)"]}
+        colors={["rgba(19,216,69,0.18)", "rgba(19,216,69,0.06)"]}
         style={styles.questCard}
       >
         <View style={styles.questHeader}>
@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 18,
     borderWidth: 1.5,
-    borderColor: "rgba(244,168,50,0.4)",
+    borderColor: "rgba(19,216,69,0.4)",
   },
   questHeader: {
     flexDirection: "row",
@@ -166,7 +166,7 @@ const styles = StyleSheet.create({
   questName: {
     fontSize: 22,
     fontWeight: "800",
-    color: "#FFFFFF",
+    color: Colors.navy,
     letterSpacing: 0,
     lineHeight: 28,
     marginBottom: 14,
@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
   },
   whyText: {
     fontSize: 14,
-    color: "rgba(255,255,255,0.85)",
+    color: Colors.navyMuted,
     lineHeight: 21,
   },
 
@@ -188,9 +188,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
-    backgroundColor: "rgba(255,255,255,0.04)",
+    backgroundColor: Colors.card,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: Colors.border,
     borderRadius: 18,
     padding: 16,
   },
@@ -198,18 +198,18 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 16,
-    backgroundColor: "rgba(244,168,50,0.14)",
+    backgroundColor: "rgba(19,216,69,0.14)",
     borderWidth: 1,
-    borderColor: "rgba(244,168,50,0.4)",
+    borderColor: "rgba(19,216,69,0.4)",
     alignItems: "center",
     justifyContent: "center",
   },
   streakTitle: {
     fontSize: 16,
     fontWeight: "800",
-    color: "#FFFFFF",
+    color: Colors.navy,
     marginBottom: 4,
     letterSpacing: 0,
   },
-  streakSub: { fontSize: 13, color: "rgba(255,255,255,0.7)", lineHeight: 19 },
+  streakSub: { fontSize: 13, color: Colors.navyMuted, lineHeight: 19 },
 });

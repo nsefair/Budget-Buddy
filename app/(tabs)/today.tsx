@@ -10,7 +10,7 @@
  *   • Goal Progress Card — most active goal
  *
  * Strict rules followed (developer review §6):
- *   • No childish emojis — every visual is a Lucide icon or letter mark
+ *   • Emojis are reserved for spending categories and Buds kudos only
  *   • Bud's greeting copy passes the Friend / Cringe / Shame tests
  *   • No prescriptive language ("you should/must/need to")
  *
@@ -48,6 +48,17 @@ import type { Goal } from "@/mock/goals";
 import { formatCurrency, secureLog } from "@/utils/security";
 
 const TAB_BAR_HEIGHT = 80;
+
+const SPENDING_EMOJI: Record<string, string> = {
+  food: "🍔",
+  transport: "🚗",
+  shopping: "🛍️",
+  housing: "🏠",
+  entertainment: "🎬",
+  health: "💊",
+  personal: "✂️",
+  education: "📚",
+};
 
 export default function TodayScreen() {
   const insets = useSafeAreaInsets();
@@ -172,11 +183,9 @@ export default function TodayScreen() {
                 <View style={styles.txnRow}>
                   <View style={styles.txnLeft}>
                     <View style={styles.txnIconBox}>
-                      <Icon
-                        name={t.amount < 0 ? "arrow-down-right" : "arrow-up-right"}
-                        size={14}
-                        color={Colors.muted}
-                      />
+                      <Text style={styles.txnEmoji}>
+                        {SPENDING_EMOJI[t.categoryId] ?? "💸"}
+                      </Text>
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.txnMerchant}>{t.merchant}</Text>
@@ -496,10 +505,12 @@ const styles = StyleSheet.create({
 
   // Why
   whyCard: {
-    backgroundColor: Colors.navy,
+    backgroundColor: Colors.greenSurface,
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: Colors.greenBorder,
   },
   whyHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 },
   whyEyebrow: {
@@ -510,7 +521,7 @@ const styles = StyleSheet.create({
   },
   whyQuote: {
     fontSize: 15,
-    color: "#FFFFFF",
+    color: Colors.navy,
     fontWeight: "600",
     lineHeight: 22,
     fontStyle: "italic",
@@ -747,6 +758,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  txnEmoji: { fontSize: 16, lineHeight: 20 },
   txnMerchant: { fontSize: 13, fontWeight: "700", color: Colors.navy },
   txnCategory: { fontSize: 11, color: Colors.muted, marginTop: 1 },
   txnAmount: { fontSize: 14, fontWeight: "700", color: Colors.navy },

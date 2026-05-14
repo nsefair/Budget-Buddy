@@ -211,7 +211,7 @@ const styles = StyleSheet.create({
   },
   topBorder: {
     height: 1,
-    backgroundColor: "rgba(244, 168, 50, 0.22)",
+    backgroundColor: "rgba(19, 216, 69, 0.22)",
   },
   tabRow: {
     flexDirection: "row",
@@ -260,9 +260,9 @@ const styles = StyleSheet.create({
     width: 54,
     height: 54,
     borderRadius: 27,
-    backgroundColor: "rgba(244, 168, 50, 0.1)",
+    backgroundColor: "rgba(19, 216, 69, 0.1)",
     borderWidth: 1.5,
-    borderColor: "rgba(244, 168, 50, 0.35)",
+    borderColor: "rgba(19, 216, 69, 0.35)",
     alignItems: "center",
     justifyContent: "center",
   },

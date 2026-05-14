@@ -75,13 +75,13 @@ const styles = StyleSheet.create({
   greeting: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#FFFFFF",
+    color: Colors.navy,
     marginBottom: 18,
   },
   line: {
     fontSize: 36,
     fontWeight: "800",
-    color: "#FFFFFF",
+    color: Colors.navy,
     letterSpacing: 0,
     textAlign: "center",
     lineHeight: 44,
@@ -97,7 +97,7 @@ const styles = StyleSheet.create({
   },
   body: {
     fontSize: 15,
-    color: "rgba(255,255,255,0.65)",
+    color: Colors.navyMuted,
     textAlign: "center",
     lineHeight: 22,
     paddingHorizontal: 16,

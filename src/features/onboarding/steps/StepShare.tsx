@@ -6,7 +6,7 @@
  */
 
 import React, { useRef } from "react";
-import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
+import { Animated, Pressable, StyleSheet, Text, useColorScheme, View } from "react-native";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { BudBubble } from "../components/BudBubble";
@@ -23,6 +23,7 @@ interface Props {
 
 export function StepShare({ firstName, whyIcon, share, onChangeShare }: Props) {
   const press = useRef(new Animated.Value(1)).current;
+  const isDark = useColorScheme() === "dark";
 
   const toggle = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -49,7 +50,9 @@ export function StepShare({ firstName, whyIcon, share, onChangeShare }: Props) {
             colors={
               share
                 ? ["rgba(0,180,166,0.18)", "rgba(0,180,166,0.04)"]
-                : ["rgba(255,255,255,0.06)", "rgba(255,255,255,0.02)"]
+                : isDark
+                ? ["rgba(19,216,69,0.08)", "rgba(19,216,69,0.03)"]
+                : ["rgba(255,255,255,0.92)", "rgba(233,252,238,0.74)"]
             }
             style={[
               styles.previewCard,
@@ -83,14 +86,14 @@ export function StepShare({ firstName, whyIcon, share, onChangeShare }: Props) {
             </View>
 
             <View style={styles.bumpRow}>
-              <Icon name="hand" size={13} color={Colors.muted} />
+              <Text style={styles.bumpEmoji}>👊</Text>
               <Text style={styles.bumpLabel}>Fist Bump · 0</Text>
             </View>
 
             {/* Toggle indicator */}
             <View style={[styles.toggle, share && styles.toggleOn]}>
-              {share && <Icon name="check" size={13} color="#FFFFFF" strokeWidth={3} />}
-              <Text style={styles.toggleText}>
+              {share && <Icon name="check" size={13} color={Colors.onGreen} strokeWidth={3} />}
+              <Text style={[styles.toggleText, share && styles.toggleTextOn]}>
                 {share ? "Share to Buds" : "Tap to share"}
               </Text>
             </View>
@@ -113,7 +116,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 16,
     borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: Colors.border,
     gap: 12,
   },
   avatarRow: { flexDirection: "row", alignItems: "center", gap: 12 },
@@ -126,15 +129,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   avatarLetter: { fontSize: 18, fontWeight: "800", color: Colors.navy },
-  userName: { fontSize: 14, fontWeight: "700", color: "#FFFFFF" },
+  userName: { fontSize: 14, fontWeight: "700", color: Colors.navy },
   timestamp: { fontSize: 11, color: Colors.muted, marginTop: 2 },
   dayPill: {
-    backgroundColor: "rgba(244,168,50,0.18)",
+    backgroundColor: "rgba(19,216,69,0.18)",
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: "rgba(244,168,50,0.4)",
+    borderColor: "rgba(19,216,69,0.4)",
   },
   dayPillText: {
     fontSize: 10,
@@ -148,9 +151,9 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 8,
-    backgroundColor: "rgba(244,168,50,0.18)",
+    backgroundColor: "rgba(19,216,69,0.18)",
     borderWidth: 1,
-    borderColor: "rgba(244,168,50,0.4)",
+    borderColor: "rgba(19,216,69,0.4)",
     alignItems: "center",
     justifyContent: "center",
     marginTop: 1,
@@ -158,10 +161,11 @@ const styles = StyleSheet.create({
   postText: {
     flex: 1,
     fontSize: 14,
-    color: "rgba(255,255,255,0.92)",
+    color: Colors.navy,
     lineHeight: 21,
   },
   bumpRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  bumpEmoji: { fontSize: 14, lineHeight: 18 },
   bumpLabel: { fontSize: 12, color: Colors.muted, fontWeight: "500" },
 
   toggle: {
@@ -169,12 +173,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: Colors.card,
     paddingVertical: 11,
     borderRadius: 12,
     marginTop: 4,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: Colors.border,
   },
   toggleOn: {
     backgroundColor: Colors.teal,
@@ -183,9 +187,10 @@ const styles = StyleSheet.create({
   toggleText: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: Colors.navy,
     letterSpacing: 0.2,
   },
+  toggleTextOn: { color: Colors.onGreen },
 
   privacyRow: {
     flexDirection: "row",

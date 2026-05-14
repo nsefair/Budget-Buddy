@@ -21,6 +21,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  useColorScheme,
   View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -54,6 +55,7 @@ export function OnboardingShell({
   footer,
 }: Props) {
   const insets = useSafeAreaInsets();
+  const isDark = useColorScheme() === "dark";
 
   // Slide-in transition each time `step` changes — gives the conversation feel
   const slide = useRef(new Animated.Value(0)).current;
@@ -69,7 +71,7 @@ export function OnboardingShell({
 
   return (
     <LinearGradient
-      colors={[Colors.navy800, Colors.navy600]}
+      colors={isDark ? [Colors.navy900, Colors.navy700] : [Colors.white, Colors.greenSoft]}
       style={{ flex: 1 }}
     >
       {/* Top bar — back + progress */}
@@ -84,7 +86,7 @@ export function OnboardingShell({
               style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.5 }]}
               hitSlop={12}
             >
-              <Icon name="arrow-left" size={18} color="#FFFFFF" strokeWidth={2.4} />
+              <Icon name="arrow-left" size={18} color={Colors.navy} strokeWidth={2.4} />
             </Pressable>
           )}
         </View>
@@ -179,7 +181,9 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
 
   progressWrap: { flex: 1, alignItems: "center" },
@@ -188,10 +192,10 @@ const styles = StyleSheet.create({
     width: 22,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "rgba(255,255,255,0.14)",
+    backgroundColor: Colors.border,
   },
   dotActive: { backgroundColor: Colors.gold, width: 28 },
-  dotPast: { backgroundColor: "rgba(244,168,50,0.45)" },
+  dotPast: { backgroundColor: "rgba(19,216,69,0.45)" },
 
   content: { paddingHorizontal: 24, paddingTop: 16, flexGrow: 1, zIndex: 1 },
   contentCentered: { justifyContent: "center" },

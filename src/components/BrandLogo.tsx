@@ -12,7 +12,7 @@ import {
 
 import { Colors } from "@/constants/colors";
 
-export const BRAND_MARK_SOURCE = require("../../assets/brand/budget-buddy-mark-teal.png");
+export const BRAND_MARK_SOURCE = require("../../assets/brand/budget-buddy-mark-green.png");
 
 type BrandLogoVariant = "mark" | "lockup";
 type BrandLogoDirection = "row" | "column";

@@ -72,7 +72,7 @@ export function StepBank({ bankConnected, onConnected }: Props) {
       {bankConnected ? (
         <View style={styles.successCard}>
           <View style={styles.successCheck}>
-            <Icon name="check" size={18} color="#FFFFFF" strokeWidth={3} />
+            <Icon name="check" size={18} color={Colors.onGreen} strokeWidth={3} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.successTitle}>You're connected</Text>
@@ -123,9 +123,9 @@ function TrustRow({ icon, text }: { icon: IconName; text: string }) {
 
 const styles = StyleSheet.create({
   trustCard: {
-    backgroundColor: "rgba(255,255,255,0.04)",
+    backgroundColor: Colors.card,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: Colors.border,
     borderRadius: 16,
     padding: 16,
     gap: 12,
@@ -135,16 +135,16 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 8,
-    backgroundColor: "rgba(244,168,50,0.12)",
+    backgroundColor: "rgba(19,216,69,0.12)",
     borderWidth: 1,
-    borderColor: "rgba(244,168,50,0.3)",
+    borderColor: "rgba(19,216,69,0.3)",
     alignItems: "center",
     justifyContent: "center",
   },
   trustText: {
     flex: 1,
     fontSize: 13,
-    color: "rgba(255,255,255,0.78)",
+    color: Colors.navyMuted,
     lineHeight: 19,
   },
 
@@ -154,14 +154,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 12,
     paddingVertical: 18,
-    backgroundColor: "rgba(244,168,50,0.12)",
+    backgroundColor: "rgba(19,216,69,0.12)",
     borderWidth: 1.5,
     borderColor: Colors.gold,
     borderRadius: 16,
   },
   connectBtnLoading: {
-    backgroundColor: "rgba(244,168,50,0.06)",
-    borderColor: "rgba(244,168,50,0.4)",
+    backgroundColor: "rgba(19,216,69,0.06)",
+    borderColor: "rgba(19,216,69,0.4)",
   },
   connectText: {
     fontSize: 16,
@@ -197,10 +197,10 @@ const styles = StyleSheet.create({
   successTitle: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: Colors.navy,
     marginBottom: 2,
   },
-  successSub: { fontSize: 13, color: "rgba(255,255,255,0.7)", lineHeight: 19 },
+  successSub: { fontSize: 13, color: Colors.navyMuted, lineHeight: 19 },
 
   error: {
     fontSize: 13,

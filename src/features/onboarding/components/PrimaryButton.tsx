@@ -63,7 +63,7 @@ export function PrimaryButton({ label, onPress, disabled, loading, style }: Prop
           style={styles.gradient}
         >
           {loading ? (
-            <ActivityIndicator color={Colors.navy} />
+            <ActivityIndicator color={Colors.onGreen} />
           ) : (
             <Text style={styles.label}>{label}</Text>
           )}
@@ -116,7 +116,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontWeight: "700",
-    color: Colors.navy,
+    color: Colors.onGreen,
     letterSpacing: 0,
   },
   secondary: {

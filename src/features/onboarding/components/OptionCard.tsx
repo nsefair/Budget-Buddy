@@ -45,12 +45,12 @@ export function OptionCard({ icon, label, sub, selected, onPress, compact }: Pro
 
   const borderColor = borderAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ["rgba(255,255,255,0.08)", Colors.gold],
+    outputRange: ["rgba(19,216,69,0.20)", Colors.gold],
   });
 
   const bgColor = borderAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ["rgba(255,255,255,0.04)", "rgba(244,168,50,0.10)"],
+    outputRange: ["rgba(19,216,69,0.05)", "rgba(19,216,69,0.12)"],
   });
 
   return (
@@ -74,7 +74,7 @@ export function OptionCard({ icon, label, sub, selected, onPress, compact }: Pro
               <Icon
                 name={icon}
                 size={compact ? 14 : 18}
-                color={selected ? Colors.navy : Colors.gold}
+                color={selected ? Colors.onGreen : Colors.gold}
                 strokeWidth={2.4}
               />
             </View>
@@ -86,7 +86,7 @@ export function OptionCard({ icon, label, sub, selected, onPress, compact }: Pro
             {sub && !compact && <Text style={styles.sub}>{sub}</Text>}
           </View>
           <View style={[styles.check, selected && styles.checkActive]}>
-            {selected && <Icon name="check" size={12} color={Colors.navy} strokeWidth={3} />}
+            {selected && <Icon name="check" size={12} color={Colors.onGreen} strokeWidth={3} />}
           </View>
         </Animated.View>
       </Pressable>
@@ -109,9 +109,9 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: "rgba(244,168,50,0.12)",
+    backgroundColor: "rgba(19,216,69,0.12)",
     borderWidth: 1,
-    borderColor: "rgba(244,168,50,0.3)",
+    borderColor: "rgba(19,216,69,0.3)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.gold,
     borderColor: Colors.gold,
   },
-  label: { fontSize: 15, fontWeight: "700", color: "#FFF", letterSpacing: 0 },
+  label: { fontSize: 15, fontWeight: "700", color: Colors.navy, letterSpacing: 0 },
   labelSelected: { color: Colors.gold },
   sub: { fontSize: 12, color: Colors.muted, marginTop: 2, lineHeight: 17 },
   check: {
@@ -128,7 +128,7 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 11,
     borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.22)",
+    borderColor: Colors.border,
     alignItems: "center",
     justifyContent: "center",
   },

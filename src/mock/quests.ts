@@ -133,7 +133,7 @@ export const MOCK_QUESTS: Quest[] = [
 
 export const MOCK_LEAGUE: League = {
   tier: "Gold",
-  tierColor: "#F4A832",
+  tierColor: "#13D845",
   resetDate: "2026-05-12T00:00:00Z",
   currentUserRank: 4,
   users: [

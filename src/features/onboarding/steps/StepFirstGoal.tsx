@@ -196,7 +196,7 @@ export function StepFirstGoal({
           value={current.name}
           onChangeText={(v) => setField("name", v)}
           placeholder={defaultName}
-          placeholderTextColor="rgba(255,255,255,0.35)"
+          placeholderTextColor={Colors.muted}
           style={styles.input}
           maxLength={40}
           returnKeyType="done"
@@ -216,7 +216,7 @@ export function StepFirstGoal({
             }}
             keyboardType="number-pad"
             placeholder="0"
-            placeholderTextColor="rgba(255,255,255,0.35)"
+            placeholderTextColor={Colors.muted}
             style={styles.amountInput}
             maxLength={9}
           />
@@ -273,7 +273,7 @@ export function StepFirstGoal({
           value={current.reason}
           onChangeText={(v) => setField("reason", v)}
           placeholder="One sentence. Bud will reference this when it counts."
-          placeholderTextColor="rgba(255,255,255,0.35)"
+          placeholderTextColor={Colors.muted}
           style={[styles.input, { minHeight: 70, textAlignVertical: "top" }]}
           multiline
           maxLength={140}
@@ -305,26 +305,26 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: Colors.navy,
     marginBottom: 10,
   },
   input: {
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: Colors.card,
     borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: Colors.border,
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 15,
-    color: "#FFFFFF",
+    color: Colors.navy,
     lineHeight: 21,
   },
   amountInputRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: Colors.card,
     borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: Colors.border,
     borderRadius: 14,
     paddingHorizontal: 16,
     marginBottom: 10,
@@ -335,7 +335,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     fontSize: 22,
     fontWeight: "800",
-    color: "#FFFFFF",
+    color: Colors.navy,
     letterSpacing: 0,
   },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
@@ -344,20 +344,20 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     borderRadius: 999,
     borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(255,255,255,0.04)",
+    borderColor: Colors.border,
+    backgroundColor: Colors.card,
   },
   chipActive: {
     borderColor: Colors.gold,
-    backgroundColor: "rgba(244,168,50,0.15)",
+    backgroundColor: "rgba(19,216,69,0.15)",
   },
-  chipText: { fontSize: 13, fontWeight: "600", color: "rgba(255,255,255,0.78)" },
+  chipText: { fontSize: 13, fontWeight: "600", color: Colors.navyMuted },
   chipTextActive: { color: Colors.gold },
 
   paceBox: {
-    backgroundColor: "rgba(244,168,50,0.08)",
+    backgroundColor: "rgba(19,216,69,0.08)",
     borderWidth: 1,
-    borderColor: "rgba(244,168,50,0.25)",
+    borderColor: "rgba(19,216,69,0.25)",
     borderRadius: 14,
     padding: 14,
   },
@@ -368,6 +368,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     marginBottom: 6,
   },
-  paceText: { fontSize: 14, color: "#FFFFFF", lineHeight: 20 },
+  paceText: { fontSize: 14, color: Colors.navy, lineHeight: 20 },
   paceBold: { fontWeight: "800", color: Colors.gold },
 });

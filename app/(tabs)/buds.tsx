@@ -63,7 +63,7 @@ export default function BudsScreen() {
         {/* My profile strip */}
         <View style={styles.profileStrip}>
           <View style={styles.myAvatar}>
-            <LinearGradient colors={[Colors.gold, "#E08A10"]} style={styles.myAvatarGrad}>
+            <LinearGradient colors={[Colors.gold, Colors.gold600]} style={styles.myAvatarGrad}>
               <Text style={styles.myAvatarInitial}>
                 {user?.firstName[0] ?? "M"}
               </Text>
@@ -181,7 +181,7 @@ export default function BudsScreen() {
                 Help us get there — invite your people.
               </Text>
               <Pressable style={styles.phase2Cta}>
-                <LinearGradient colors={[Colors.gold, "#E08A10"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.phase2CtaGrad}>
+                <LinearGradient colors={[Colors.gold, Colors.gold600]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.phase2CtaGrad}>
                   <Text style={styles.phase2CtaText}>Invite a Bud</Text>
                 </LinearGradient>
               </Pressable>
@@ -246,12 +246,7 @@ function FeedCard({ post, onFistBump }: { post: FeedPost; onFistBump: (id: strin
           onPress={handleBump}
         >
           <Animated.View style={{ transform: [{ scale }] }}>
-            <Icon
-              name="hand"
-              size={16}
-              color={post.hasFistBumped ? Colors.gold : Colors.navyMuted}
-              strokeWidth={2.2}
-            />
+            <Text style={styles.fistBumpEmoji}>👊</Text>
           </Animated.View>
           <Text style={[styles.fistBumpCount, post.hasFistBumped && styles.fistBumpCountActive]}>
             {post.fistBumps}
@@ -310,7 +305,7 @@ const styles = StyleSheet.create({
   profileStatValue: { fontSize: 13, fontWeight: "700", color: "#FFF" },
   profileStatLabel: { fontSize: 10, color: Colors.muted },
   profileStatDivider: { width: 1, height: 20, backgroundColor: "rgba(255,255,255,0.1)" },
-  inviteButton: { backgroundColor: "rgba(244,168,50,0.15)", borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6, borderWidth: 1, borderColor: "rgba(244,168,50,0.3)" },
+  inviteButton: { backgroundColor: "rgba(19,216,69,0.15)", borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6, borderWidth: 1, borderColor: "rgba(19,216,69,0.3)" },
   inviteText: { fontSize: 13, color: Colors.gold, fontWeight: "600" },
   viewSwitcher: { flexDirection: "row", borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.08)" },
   switchTab: { flex: 1, paddingVertical: 12, alignItems: "center" },
@@ -338,7 +333,8 @@ const styles = StyleSheet.create({
   feedMessage: { fontSize: 13, color: Colors.navyMuted, lineHeight: 19 },
   feedFooter: { flexDirection: "row" },
   fistBumpButton: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
-  fistBumpButtonActive: { backgroundColor: "rgba(244,168,50,0.10)", borderColor: "rgba(244,168,50,0.4)" },
+  fistBumpButtonActive: { backgroundColor: "rgba(19,216,69,0.10)", borderColor: "rgba(19,216,69,0.4)" },
+  fistBumpEmoji: { fontSize: 16, lineHeight: 20 },
   fistBumpCount: { fontSize: 13, color: Colors.navyMuted, fontWeight: "600" },
   fistBumpCountActive: { color: Colors.gold },
   budsCount: { fontSize: 13, color: Colors.muted, fontWeight: "500", marginBottom: 4 },
@@ -349,10 +345,10 @@ const styles = StyleSheet.create({
   budCardName: { fontSize: 14, fontWeight: "700", color: Colors.navy, marginBottom: 3 },
   budCardStatsRow: { flexDirection: "row", alignItems: "center" },
   budCardStats: { fontSize: 11, color: Colors.muted },
-  followButton: { backgroundColor: Colors.navy, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7 },
-  followButtonActive: { backgroundColor: "rgba(27,43,75,0.12)", borderWidth: 1.5, borderColor: Colors.navy },
-  followText: { fontSize: 13, fontWeight: "600", color: "#FFF" },
-  followTextActive: { color: Colors.navy },
+  followButton: { backgroundColor: Colors.gold, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7 },
+  followButtonActive: { backgroundColor: Colors.greenSurface, borderWidth: 1.5, borderColor: Colors.gold },
+  followText: { fontSize: 13, fontWeight: "600", color: Colors.onGreen },
+  followTextActive: { color: Colors.gold },
   searchContainer: { marginBottom: 16 },
   searchInput: { backgroundColor: Colors.card, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15, color: Colors.navy, borderWidth: 1, borderColor: Colors.border },
   discoverSectionTitle: { fontSize: 16, fontWeight: "700", color: Colors.navy, marginBottom: 4 },

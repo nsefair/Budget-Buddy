@@ -128,7 +128,7 @@ export default function LoginScreen() {
             disabled={isLoading}
           >
             <LinearGradient
-              colors={[Colors.gold, "#E08A10"]}
+              colors={[Colors.gold, Colors.gold600]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={styles.loginButtonGradient}

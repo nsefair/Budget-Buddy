@@ -52,7 +52,7 @@ export function StepWhy({ selectedId, customText, onSelect, onChangeCustom }: Pr
             value={customText}
             onChangeText={onChangeCustom}
             placeholder="What does this really mean to you?"
-            placeholderTextColor="rgba(255,255,255,0.35)"
+            placeholderTextColor={Colors.muted}
             style={styles.input}
             multiline
             maxLength={140}
@@ -69,18 +69,18 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: Colors.navy,
     marginBottom: 10,
   },
   input: {
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: Colors.card,
     borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: Colors.border,
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 15,
-    color: "#FFFFFF",
+    color: Colors.navy,
     minHeight: 90,
     textAlignVertical: "top",
     lineHeight: 22,

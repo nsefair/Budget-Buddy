@@ -9,7 +9,8 @@
  *   • Investment Portfolio (holdings)
  *   • Accounts list (checking / credit / savings / investments + Net Cash)
  *
- * No emojis anywhere — every glyph is a Lucide icon. Numbers are the heroes.
+ * Emojis are reserved for spending categories and transaction context.
+ * Everything else stays Lucide/icon-system based.
  */
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -41,17 +42,30 @@ import { formatCurrency, secureLog } from "@/utils/security";
 
 const TAB_BAR_HEIGHT = 80;
 
-// Map category id → curated icon for a pro look.
-const CATEGORY_ICON: Record<string, IconName> = {
-  food: "receipt",
-  transport: "activity",
-  shopping: "wallet",
-  housing: "home",
-  entertainment: "star",
-  health: "shield",
-  personal: "user",
-  education: "layers",
+const CATEGORY_EMOJI: Record<string, string> = {
+  food: "🍔",
+  transport: "🚗",
+  shopping: "🛍️",
+  housing: "🏠",
+  entertainment: "🎬",
+  health: "💊",
+  personal: "✂️",
+  education: "📚",
+  debt: "💳",
 };
+
+function emojiForCategory(value: string) {
+  const normalised = value.toLowerCase();
+  if (CATEGORY_EMOJI[normalised]) return CATEGORY_EMOJI[normalised];
+  if (normalised.includes("food")) return CATEGORY_EMOJI.food;
+  if (normalised.includes("transport")) return CATEGORY_EMOJI.transport;
+  if (normalised.includes("shop")) return CATEGORY_EMOJI.shopping;
+  if (normalised.includes("housing")) return CATEGORY_EMOJI.housing;
+  if (normalised.includes("entertainment")) return CATEGORY_EMOJI.entertainment;
+  if (normalised.includes("health")) return CATEGORY_EMOJI.health;
+  if (normalised.includes("debt") || normalised.includes("credit")) return CATEGORY_EMOJI.debt;
+  return "💸";
+}
 
 export default function BudgetScreen() {
   const insets = useSafeAreaInsets();
@@ -199,7 +213,7 @@ export default function BudgetScreen() {
             value={formatCurrency(overview.avgDailySpend)}
             sub="this week"
             icon="line-chart"
-            tint={Colors.navyMuted}
+            tint={Colors.greenDark}
           />
         </View>
 
@@ -248,6 +262,7 @@ export default function BudgetScreen() {
                     merchant={t.merchant}
                     sub={`${t.category}${t.isRecurring ? " · Recurring" : ""}`}
                     amount={-t.amount}
+                    emoji={emojiForCategory(t.categoryId)}
                   />
                   {i < recent.length - 1 && <View style={styles.txnDivider} />}
                 </React.Fragment>
@@ -266,6 +281,7 @@ export default function BudgetScreen() {
                       merchant={b.merchant}
                       sub={`${b.category} · ${days === 0 ? "Today" : days === 1 ? "Tomorrow" : `In ${days} days`}`}
                       amount={-b.amount}
+                      emoji={emojiForCategory(b.category)}
                     />
                     {i < MOCK_UPCOMING_BILLS.length - 1 && <View style={styles.txnDivider} />}
                   </React.Fragment>
@@ -533,14 +549,14 @@ function CategoryRow({ category }: { category: BudgetCategory }) {
     ? Colors.amber
     : category.color;
 
-  const iconName = CATEGORY_ICON[category.id] ?? "wallet";
+  const emoji = emojiForCategory(category.id);
 
   return (
     <View>
       <View style={styles.catRow}>
         <View style={styles.catLeft}>
           <View style={[styles.catIcon, { borderColor: `${category.color}55`, backgroundColor: `${category.color}15` }]}>
-            <Icon name={iconName} size={13} color={category.color} strokeWidth={2.4} />
+            <Text style={styles.catEmoji}>{emoji}</Text>
           </View>
           <Text style={styles.catName}>{category.name}</Text>
         </View>
@@ -592,20 +608,26 @@ function TransactionRow({
   merchant,
   sub,
   amount,
+  emoji,
 }: {
   merchant: string;
   sub: string;
   amount: number;
+  emoji?: string;
 }) {
   return (
     <View style={styles.txnRow}>
       <View style={styles.txnLeft}>
         <View style={styles.txnIconBox}>
-          <Icon
-            name={amount < 0 ? "arrow-down-right" : "arrow-up-right"}
-            size={13}
-            color={amount < 0 ? Colors.muted : Colors.emerald}
-          />
+          {emoji ? (
+            <Text style={styles.txnEmoji}>{emoji}</Text>
+          ) : (
+            <Icon
+              name={amount < 0 ? "arrow-down-right" : "arrow-up-right"}
+              size={13}
+              color={amount < 0 ? Colors.muted : Colors.emerald}
+            />
+          )}
         </View>
         <View>
           <Text style={styles.txnMerchant}>{merchant}</Text>
@@ -667,7 +689,7 @@ function AccountsBlock() {
       ))}
       <View style={styles.netCashRow}>
         <View style={styles.accountLeft}>
-          <View style={[styles.accountIconBox, { backgroundColor: Colors.gold50, borderColor: Colors.gold }]}>
+          <View style={[styles.accountIconBox, { backgroundColor: Colors.greenSurfaceStrong, borderColor: Colors.gold }]}>
             <Icon name="badge-check" size={13} color={Colors.gold} strokeWidth={2.4} />
           </View>
           <Text style={styles.netCashLabel}>Net cash</Text>
@@ -786,8 +808,8 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   monthChipActive: {
-    backgroundColor: Colors.navy,
-    borderColor: Colors.navy,
+    backgroundColor: Colors.gold,
+    borderColor: Colors.gold,
   },
   monthChipText: {
     fontSize: 12,
@@ -795,7 +817,7 @@ const styles = StyleSheet.create({
     color: Colors.navyMuted,
   },
   monthChipTextActive: {
-    color: "#FFFFFF",
+    color: Colors.onGreen,
   },
   monthInsight: {
     flexDirection: "row",
@@ -912,6 +934,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
   },
+  catEmoji: { fontSize: 15, lineHeight: 18 },
   catName: { fontSize: 13, fontWeight: "700", color: Colors.navy },
   catNumbers: { fontSize: 13, fontWeight: "700", color: Colors.navy },
   catBudget: { color: Colors.muted, fontWeight: "600" },
@@ -937,9 +960,9 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: 999,
   },
-  tabPillActive: { backgroundColor: Colors.navy },
+  tabPillActive: { backgroundColor: Colors.gold },
   tabPillText: { fontSize: 12, fontWeight: "700", color: Colors.navyMuted },
-  tabPillTextActive: { color: "#FFFFFF" },
+  tabPillTextActive: { color: Colors.onGreen },
 
   txnList: { gap: 0 },
   emptyTransactions: {
@@ -964,6 +987,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  txnEmoji: { fontSize: 16, lineHeight: 20 },
   txnMerchant: { fontSize: 13, fontWeight: "700", color: Colors.navy },
   txnSub: { fontSize: 11, color: Colors.muted, marginTop: 1 },
   txnAmount: { fontSize: 14, fontWeight: "700" },
@@ -1022,11 +1046,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: Colors.gold50,
+    backgroundColor: Colors.greenSurface,
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: "rgba(244,168,50,0.3)",
+    borderColor: Colors.greenBorder,
   },
   netCashLabel: {
     fontSize: 12,

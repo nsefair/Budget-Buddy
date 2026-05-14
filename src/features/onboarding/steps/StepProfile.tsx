@@ -49,7 +49,7 @@ export function StepProfile({
           value={firstName}
           onChangeText={onChangeName}
           placeholder="First name"
-          placeholderTextColor="rgba(255,255,255,0.35)"
+          placeholderTextColor={Colors.muted}
           autoCapitalize="words"
           returnKeyType="done"
           style={styles.input}
@@ -100,19 +100,19 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: Colors.navy,
     letterSpacing: 0.2,
     marginBottom: 10,
   },
   input: {
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: Colors.card,
     borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: Colors.border,
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
-    color: "#FFFFFF",
+    color: Colors.navy,
     fontWeight: "500",
   },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
@@ -121,15 +121,15 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 999,
     borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(255,255,255,0.04)",
-    color: "rgba(255,255,255,0.78)",
+    borderColor: Colors.border,
+    backgroundColor: Colors.card,
+    color: Colors.navyMuted,
     fontSize: 14,
     fontWeight: "600",
     overflow: "hidden",
   },
   chipActive: {
-    backgroundColor: "rgba(244,168,50,0.15)",
+    backgroundColor: "rgba(19,216,69,0.15)",
     borderColor: Colors.gold,
     color: Colors.gold,
   },

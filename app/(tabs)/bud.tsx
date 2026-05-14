@@ -59,7 +59,7 @@ export default function BudScreen() {
     <View style={styles.container}>
       {/* Header */}
       <LinearGradient
-        colors={["#0E1926", "#1B2B4B"]}
+        colors={[Colors.navy900, Colors.navy700]}
         style={[styles.header, { paddingTop: insets.top + 12 }]}
       >
         <BrandHeader dark style={styles.brandHeader} />
@@ -134,7 +134,7 @@ export default function BudScreen() {
 
           {/* Run Scenario — Time Machine */}
           <View style={styles.scenarioCard}>
-            <LinearGradient colors={[Colors.navy, "#0E1926"]} style={styles.scenarioGrad}>
+            <LinearGradient colors={[Colors.navy800, Colors.navy600]} style={styles.scenarioGrad}>
               <View style={styles.scenarioHeader}>
                 <View style={styles.scenarioIconBox}>
                   <Icon name="line-chart" size={18} color={Colors.gold} strokeWidth={2.2} />
@@ -258,7 +258,7 @@ export default function BudScreen() {
               multiline
             />
             <Pressable style={styles.sendButton} onPress={handleAsk}>
-              <LinearGradient colors={[Colors.gold, "#E08A10"]} style={styles.sendGrad}>
+              <LinearGradient colors={[Colors.gold, Colors.gold600]} style={styles.sendGrad}>
                 <Text style={styles.sendIcon}>↑</Text>
               </LinearGradient>
             </Pressable>
@@ -346,14 +346,14 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 16 },
   budHeaderOrb: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
   headerTitle: { fontSize: 24, fontWeight: "800", color: "#FFF", letterSpacing: 0 },
-  headerSub: { fontSize: 13, color: Colors.muted },
+  headerSub: { fontSize: 13, color: "rgba(243,255,244,0.72)" },
   viewSwitcher: { flexDirection: "row", borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.08)", marginTop: 4 },
   switchTab: { flex: 1, paddingVertical: 12, alignItems: "center" },
   switchTabActive: { borderBottomWidth: 2, borderBottomColor: Colors.gold },
   switchTabText: { fontSize: 13, color: Colors.muted, fontWeight: "500" },
   switchTabTextActive: { color: Colors.gold, fontWeight: "700" },
   scrollContent: { padding: 20, gap: 14 },
-  insightCard: { backgroundColor: "rgba(244,168,50,0.08)", borderRadius: 16, padding: 18, borderWidth: 1, borderColor: "rgba(244,168,50,0.2)" },
+  insightCard: { backgroundColor: "rgba(19,216,69,0.08)", borderRadius: 16, padding: 18, borderWidth: 1, borderColor: "rgba(19,216,69,0.2)" },
   insightLabelRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
   insightLabel: { fontSize: 12, color: Colors.gold, fontWeight: "800", letterSpacing: 0.6, textTransform: "uppercase" },
   insightText: { fontSize: 15, color: Colors.navyMuted, lineHeight: 22, fontWeight: "400" },
@@ -361,18 +361,18 @@ const styles = StyleSheet.create({
   actionCards: { gap: 10 },
   actionCard: { flexDirection: "row", alignItems: "center", backgroundColor: Colors.card, borderRadius: 14, padding: 16, gap: 14, shadowColor: Colors.navy, shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
   actionCardLocked: { opacity: 0.55 },
-  actionIconBox: { width: 36, height: 36, borderRadius: 10, backgroundColor: "rgba(244,168,50,0.12)", borderWidth: 1, borderColor: "rgba(244,168,50,0.3)", alignItems: "center", justifyContent: "center" },
+  actionIconBox: { width: 36, height: 36, borderRadius: 10, backgroundColor: "rgba(19,216,69,0.12)", borderWidth: 1, borderColor: "rgba(19,216,69,0.3)", alignItems: "center", justifyContent: "center" },
   actionText: { flex: 1 },
   actionTitle: { fontSize: 15, fontWeight: "700", color: Colors.navy, marginBottom: 2 },
   actionSub: { fontSize: 12, color: Colors.muted, lineHeight: 16 },
   scenarioCard: { borderRadius: 16, overflow: "hidden" },
   scenarioGrad: { padding: 20 },
   scenarioHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
-  scenarioIconBox: { width: 36, height: 36, borderRadius: 10, backgroundColor: "rgba(244,168,50,0.12)", borderWidth: 1, borderColor: "rgba(244,168,50,0.3)", alignItems: "center", justifyContent: "center" },
+  scenarioIconBox: { width: 36, height: 36, borderRadius: 10, backgroundColor: "rgba(19,216,69,0.12)", borderWidth: 1, borderColor: "rgba(19,216,69,0.3)", alignItems: "center", justifyContent: "center" },
   eliteBadge: { backgroundColor: Colors.gold, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, alignSelf: "flex-start" },
-  eliteBadgeText: { fontSize: 11, fontWeight: "700", color: Colors.navy },
+  eliteBadgeText: { fontSize: 11, fontWeight: "700", color: Colors.onGreen },
   scenarioTitle: { fontSize: 18, fontWeight: "800", color: "#FFF", marginBottom: 6 },
-  scenarioSub: { fontSize: 13, color: Colors.muted, lineHeight: 18, marginBottom: 16 },
+  scenarioSub: { fontSize: 13, color: "rgba(243,255,244,0.72)", lineHeight: 18, marginBottom: 16 },
   scenarioCta: { alignSelf: "flex-start" },
   scenarioCtaText: { fontSize: 13, color: Colors.gold, fontWeight: "700" },
   memoryCard: { backgroundColor: Colors.card, borderRadius: 16, padding: 16, gap: 10, shadowColor: Colors.navy, shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
@@ -382,7 +382,7 @@ const styles = StyleSheet.create({
   memoryBullet: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: Colors.gold, marginTop: 7 },
   memoryText: { fontSize: 13, color: Colors.navyMuted, flex: 1, lineHeight: 18 },
   chatContent: { padding: 20 },
-  disclaimer: { backgroundColor: "rgba(244,168,50,0.07)", borderRadius: 10, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: "rgba(244,168,50,0.15)" },
+  disclaimer: { backgroundColor: "rgba(19,216,69,0.07)", borderRadius: 10, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: "rgba(19,216,69,0.15)" },
   disclaimerText: { fontSize: 12, color: Colors.muted, lineHeight: 17 },
   suggestLabel: { fontSize: 12, color: Colors.muted, fontWeight: "500", marginBottom: 10, letterSpacing: 0.3 },
   suggestions: { gap: 8, paddingBottom: 16 },
@@ -394,9 +394,9 @@ const styles = StyleSheet.create({
   chatBubbleBud: {},
   budBubbleAvatar: { width: 28, height: 28, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   bubbleContent: { maxWidth: "78%", backgroundColor: Colors.card, borderRadius: 16, borderBottomLeftRadius: 4, padding: 14, shadowColor: Colors.navy, shadowOpacity: 0.05, shadowRadius: 4, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
-  bubbleContentUser: { backgroundColor: Colors.navy, borderBottomLeftRadius: 16, borderBottomRightRadius: 4 },
+  bubbleContentUser: { backgroundColor: Colors.gold, borderBottomLeftRadius: 16, borderBottomRightRadius: 4 },
   bubbleText: { fontSize: 14, color: Colors.navyMuted, lineHeight: 20 },
-  bubbleTextUser: { color: "#FFF" },
+  bubbleTextUser: { color: Colors.onGreen },
   typingText: { fontSize: 13, color: Colors.muted, fontStyle: "italic" },
   inputBar: { position: "absolute", bottom: 0, left: 0, right: 0, flexDirection: "row", alignItems: "flex-end", gap: 10, paddingHorizontal: 20, paddingTop: 12, backgroundColor: Colors.surface, borderTopWidth: 1, borderTopColor: Colors.border },
   chatInput: { flex: 1, backgroundColor: Colors.card, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15, color: Colors.navy, borderWidth: 1, borderColor: Colors.border, maxHeight: 100 },

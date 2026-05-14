@@ -1,38 +1,56 @@
+import { DynamicColorIOS, Platform } from "react-native";
+
+const systemColor = (light: string, dark: string) =>
+  (Platform.OS === "ios"
+    ? DynamicColorIOS({ light, dark })
+    : light) as unknown as string;
+
 export const Colors = {
-  // Core palette
-  navy: "#1B2B4B",
-  gold: "#F4A832",
-  emerald: "#10B981",
+  // Core brand palette: black / white / Budget Buddy green
+  black: "#050705",
+  white: "#FFFFFF",
+  green: "#13D845",
+  greenDark: "#08A832",
+  greenSoft: "#E9FCEE",
+  onGreen: "#021006",
+  greenSurface: systemColor("#E9FCEE", "#082313"),
+  greenSurfaceStrong: systemColor("#CCF7D5", "#0F351D"),
+  greenBorder: systemColor("#A7F3B8", "#145C2B"),
+
+  // Semantic colors. On iOS these follow the user's light/dark setting.
+  navy: systemColor("#102015", "#F3FFF4"),
+  gold: "#13D845",
+  emerald: "#13D845",
   coral: "#EF4444",
-  teal: "#00B4A6",
-  surface: "#F8F9FA",
-  card: "#FFFFFF",
-  border: "#E8EDF5",
-  muted: "#8B9CB8",
-  navyMuted: "#4A5D7A",
+  teal: "#13D845",
+  surface: systemColor("#F7FAF7", "#050705"),
+  card: systemColor("#FFFFFF", "#0C120D"),
+  border: systemColor("#E3EDE4", "#1F2D21"),
+  muted: systemColor("#6B7F72", "#8DAA93"),
+  navyMuted: systemColor("#355141", "#B8D7BF"),
 
-  // Navy scale
-  navy50: "#E8EDF5",
-  navy100: "#C5D0E3",
-  navy200: "#9AAECF",
-  navy300: "#6F8CBB",
-  navy600: "#1B2B4B",
-  navy700: "#152238",
-  navy800: "#0E1926",
-  navy900: "#070D13",
+  // Neutral scale
+  navy50: systemColor("#EAF5EC", "#122017"),
+  navy100: systemColor("#D5E9D9", "#1A2B1F"),
+  navy200: systemColor("#AFC8B6", "#2B4231"),
+  navy300: systemColor("#7FA08A", "#45624D"),
+  navy600: "#0B120D",
+  navy700: "#08100A",
+  navy800: "#050705",
+  navy900: "#020302",
 
-  // Gold scale
-  gold50: "#FEF7EC",
-  gold100: "#FDECD0",
-  gold400: "#F7B847",
-  gold500: "#F4A832",
-  gold600: "#E08A10",
+  // Green action scale. Kept under the existing names so screens stay stable.
+  gold50: systemColor("#E9FCEE", "#082313"),
+  gold100: systemColor("#CCF7D5", "#0F351D"),
+  gold400: "#2AF15A",
+  gold500: "#13D845",
+  gold600: "#08A832",
 
-  // Emerald scale
-  emerald50: "#ECFDF5",
-  emerald100: "#D1FAE5",
-  emerald500: "#10B981",
-  emerald600: "#059669",
+  // Green scale
+  emerald50: systemColor("#E9FCEE", "#082313"),
+  emerald100: systemColor("#CCF7D5", "#0F351D"),
+  emerald500: "#13D845",
+  emerald600: "#08A832",
 
   // Coral scale
   coral50: "#FEF2F2",
@@ -45,13 +63,13 @@ export const Colors = {
   amber500: "#F59E0B",
 
   // Tab bar
-  tabBarBackground: "rgba(27, 43, 75, 0.96)",
-  tabBarActive: "#F4A832",
-  tabBarInactive: "rgba(139, 156, 184, 0.6)",
+  tabBarBackground: "rgba(5, 7, 5, 0.96)",
+  tabBarActive: "#13D845",
+  tabBarInactive: "rgba(141, 170, 147, 0.66)",
 
   // Transparent overlays
-  navyOverlay: "rgba(27, 43, 75, 0.85)",
-  goldOverlay: "rgba(244, 168, 50, 0.12)",
+  navyOverlay: "rgba(5, 7, 5, 0.86)",
+  goldOverlay: "rgba(19, 216, 69, 0.12)",
   blackOverlay: "rgba(0, 0, 0, 0.4)",
 } as const;
 

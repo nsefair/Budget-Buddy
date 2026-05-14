@@ -95,7 +95,7 @@ export default function WelcomeScreen() {
           onPress={() => router.push("/(auth)/register")}
         >
           <LinearGradient
-            colors={[Colors.gold, "#E08A10"]}
+            colors={[Colors.gold, Colors.gold600]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.primaryButtonGradient}

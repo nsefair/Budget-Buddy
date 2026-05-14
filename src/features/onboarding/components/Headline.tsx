@@ -42,14 +42,14 @@ const styles = StyleSheet.create({
   headline: {
     fontSize: 28,
     fontWeight: "800",
-    color: "#FFFFFF",
+    color: Colors.navy,
     letterSpacing: 0,
     lineHeight: 36,
     marginBottom: 12,
   },
   subheadline: {
     fontSize: 15,
-    color: "rgba(255,255,255,0.72)",
+    color: Colors.navyMuted,
     lineHeight: 22,
     marginBottom: 24,
   },

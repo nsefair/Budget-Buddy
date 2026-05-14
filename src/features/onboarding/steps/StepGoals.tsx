@@ -53,7 +53,7 @@ export function StepGoals({ selected, customLabel, onToggle, onChangeCustom }: P
             value={customLabel}
             onChangeText={onChangeCustom}
             placeholder='e.g. "Save for a move to Austin"'
-            placeholderTextColor="rgba(255,255,255,0.35)"
+            placeholderTextColor={Colors.muted}
             style={styles.input}
             maxLength={60}
             returnKeyType="done"
@@ -72,18 +72,18 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: Colors.navy,
     marginBottom: 10,
   },
   input: {
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: Colors.card,
     borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: Colors.border,
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
-    color: "#FFFFFF",
+    color: Colors.navy,
   },
   counter: {
     fontSize: 12,

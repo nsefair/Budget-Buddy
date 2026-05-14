@@ -15,6 +15,7 @@ import "../global.css";
 import React, { useEffect } from "react";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { useColorScheme } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import {
@@ -39,6 +40,8 @@ SplashScreen.preventAutoHideAsync().catch(() => {
 export default function RootLayout() {
   const isLoading = useAuthLoading();
   const { restoreSession } = useAuthActions();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
 
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
@@ -66,7 +69,10 @@ export default function RootLayout() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
           <QueryProvider>
-            <StatusBar style="light" backgroundColor={Colors.navy} />
+            <StatusBar
+              style={isDark ? "light" : "dark"}
+              backgroundColor={isDark ? Colors.black : Colors.white}
+            />
             <Stack screenOptions={{ headerShown: false, animation: "fade" }}>
               <Stack.Screen name="index" options={{ headerShown: false }} />
               <Stack.Screen name="(auth)" options={{ headerShown: false }} />

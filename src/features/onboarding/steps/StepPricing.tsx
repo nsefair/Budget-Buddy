@@ -254,7 +254,7 @@ function LifetimeCard({
 const styles = StyleSheet.create({
   toggleWrap: {
     flexDirection: "row",
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: Colors.greenSurface,
     borderRadius: 999,
     padding: 4,
     height: 48,
@@ -279,11 +279,11 @@ const styles = StyleSheet.create({
   toggleText: {
     fontSize: 14,
     fontWeight: "700",
-    color: "rgba(255,255,255,0.6)",
+    color: Colors.navyMuted,
   },
-  toggleTextActive: { color: Colors.navy },
+  toggleTextActive: { color: Colors.onGreen },
   savePill: {
-    backgroundColor: "rgba(255,255,255,0.18)",
+    backgroundColor: "rgba(2,16,6,0.12)",
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
@@ -291,14 +291,14 @@ const styles = StyleSheet.create({
   savePillText: {
     fontSize: 9,
     fontWeight: "800",
-    color: Colors.navy,
+    color: Colors.onGreen,
     letterSpacing: 0.6,
   },
 
   planCard: {
-    backgroundColor: "rgba(255,255,255,0.04)",
+    backgroundColor: Colors.card,
     borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: Colors.border,
     borderRadius: 18,
     padding: 18,
     paddingRight: 50,
@@ -306,7 +306,7 @@ const styles = StyleSheet.create({
   },
   planCardSelected: {
     borderColor: Colors.gold,
-    backgroundColor: "rgba(244,168,50,0.08)",
+    backgroundColor: "rgba(19,216,69,0.08)",
   },
   badge: {
     position: "absolute",
@@ -320,23 +320,23 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 9,
     fontWeight: "800",
-    color: Colors.navy,
+    color: Colors.onGreen,
     letterSpacing: 0.8,
   },
 
   planTop: { flexDirection: "row", alignItems: "flex-start", marginBottom: 14 },
-  planName: { fontSize: 20, fontWeight: "800", color: "#FFFFFF", letterSpacing: 0 },
+  planName: { fontSize: 20, fontWeight: "800", color: Colors.navy, letterSpacing: 0 },
   planTagline: { fontSize: 13, color: Colors.muted, marginTop: 4, lineHeight: 18 },
   priceCol: { alignItems: "flex-end" },
   priceFree: { fontSize: 22, fontWeight: "800", color: Colors.emerald },
-  priceMain: { fontSize: 28, fontWeight: "800", color: "#FFFFFF", letterSpacing: 0 },
+  priceMain: { fontSize: 28, fontWeight: "800", color: Colors.navy, letterSpacing: 0 },
   priceSub: { fontSize: 12, color: Colors.muted, marginTop: -2 },
   priceAnnual: { fontSize: 11, color: Colors.muted, marginTop: 4 },
 
   featureList: { gap: 6 },
   featureRow: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
   featureCheck: { fontSize: 12, color: Colors.gold, fontWeight: "800", marginTop: 2 },
-  featureText: { fontSize: 13, color: "rgba(255,255,255,0.78)", flex: 1, lineHeight: 18 },
+  featureText: { fontSize: 13, color: Colors.navyMuted, flex: 1, lineHeight: 18 },
   featureMore: { fontSize: 12, color: Colors.gold, fontWeight: "600", marginTop: 4 },
 
   radio: {
@@ -347,7 +347,7 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 11,
     borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.22)",
+    borderColor: Colors.border,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -356,7 +356,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Colors.navy,
+    backgroundColor: Colors.onGreen,
   },
 
   lifetimeCard: {
@@ -367,7 +367,7 @@ const styles = StyleSheet.create({
     paddingRight: 50,
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: Colors.border,
     backgroundColor: "rgba(0,180,166,0.06)",
     position: "relative",
   },
@@ -378,12 +378,12 @@ const styles = StyleSheet.create({
   lifetimeName: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#FFFFFF",
+    color: Colors.navy,
     letterSpacing: 0,
   },
   lifetimeBlurb: {
     fontSize: 12,
-    color: "rgba(255,255,255,0.7)",
+    color: Colors.navyMuted,
     lineHeight: 17,
     marginTop: 4,
   },
