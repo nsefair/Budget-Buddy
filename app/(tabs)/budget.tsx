@@ -745,9 +745,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: 999,
-    backgroundColor: "rgba(0,180,166,0.10)",
+    backgroundColor: Colors.emerald50,
     borderWidth: 1,
-    borderColor: "rgba(0,180,166,0.22)",
+    borderColor: Colors.emerald100,
   },
   syncBadgeText: {
     fontSize: 11,
@@ -826,9 +826,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderRadius: 14,
-    backgroundColor: "rgba(0,180,166,0.08)",
+    backgroundColor: Colors.accentAlpha08,
     borderWidth: 1,
-    borderColor: "rgba(0,180,166,0.16)",
+    borderColor: Colors.accentAlpha15,
     marginBottom: 12,
   },
   monthInsightText: {

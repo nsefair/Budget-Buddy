@@ -205,13 +205,13 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 22,
   },
   androidBg: {
-    backgroundColor: "rgba(12, 20, 38, 0.97)",
+    backgroundColor: Colors.tabBarBackground,
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
   },
   topBorder: {
     height: 1,
-    backgroundColor: "rgba(19, 216, 69, 0.22)",
+    backgroundColor: Colors.accentAlpha22,
   },
   tabRow: {
     flexDirection: "row",
@@ -260,9 +260,9 @@ const styles = StyleSheet.create({
     width: 54,
     height: 54,
     borderRadius: 27,
-    backgroundColor: "rgba(19, 216, 69, 0.1)",
+    backgroundColor: Colors.accentAlpha10,
     borderWidth: 1.5,
-    borderColor: "rgba(19, 216, 69, 0.35)",
+    borderColor: Colors.accentAlpha35,
     alignItems: "center",
     justifyContent: "center",
   },

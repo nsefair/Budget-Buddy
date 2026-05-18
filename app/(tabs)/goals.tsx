@@ -330,9 +330,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: "rgba(19,216,69,0.10)",
+    backgroundColor: Colors.accentAlpha10,
     borderWidth: 1.5,
-    borderColor: "rgba(19,216,69,0.4)",
+    borderColor: Colors.accentAlpha40,
     borderStyle: "dashed",
     borderRadius: 14,
     paddingVertical: 14,
@@ -415,7 +415,7 @@ const styles = StyleSheet.create({
 
   bottomRow: {
     flexDirection: "row",
-    backgroundColor: "rgba(27,43,75,0.04)",
+    backgroundColor: Colors.navy50,
     borderRadius: 12,
     padding: 12,
   },

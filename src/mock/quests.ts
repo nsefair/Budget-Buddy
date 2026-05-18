@@ -1,3 +1,5 @@
+import { Colors } from "@/constants/colors";
+
 export type QuestType = "short" | "medium" | "long";
 export type QuestStatus = "active" | "completed" | "locked";
 
@@ -133,7 +135,7 @@ export const MOCK_QUESTS: Quest[] = [
 
 export const MOCK_LEAGUE: League = {
   tier: "Gold",
-  tierColor: "#13D845",
+  tierColor: Colors.gold,
   resetDate: "2026-05-12T00:00:00Z",
   currentUserRank: 4,
   users: [

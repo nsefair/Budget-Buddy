@@ -49,7 +49,7 @@ export default function LoginScreen() {
 
   return (
     <LinearGradient
-      colors={["#0E1926", "#1B2B4B"]}
+      colors={[Colors.brandGradientStart, Colors.brandGradientMid]}
       style={{ flex: 1 }}
     >
       <KeyboardAvoidingView
@@ -176,7 +176,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: "800",
-    color: "#FFFFFF",
+    color: Colors.brandOnDark,
     marginBottom: 8,
     letterSpacing: 0,
   },
@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
-    color: "#FFFFFF",
+    color: Colors.brandOnDark,
     fontWeight: "400",
   },
   forgotPassword: {
@@ -248,7 +248,7 @@ const styles = StyleSheet.create({
   loginButtonText: {
     fontSize: 17,
     fontWeight: "700",
-    color: Colors.navy,
+    color: Colors.onAccent,
     letterSpacing: 0.3,
   },
   signupLink: {

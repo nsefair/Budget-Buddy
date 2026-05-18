@@ -349,15 +349,15 @@ const styles = StyleSheet.create({
   },
   chipActive: {
     borderColor: Colors.gold,
-    backgroundColor: "rgba(19,216,69,0.15)",
+    backgroundColor: Colors.accentAlpha15,
   },
   chipText: { fontSize: 13, fontWeight: "600", color: Colors.navyMuted },
   chipTextActive: { color: Colors.gold },
 
   paceBox: {
-    backgroundColor: "rgba(19,216,69,0.08)",
+    backgroundColor: Colors.accentAlpha08,
     borderWidth: 1,
-    borderColor: "rgba(19,216,69,0.25)",
+    borderColor: Colors.accentAlpha25,
     borderRadius: 14,
     padding: 14,
   },

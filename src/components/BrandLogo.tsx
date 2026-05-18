@@ -1,6 +1,7 @@
 import React from "react";
 import {
   Image,
+  ImageSourcePropType,
   ImageStyle,
   StyleProp,
   StyleSheet,
@@ -10,9 +11,14 @@ import {
   ViewStyle,
 } from "react-native";
 
-import { Colors } from "@/constants/colors";
+import { ACTIVE_BRAND_PALETTE, Colors } from "@/constants/colors";
 
-export const BRAND_MARK_SOURCE = require("../../assets/brand/budget-buddy-mark-green.png");
+const BRAND_MARK_SOURCES = {
+  orange: require("../../assets/brand/budget-buddy-mark-orange.png"),
+  green: require("../../assets/brand/budget-buddy-mark-green.png"),
+} satisfies Record<typeof ACTIVE_BRAND_PALETTE, ImageSourcePropType>;
+
+export const BRAND_MARK_SOURCE = BRAND_MARK_SOURCES[ACTIVE_BRAND_PALETTE];
 
 type BrandLogoVariant = "mark" | "lockup";
 type BrandLogoDirection = "row" | "column";
@@ -89,7 +95,7 @@ export function BrandHeader({ dark, style }: BrandHeaderProps) {
     <View style={[styles.header, style]}>
       <BrandLogo
         markSize={24}
-        textColor={dark ? "rgba(255,255,255,0.78)" : Colors.navy}
+        textColor={dark ? Colors.brandOnDarkMuted : Colors.navy}
         textStyle={dark ? styles.darkHeaderText : styles.lightHeaderText}
       />
     </View>

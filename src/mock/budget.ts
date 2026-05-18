@@ -1,3 +1,5 @@
+import { Colors } from "@/constants/colors";
+
 export interface BudgetCategory {
   id: string;
   name: string;
@@ -47,7 +49,7 @@ const CATEGORY_META: Array<Omit<BudgetCategory, "spent">> = [
   { id: "housing", name: "Housing", icon: "home", budgetLimit: 1200, color: "#1B2B4B" },
   { id: "entertainment", name: "Entertainment", icon: "star", budgetLimit: 100, color: "#8B5CF6" },
   { id: "health", name: "Health & Wellness", icon: "shield", budgetLimit: 80, color: "#10B981" },
-  { id: "personal", name: "Personal Care", icon: "user", budgetLimit: 60, color: "#13D845" },
+  { id: "personal", name: "Personal Care", icon: "user", budgetLimit: 60, color: Colors.gold },
   { id: "education", name: "Education", icon: "layers", budgetLimit: 50, color: "#00B4A6" },
 ];
 

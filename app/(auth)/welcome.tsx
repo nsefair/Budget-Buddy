@@ -48,7 +48,7 @@ export default function WelcomeScreen() {
 
   return (
     <LinearGradient
-      colors={["#0E1926", "#1B2B4B", "#0E2338"]}
+      colors={[Colors.brandGradientStart, Colors.brandGradientMid, Colors.brandGradientEnd]}
       locations={[0, 0.5, 1]}
       style={styles.container}
     >
@@ -56,7 +56,7 @@ export default function WelcomeScreen() {
       <Animated.View style={[styles.logoContainer, { opacity: logoOpacity, transform: [{ scale: logoScale }] }]}>
         <BrandLogo
           markSize={30}
-          textColor="rgba(255,255,255,0.82)"
+          textColor={Colors.brandOnDarkMuted}
           textStyle={styles.logoText}
         />
       </Animated.View>
@@ -121,7 +121,7 @@ const styles = StyleSheet.create({
   logoText: {
     fontSize: 15,
     fontWeight: "800",
-    color: "rgba(255,255,255,0.82)",
+    color: Colors.brandOnDarkMuted,
     letterSpacing: 3,
     textTransform: "uppercase",
   },
@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
     height: 148,
     borderRadius: 74,
     borderWidth: 1,
-    borderColor: "rgba(0, 180, 166, 0.24)",
+    borderColor: Colors.accentAlpha25,
   },
   budOrb: {
     width: 124,
@@ -155,7 +155,7 @@ const styles = StyleSheet.create({
   headline: {
     fontSize: 36,
     fontWeight: "800",
-    color: "#FFF",
+    color: Colors.brandOnDark,
     textAlign: "center",
     lineHeight: 44,
     letterSpacing: 0,
@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   primaryButtonGradient: { paddingVertical: 18, alignItems: "center" },
-  primaryButtonText: { fontSize: 17, fontWeight: "700", color: Colors.navy, letterSpacing: 0.3 },
+  primaryButtonText: { fontSize: 17, fontWeight: "700", color: Colors.onAccent, letterSpacing: 0.3 },
   secondaryButton: { paddingVertical: 16, alignItems: "center" },
   secondaryButtonText: { fontSize: 15, fontWeight: "500", color: Colors.muted },
 });

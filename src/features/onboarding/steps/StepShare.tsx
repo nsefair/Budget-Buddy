@@ -49,14 +49,14 @@ export function StepShare({ firstName, whyIcon, share, onChangeShare }: Props) {
           <LinearGradient
             colors={
               share
-                ? ["rgba(0,180,166,0.18)", "rgba(0,180,166,0.04)"]
+                ? [Colors.accentAlpha18, Colors.accentAlpha05]
                 : isDark
-                ? ["rgba(19,216,69,0.08)", "rgba(19,216,69,0.03)"]
-                : ["rgba(255,255,255,0.92)", "rgba(233,252,238,0.74)"]
+                ? [Colors.accentAlpha08, Colors.accentAlpha03]
+                : [Colors.white, Colors.greenSoft]
             }
             style={[
               styles.previewCard,
-              share && { borderColor: Colors.teal },
+              share && { borderColor: Colors.gold },
             ]}
           >
             <View style={styles.avatarRow}>
@@ -128,16 +128,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  avatarLetter: { fontSize: 18, fontWeight: "800", color: Colors.navy },
+  avatarLetter: { fontSize: 18, fontWeight: "800", color: Colors.onAccent },
   userName: { fontSize: 14, fontWeight: "700", color: Colors.navy },
   timestamp: { fontSize: 11, color: Colors.muted, marginTop: 2 },
   dayPill: {
-    backgroundColor: "rgba(19,216,69,0.18)",
+    backgroundColor: Colors.accentAlpha18,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: "rgba(19,216,69,0.4)",
+    borderColor: Colors.accentAlpha40,
   },
   dayPillText: {
     fontSize: 10,
@@ -151,9 +151,9 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 8,
-    backgroundColor: "rgba(19,216,69,0.18)",
+    backgroundColor: Colors.accentAlpha18,
     borderWidth: 1,
-    borderColor: "rgba(19,216,69,0.4)",
+    borderColor: Colors.accentAlpha40,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 1,
@@ -181,8 +181,8 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   toggleOn: {
-    backgroundColor: Colors.teal,
-    borderColor: Colors.teal,
+    backgroundColor: Colors.gold,
+    borderColor: Colors.gold,
   },
   toggleText: {
     fontSize: 13,

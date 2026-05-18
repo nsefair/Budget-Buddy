@@ -45,12 +45,12 @@ export function OptionCard({ icon, label, sub, selected, onPress, compact }: Pro
 
   const borderColor = borderAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ["rgba(19,216,69,0.20)", Colors.gold],
+    outputRange: [Colors.accentAlpha20, Colors.gold],
   });
 
   const bgColor = borderAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ["rgba(19,216,69,0.05)", "rgba(19,216,69,0.12)"],
+    outputRange: [Colors.accentAlpha05, Colors.accentAlpha12],
   });
 
   return (
@@ -109,9 +109,9 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: "rgba(19,216,69,0.12)",
+    backgroundColor: Colors.accentAlpha12,
     borderWidth: 1,
-    borderColor: "rgba(19,216,69,0.3)",
+    borderColor: Colors.accentAlpha30,
     alignItems: "center",
     justifyContent: "center",
   },

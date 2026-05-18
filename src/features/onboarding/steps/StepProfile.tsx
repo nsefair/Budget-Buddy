@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   chipActive: {
-    backgroundColor: "rgba(19,216,69,0.15)",
+    backgroundColor: Colors.accentAlpha15,
     borderColor: Colors.gold,
     color: Colors.gold,
   },

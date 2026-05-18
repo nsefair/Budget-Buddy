@@ -306,7 +306,7 @@ const styles = StyleSheet.create({
   },
   planCardSelected: {
     borderColor: Colors.gold,
-    backgroundColor: "rgba(19,216,69,0.08)",
+    backgroundColor: Colors.accentAlpha08,
   },
   badge: {
     position: "absolute",
@@ -368,12 +368,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1.5,
     borderColor: Colors.border,
-    backgroundColor: "rgba(0,180,166,0.06)",
+    backgroundColor: Colors.accentAlpha06,
     position: "relative",
   },
   lifetimeCardSelected: {
     borderColor: Colors.teal,
-    backgroundColor: "rgba(0,180,166,0.14)",
+    backgroundColor: Colors.accentAlpha14,
   },
   lifetimeName: {
     fontSize: 15,
@@ -396,7 +396,7 @@ const styles = StyleSheet.create({
   scarcityText: {
     fontSize: 9,
     fontWeight: "800",
-    color: "#FFFFFF",
+    color: Colors.brandOnDark,
     letterSpacing: 0.4,
   },
 

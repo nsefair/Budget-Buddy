@@ -54,7 +54,7 @@ export default function RegisterScreen() {
   };
 
   return (
-    <LinearGradient colors={["#0E1926", "#1B2B4B"]} style={{ flex: 1 }}>
+    <LinearGradient colors={[Colors.brandGradientStart, Colors.brandGradientMid]} style={{ flex: 1 }}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -193,7 +193,7 @@ const styles = StyleSheet.create({
   },
   backText: { color: Colors.muted, fontSize: 15, fontWeight: "500" },
   brandHeader: { marginBottom: 32 },
-  title: { fontSize: 32, fontWeight: "800", color: "#FFF", marginBottom: 8, letterSpacing: 0 },
+  title: { fontSize: 32, fontWeight: "800", color: Colors.brandOnDark, marginBottom: 8, letterSpacing: 0 },
   subtitle: { fontSize: 15, color: Colors.muted, marginBottom: 40 },
   form: { gap: 20, marginBottom: 32 },
   row: { flexDirection: "row", gap: 12 },
@@ -216,11 +216,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
-    color: "#FFF",
+    color: Colors.brandOnDark,
   },
   registerButton: { borderRadius: 16, overflow: "hidden", marginBottom: 16, shadowColor: Colors.gold, shadowOpacity: 0.35, shadowRadius: 14, shadowOffset: { width: 0, height: 4 }, elevation: 8 },
   registerButtonGradient: { paddingVertical: 18, alignItems: "center" },
-  registerButtonText: { fontSize: 17, fontWeight: "700", color: Colors.navy, letterSpacing: 0.3 },
+  registerButtonText: { fontSize: 17, fontWeight: "700", color: Colors.onAccent, letterSpacing: 0.3 },
   legalText: { textAlign: "center", fontSize: 12, color: Colors.muted, lineHeight: 18, marginBottom: 16, paddingHorizontal: 16 },
   loginLink: { textAlign: "center", color: Colors.muted, fontSize: 14 },
 });

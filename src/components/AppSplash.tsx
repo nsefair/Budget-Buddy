@@ -7,6 +7,7 @@ import React, { useEffect, useRef } from "react";
 import { StyleSheet, Animated } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { BrandLogo } from "@/components/BrandLogo";
+import { Colors } from "@/constants/colors";
 
 export function AppSplash() {
   const pulse = useRef(new Animated.Value(1)).current;
@@ -21,12 +22,15 @@ export function AppSplash() {
   }, []);
 
   return (
-    <LinearGradient colors={["#0E1926", "#1B2B4B"]} style={styles.container}>
+    <LinearGradient
+      colors={[Colors.brandGradientStart, Colors.brandGradientMid]}
+      style={styles.container}
+    >
       <Animated.View style={{ transform: [{ scale: pulse }] }}>
         <BrandLogo
           direction="column"
           markSize={96}
-          textColor="#FFFFFF"
+          textColor={Colors.brandOnDark}
           textStyle={styles.wordmark}
         />
       </Animated.View>
@@ -39,7 +43,7 @@ const styles = StyleSheet.create({
   wordmark: {
     fontSize: 13,
     fontWeight: "800",
-    color: "#FFFFFF",
+    color: Colors.brandOnDark,
     letterSpacing: 3,
     textTransform: "uppercase",
   },

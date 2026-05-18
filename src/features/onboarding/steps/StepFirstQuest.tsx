@@ -87,7 +87,7 @@ export function StepFirstQuest({ goalKinds, quest, onLoaded }: Props) {
 
       {/* Quest card */}
       <LinearGradient
-        colors={["rgba(19,216,69,0.18)", "rgba(19,216,69,0.06)"]}
+        colors={[Colors.accentAlpha18, Colors.accentAlpha06]}
         style={styles.questCard}
       >
         <View style={styles.questHeader}>
@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 18,
     borderWidth: 1.5,
-    borderColor: "rgba(19,216,69,0.4)",
+    borderColor: Colors.accentAlpha40,
   },
   questHeader: {
     flexDirection: "row",
@@ -198,9 +198,9 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 16,
-    backgroundColor: "rgba(19,216,69,0.14)",
+    backgroundColor: Colors.accentAlpha14,
     borderWidth: 1,
-    borderColor: "rgba(19,216,69,0.4)",
+    borderColor: Colors.accentAlpha40,
     alignItems: "center",
     justifyContent: "center",
   },

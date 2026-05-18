@@ -195,7 +195,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.border,
   },
   dotActive: { backgroundColor: Colors.gold, width: 28 },
-  dotPast: { backgroundColor: "rgba(19,216,69,0.45)" },
+  dotPast: { backgroundColor: Colors.accentAlpha45 },
 
   content: { paddingHorizontal: 24, paddingTop: 16, flexGrow: 1, zIndex: 1 },
   contentCentered: { justifyContent: "center" },

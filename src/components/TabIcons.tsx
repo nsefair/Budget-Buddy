@@ -1,5 +1,6 @@
 import React from "react";
 import Svg, { Path, Circle, Rect } from "react-native-svg";
+import { Colors } from "@/constants/colors";
 
 interface IconProps {
   color: string;
@@ -22,7 +23,7 @@ export function TodayIcon({ color, size = 24, filled }: IconProps) {
       {filled && (
         <Path
           d="M9 22V12h6v10"
-          stroke="rgba(27,43,75,0.8)"
+          stroke={Colors.onAccent}
           strokeWidth={2}
           strokeLinecap="round"
         />
@@ -54,11 +55,11 @@ export function BudgetIcon({ color, size = 24, filled }: IconProps) {
       />
       <Path
         d="M8 10h8M8 14h5"
-        stroke={filled ? "rgba(27,43,75,0.8)" : color}
+        stroke={filled ? Colors.onAccent : color}
         strokeWidth={2}
         strokeLinecap="round"
       />
-      <Circle cx="18" cy="14" r="1.5" fill={filled ? "rgba(27,43,75,0.8)" : color} />
+      <Circle cx="18" cy="14" r="1.5" fill={filled ? Colors.onAccent : color} />
     </Svg>
   );
 }
@@ -74,12 +75,12 @@ export function BudIcon({ color, size = 24, filled }: IconProps) {
       />
       <Path
         d="M8 14s1.5 2 4 2 4-2 4-2"
-        stroke={filled ? "rgba(27,43,75,0.9)" : color}
+        stroke={filled ? Colors.onAccent : color}
         strokeWidth={2}
         strokeLinecap="round"
       />
-      <Circle cx="9" cy="10" r="1.2" fill={filled ? "rgba(27,43,75,0.9)" : color} />
-      <Circle cx="15" cy="10" r="1.2" fill={filled ? "rgba(27,43,75,0.9)" : color} />
+      <Circle cx="9" cy="10" r="1.2" fill={filled ? Colors.onAccent : color} />
+      <Circle cx="15" cy="10" r="1.2" fill={filled ? Colors.onAccent : color} />
     </Svg>
   );
 }
@@ -99,7 +100,7 @@ export function GoalsIcon({ color, size = 24, filled }: IconProps) {
         cx="12"
         cy="12"
         r="5"
-        stroke={filled ? "rgba(27,43,75,0.85)" : color}
+        stroke={filled ? Colors.onAccent : color}
         strokeWidth={2}
         fill="none"
       />
@@ -107,7 +108,7 @@ export function GoalsIcon({ color, size = 24, filled }: IconProps) {
         cx="12"
         cy="12"
         r="1.6"
-        fill={filled ? "rgba(27,43,75,0.95)" : color}
+        fill={filled ? Colors.onAccent : color}
       />
     </Svg>
   );

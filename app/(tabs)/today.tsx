@@ -498,7 +498,7 @@ const styles = StyleSheet.create({
   greetingText: {
     flex: 1,
     fontSize: 14,
-    color: "#FFFFFF",
+    color: Colors.brandOnDark,
     lineHeight: 20,
     fontWeight: "500",
   },
@@ -601,7 +601,7 @@ const styles = StyleSheet.create({
   levelBadgeText: {
     fontSize: 16,
     fontWeight: "800",
-    color: Colors.navy,
+    color: Colors.onAccent,
     letterSpacing: 0,
   },
   levelLabel: {

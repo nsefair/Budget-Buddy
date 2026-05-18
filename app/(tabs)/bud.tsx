@@ -59,7 +59,7 @@ export default function BudScreen() {
     <View style={styles.container}>
       {/* Header */}
       <LinearGradient
-        colors={[Colors.navy900, Colors.navy700]}
+        colors={[Colors.brandGradientStart, Colors.brandGradientMid]}
         style={[styles.header, { paddingTop: insets.top + 12 }]}
       >
         <BrandHeader dark style={styles.brandHeader} />
@@ -345,15 +345,15 @@ const styles = StyleSheet.create({
   brandHeader: { marginBottom: 12 },
   headerRow: { flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 16 },
   budHeaderOrb: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
-  headerTitle: { fontSize: 24, fontWeight: "800", color: "#FFF", letterSpacing: 0 },
-  headerSub: { fontSize: 13, color: "rgba(243,255,244,0.72)" },
+  headerTitle: { fontSize: 24, fontWeight: "800", color: Colors.brandOnDark, letterSpacing: 0 },
+  headerSub: { fontSize: 13, color: Colors.brandOnDarkMuted },
   viewSwitcher: { flexDirection: "row", borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.08)", marginTop: 4 },
   switchTab: { flex: 1, paddingVertical: 12, alignItems: "center" },
   switchTabActive: { borderBottomWidth: 2, borderBottomColor: Colors.gold },
   switchTabText: { fontSize: 13, color: Colors.muted, fontWeight: "500" },
   switchTabTextActive: { color: Colors.gold, fontWeight: "700" },
   scrollContent: { padding: 20, gap: 14 },
-  insightCard: { backgroundColor: "rgba(19,216,69,0.08)", borderRadius: 16, padding: 18, borderWidth: 1, borderColor: "rgba(19,216,69,0.2)" },
+  insightCard: { backgroundColor: Colors.accentAlpha08, borderRadius: 16, padding: 18, borderWidth: 1, borderColor: Colors.accentAlpha20 },
   insightLabelRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
   insightLabel: { fontSize: 12, color: Colors.gold, fontWeight: "800", letterSpacing: 0.6, textTransform: "uppercase" },
   insightText: { fontSize: 15, color: Colors.navyMuted, lineHeight: 22, fontWeight: "400" },
@@ -361,18 +361,18 @@ const styles = StyleSheet.create({
   actionCards: { gap: 10 },
   actionCard: { flexDirection: "row", alignItems: "center", backgroundColor: Colors.card, borderRadius: 14, padding: 16, gap: 14, shadowColor: Colors.navy, shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
   actionCardLocked: { opacity: 0.55 },
-  actionIconBox: { width: 36, height: 36, borderRadius: 10, backgroundColor: "rgba(19,216,69,0.12)", borderWidth: 1, borderColor: "rgba(19,216,69,0.3)", alignItems: "center", justifyContent: "center" },
+  actionIconBox: { width: 36, height: 36, borderRadius: 10, backgroundColor: Colors.accentAlpha12, borderWidth: 1, borderColor: Colors.accentAlpha30, alignItems: "center", justifyContent: "center" },
   actionText: { flex: 1 },
   actionTitle: { fontSize: 15, fontWeight: "700", color: Colors.navy, marginBottom: 2 },
   actionSub: { fontSize: 12, color: Colors.muted, lineHeight: 16 },
   scenarioCard: { borderRadius: 16, overflow: "hidden" },
   scenarioGrad: { padding: 20 },
   scenarioHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
-  scenarioIconBox: { width: 36, height: 36, borderRadius: 10, backgroundColor: "rgba(19,216,69,0.12)", borderWidth: 1, borderColor: "rgba(19,216,69,0.3)", alignItems: "center", justifyContent: "center" },
+  scenarioIconBox: { width: 36, height: 36, borderRadius: 10, backgroundColor: Colors.accentAlpha12, borderWidth: 1, borderColor: Colors.accentAlpha30, alignItems: "center", justifyContent: "center" },
   eliteBadge: { backgroundColor: Colors.gold, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, alignSelf: "flex-start" },
   eliteBadgeText: { fontSize: 11, fontWeight: "700", color: Colors.onGreen },
-  scenarioTitle: { fontSize: 18, fontWeight: "800", color: "#FFF", marginBottom: 6 },
-  scenarioSub: { fontSize: 13, color: "rgba(243,255,244,0.72)", lineHeight: 18, marginBottom: 16 },
+  scenarioTitle: { fontSize: 18, fontWeight: "800", color: Colors.brandOnDark, marginBottom: 6 },
+  scenarioSub: { fontSize: 13, color: Colors.brandOnDarkMuted, lineHeight: 18, marginBottom: 16 },
   scenarioCta: { alignSelf: "flex-start" },
   scenarioCtaText: { fontSize: 13, color: Colors.gold, fontWeight: "700" },
   memoryCard: { backgroundColor: Colors.card, borderRadius: 16, padding: 16, gap: 10, shadowColor: Colors.navy, shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
@@ -382,7 +382,7 @@ const styles = StyleSheet.create({
   memoryBullet: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: Colors.gold, marginTop: 7 },
   memoryText: { fontSize: 13, color: Colors.navyMuted, flex: 1, lineHeight: 18 },
   chatContent: { padding: 20 },
-  disclaimer: { backgroundColor: "rgba(19,216,69,0.07)", borderRadius: 10, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: "rgba(19,216,69,0.15)" },
+  disclaimer: { backgroundColor: Colors.accentAlpha07, borderRadius: 10, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: Colors.accentAlpha15 },
   disclaimerText: { fontSize: 12, color: Colors.muted, lineHeight: 17 },
   suggestLabel: { fontSize: 12, color: Colors.muted, fontWeight: "500", marginBottom: 10, letterSpacing: 0.3 },
   suggestions: { gap: 8, paddingBottom: 16 },
@@ -402,7 +402,7 @@ const styles = StyleSheet.create({
   chatInput: { flex: 1, backgroundColor: Colors.card, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15, color: Colors.navy, borderWidth: 1, borderColor: Colors.border, maxHeight: 100 },
   sendButton: { width: 44, height: 44, borderRadius: 22, overflow: "hidden" },
   sendGrad: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
-  sendIcon: { fontSize: 18, fontWeight: "700", color: Colors.navy },
+  sendIcon: { fontSize: 18, fontWeight: "700", color: Colors.onAccent },
   sessionsHeader: { fontSize: 13, color: Colors.muted, fontWeight: "500", marginBottom: 4 },
   sessionCard: { backgroundColor: Colors.card, borderRadius: 16, padding: 16, gap: 10, shadowColor: Colors.navy, shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
   sessionCardDone: { opacity: 0.65 },

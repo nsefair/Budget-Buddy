@@ -42,7 +42,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
     if (!this.state.hasError) return this.props.children;
 
     return (
-      <LinearGradient colors={["#0E1926", "#1B2B4B"]} style={styles.container}>
+      <LinearGradient colors={[Colors.brandGradientStart, Colors.brandGradientMid]} style={styles.container}>
         <View style={styles.budOrb}>
           <Text style={styles.budOrbText}>B</Text>
         </View>
@@ -79,8 +79,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 16,
   },
-  budOrbText: { fontSize: 40, fontWeight: "800", color: Colors.navy },
-  title: { fontSize: 24, fontWeight: "800", color: "#FFF", textAlign: "center" },
+  budOrbText: { fontSize: 40, fontWeight: "800", color: Colors.onAccent },
+  title: { fontSize: 24, fontWeight: "800", color: Colors.brandOnDark, textAlign: "center" },
   subtitle: {
     fontSize: 14,
     color: Colors.muted,
@@ -101,5 +101,5 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 14,
   },
-  buttonText: { fontSize: 15, fontWeight: "700", color: Colors.navy },
+  buttonText: { fontSize: 15, fontWeight: "700", color: Colors.onAccent },
 });

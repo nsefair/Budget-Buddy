@@ -55,7 +55,7 @@ export default function BudsScreen() {
     <View style={styles.container}>
       {/* Header */}
       <LinearGradient
-        colors={["#0E1926", "#1B2B4B"]}
+        colors={[Colors.brandGradientStart, Colors.brandGradientMid]}
         style={[styles.header, { paddingTop: insets.top + 12 }]}
       >
         <BrandHeader dark style={styles.brandHeader} />
@@ -297,15 +297,15 @@ const styles = StyleSheet.create({
   profileStrip: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 },
   myAvatar: { width: 44, height: 44, borderRadius: 22, overflow: "hidden" },
   myAvatarGrad: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
-  myAvatarInitial: { fontSize: 20, fontWeight: "800", color: Colors.navy },
+  myAvatarInitial: { fontSize: 20, fontWeight: "800", color: Colors.onAccent },
   profileInfo: { flex: 1 },
-  profileName: { fontSize: 15, fontWeight: "700", color: "#FFF", marginBottom: 6 },
+  profileName: { fontSize: 15, fontWeight: "700", color: Colors.brandOnDark, marginBottom: 6 },
   profileStats: { flexDirection: "row", alignItems: "center", gap: 10 },
   profileStat: { alignItems: "center" },
-  profileStatValue: { fontSize: 13, fontWeight: "700", color: "#FFF" },
+  profileStatValue: { fontSize: 13, fontWeight: "700", color: Colors.brandOnDark },
   profileStatLabel: { fontSize: 10, color: Colors.muted },
   profileStatDivider: { width: 1, height: 20, backgroundColor: "rgba(255,255,255,0.1)" },
-  inviteButton: { backgroundColor: "rgba(19,216,69,0.15)", borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6, borderWidth: 1, borderColor: "rgba(19,216,69,0.3)" },
+  inviteButton: { backgroundColor: Colors.accentAlpha15, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6, borderWidth: 1, borderColor: Colors.accentAlpha30 },
   inviteText: { fontSize: 13, color: Colors.gold, fontWeight: "600" },
   viewSwitcher: { flexDirection: "row", borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.08)" },
   switchTab: { flex: 1, paddingVertical: 12, alignItems: "center" },
@@ -333,7 +333,7 @@ const styles = StyleSheet.create({
   feedMessage: { fontSize: 13, color: Colors.navyMuted, lineHeight: 19 },
   feedFooter: { flexDirection: "row" },
   fistBumpButton: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
-  fistBumpButtonActive: { backgroundColor: "rgba(19,216,69,0.10)", borderColor: "rgba(19,216,69,0.4)" },
+  fistBumpButtonActive: { backgroundColor: Colors.accentAlpha10, borderColor: Colors.accentAlpha40 },
   fistBumpEmoji: { fontSize: 16, lineHeight: 20 },
   fistBumpCount: { fontSize: 13, color: Colors.navyMuted, fontWeight: "600" },
   fistBumpCountActive: { color: Colors.gold },
@@ -359,5 +359,5 @@ const styles = StyleSheet.create({
   phase2Sub: { fontSize: 13, color: Colors.muted, lineHeight: 19 },
   phase2Cta: { borderRadius: 12, overflow: "hidden", shadowColor: Colors.gold, shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 4 },
   phase2CtaGrad: { paddingVertical: 13, alignItems: "center" },
-  phase2CtaText: { fontSize: 15, fontWeight: "700", color: Colors.navy },
+  phase2CtaText: { fontSize: 15, fontWeight: "700", color: Colors.onAccent },
 });
