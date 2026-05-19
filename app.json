@@ -4,14 +4,14 @@
     "slug": "budget-buddy",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon-orange.png",
+    "icon": "./assets/icon-green.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "scheme": "budget-buddy",
     "splash": {
-      "image": "./assets/splash-icon-orange.png",
+      "image": "./assets/splash-icon-green.png",
       "resizeMode": "contain",
-      "backgroundColor": "#070D13"
+      "backgroundColor": "#050705"
     },
     "ios": {
       "supportsTablet": false,
@@ -19,8 +19,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon-orange.png",
-        "backgroundColor": "#F4A832"
+        "foregroundImage": "./assets/adaptive-icon-green.png",
+        "backgroundColor": "#0A0A0A"
       },
       "package": "com.budgetbuddy.app",
       "edgeToEdgeEnabled": true,
@@ -29,7 +29,7 @@
     "web": {
       "bundler": "metro",
       "output": "single",
-      "favicon": "./assets/favicon-orange.png"
+      "favicon": "./assets/favicon-green.png"
     },
     "plugins": [
       "expo-router",

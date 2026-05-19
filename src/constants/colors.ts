@@ -8,9 +8,9 @@ const systemColor = (light: string, dark: string) =>
 const alpha = (rgb: string, opacity: number) => `rgba(${rgb}, ${opacity})`;
 
 const brandPaletteName =
-  process.env.EXPO_PUBLIC_BRAND_PALETTE?.trim().toLowerCase() === "green"
-    ? "green"
-    : "orange";
+  process.env.EXPO_PUBLIC_BRAND_PALETTE?.trim().toLowerCase() === "orange"
+    ? "orange"
+    : "green";
 
 export const ACTIVE_BRAND_PALETTE = brandPaletteName;
 

@@ -1,9 +1,9 @@
 const appJson = require("./app.json");
 
 const activePalette =
-  process.env.EXPO_PUBLIC_BRAND_PALETTE?.trim().toLowerCase() === "green"
-    ? "green"
-    : "orange";
+  process.env.EXPO_PUBLIC_BRAND_PALETTE?.trim().toLowerCase() === "orange"
+    ? "orange"
+    : "green";
 
 const brandAssets = {
   orange: {
@@ -19,7 +19,7 @@ const brandAssets = {
     adaptiveIcon: "./assets/adaptive-icon-green.png",
     favicon: "./assets/favicon-green.png",
     splashIcon: "./assets/splash-icon-green.png",
-    adaptiveBackground: "#13D845",
+    adaptiveBackground: "#0A0A0A",
     splashBackground: "#050705",
   },
 };
