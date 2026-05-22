@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import {
   FeedPost,
   BudProfile,
 } from "@/mock/buds";
+import { MOCK_LEAGUE } from "@/mock/quests";
 import * as Haptics from "expo-haptics";
 import { Icon } from "@/components/Icon";
 
@@ -133,6 +134,8 @@ export default function BudsScreen() {
               </Text>
             </View>
 
+            <WealthLeagueCard />
+
             {feed.map((post) => (
               <FeedCard key={post.id} post={post} onFistBump={handleFistBump} />
             ))}
@@ -189,6 +192,116 @@ export default function BudsScreen() {
           </>
         )}
       </ScrollView>
+    </View>
+  );
+}
+
+function WealthLeagueCard() {
+  const leaders = MOCK_LEAGUE.users.slice(0, 5);
+  const maxXp = Math.max(...leaders.map((leader) => leader.xp));
+
+  return (
+    <View style={styles.leagueCard}>
+      <View style={styles.leagueHeader}>
+        <View style={styles.leagueTitleRow}>
+          <View style={styles.leagueIcon}>
+            <Icon name="trophy" size={18} color={Colors.gold} strokeWidth={2.4} />
+          </View>
+          <View>
+            <Text style={styles.leagueEyebrow}>WEALTH LEAGUE</Text>
+            <Text style={styles.leagueTitle}>{MOCK_LEAGUE.tier} standings</Text>
+          </View>
+        </View>
+        <View style={styles.rankPill}>
+          <Text style={styles.rankPillText}>#{MOCK_LEAGUE.currentUserRank}</Text>
+        </View>
+      </View>
+
+      <Text style={styles.leagueSub}>
+        XP from quests and streak actions only. No balances, budgets, or
+        transaction details are shared.
+      </Text>
+
+      <View style={styles.leagueResetRow}>
+        <Text style={styles.leagueResetText}>{leagueResetCopy()}</Text>
+        <Text style={styles.leagueZoneText}>Top 3 advance</Text>
+      </View>
+
+      <View style={styles.leagueRows}>
+        {leaders.map((leader, index) => (
+          <LeagueRow
+            key={leader.id}
+            leader={leader}
+            rank={index + 1}
+            maxXp={maxXp}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function LeagueRow({
+  leader,
+  rank,
+  maxXp,
+}: {
+  leader: (typeof MOCK_LEAGUE.users)[number];
+  rank: number;
+  maxXp: number;
+}) {
+  const fill = useRef(new Animated.Value(0)).current;
+  const ratio = maxXp === 0 ? 0 : leader.xp / maxXp;
+
+  useEffect(() => {
+    Animated.timing(fill, {
+      toValue: ratio,
+      duration: 520 + rank * 70,
+      useNativeDriver: false,
+    }).start();
+  }, [fill, rank, ratio]);
+
+  const width = fill.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0%", "100%"],
+  });
+
+  return (
+    <View
+      style={[
+        styles.leagueRow,
+        leader.isCurrentUser && styles.leagueRowCurrent,
+      ]}
+    >
+      <View style={styles.leagueRankBox}>
+        <Text
+          style={[
+            styles.leagueRankText,
+            leader.isCurrentUser && styles.leagueRankTextCurrent,
+          ]}
+        >
+          {rank}
+        </Text>
+      </View>
+      <View style={styles.leaguePerson}>
+        <View style={styles.leagueNameRow}>
+          <Text style={styles.leagueName}>
+            {leader.isCurrentUser ? "You" : leader.name}
+          </Text>
+          {rank <= 3 && (
+            <View style={styles.promotionPill}>
+              <Text style={styles.promotionPillText}>Advance</Text>
+            </View>
+          )}
+        </View>
+        <View style={styles.leagueTrack}>
+          <Animated.View style={[styles.leagueFill, { width }]} />
+        </View>
+      </View>
+      <View style={styles.leagueXpBox}>
+        <Text style={styles.leagueXp}>{leader.xp.toLocaleString()}</Text>
+        <Text style={styles.leagueXpLabel}>XP</Text>
+      </View>
     </View>
   );
 }
@@ -290,6 +403,14 @@ function BudCard({ bud, showFollow }: { bud: BudProfile; showFollow?: boolean })
   );
 }
 
+function leagueResetCopy() {
+  const today = new Date();
+  const daysUntilMonday = (8 - today.getDay()) % 7 || 7;
+
+  if (daysUntilMonday === 1) return "Resets tomorrow";
+  return `Resets in ${daysUntilMonday} days`;
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.surface },
   header: { paddingHorizontal: 20, paddingBottom: 0 },
@@ -316,6 +437,34 @@ const styles = StyleSheet.create({
   privacyNote: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(16,185,129,0.08)", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: "rgba(16,185,129,0.15)" },
   privacyText: { flex: 1, fontSize: 12, color: Colors.emerald, fontWeight: "500", lineHeight: 17 },
   streakInline: { flexDirection: "row", alignItems: "center", gap: 4 },
+  leagueCard: { backgroundColor: Colors.card, borderRadius: 18, padding: 16, gap: 12, borderWidth: 1, borderColor: Colors.border, shadowColor: Colors.navy, shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 3 },
+  leagueHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  leagueTitleRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  leagueIcon: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: Colors.greenSurface, borderWidth: 1, borderColor: Colors.greenBorder },
+  leagueEyebrow: { fontSize: 10, color: Colors.gold, fontWeight: "800", letterSpacing: 1.4 },
+  leagueTitle: { fontSize: 17, color: Colors.navy, fontWeight: "800", letterSpacing: 0, marginTop: 2 },
+  rankPill: { minWidth: 46, alignItems: "center", justifyContent: "center", paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999, backgroundColor: Colors.accentAlpha12, borderWidth: 1, borderColor: Colors.accentAlpha30 },
+  rankPillText: { fontSize: 13, color: Colors.gold, fontWeight: "900", letterSpacing: 0 },
+  leagueSub: { fontSize: 12, color: Colors.navyMuted, lineHeight: 18 },
+  leagueResetRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingTop: 2 },
+  leagueResetText: { fontSize: 12, color: Colors.muted, fontWeight: "700" },
+  leagueZoneText: { fontSize: 12, color: Colors.gold, fontWeight: "800" },
+  leagueRows: { gap: 9 },
+  leagueRow: { flexDirection: "row", alignItems: "center", gap: 10, padding: 10, borderRadius: 14, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
+  leagueRowCurrent: { backgroundColor: Colors.greenSurface, borderColor: Colors.accentAlpha45 },
+  leagueRankBox: { width: 28, height: 28, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: Colors.card },
+  leagueRankText: { fontSize: 12, color: Colors.navy, fontWeight: "900" },
+  leagueRankTextCurrent: { color: Colors.gold },
+  leaguePerson: { flex: 1, gap: 6 },
+  leagueNameRow: { flexDirection: "row", alignItems: "center", gap: 7 },
+  leagueName: { fontSize: 13, color: Colors.navy, fontWeight: "800", letterSpacing: 0 },
+  promotionPill: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 999, backgroundColor: Colors.accentAlpha12 },
+  promotionPillText: { fontSize: 9, color: Colors.gold, fontWeight: "900", letterSpacing: 0.4 },
+  leagueTrack: { height: 5, borderRadius: 3, backgroundColor: Colors.border, overflow: "hidden" },
+  leagueFill: { height: 5, borderRadius: 3, backgroundColor: Colors.gold },
+  leagueXpBox: { alignItems: "flex-end", minWidth: 54 },
+  leagueXp: { fontSize: 12, color: Colors.navy, fontWeight: "900", letterSpacing: 0 },
+  leagueXpLabel: { fontSize: 9, color: Colors.muted, fontWeight: "800", letterSpacing: 0.7 },
   feedCard: { backgroundColor: Colors.card, borderRadius: 16, padding: 16, gap: 12, shadowColor: Colors.navy, shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   feedCardHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
   feedAvatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: Colors.navy50, alignItems: "center", justifyContent: "center" },

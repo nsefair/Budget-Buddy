@@ -17,6 +17,7 @@ import { Colors } from "@/constants/colors";
 import { BrandHeader } from "@/components/BrandLogo";
 import { Icon } from "@/components/Icon";
 import { useAuthActions } from "@/hooks/useAuth";
+import { useAuthStore } from "@/stores/authStore";
 import * as Haptics from "expo-haptics";
 
 export default function LoginScreen() {
@@ -38,7 +39,11 @@ export default function LoginScreen() {
     try {
       await login({ email: email.trim().toLowerCase(), password });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.replace("/(tabs)/today");
+      const hasCompletedOnboarding =
+        useAuthStore.getState().hasCompletedOnboarding;
+      router.replace(
+        hasCompletedOnboarding ? "/(tabs)/today" : "/(auth)/onboarding"
+      );
     } catch {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setError("Incorrect email or password. Try again.");

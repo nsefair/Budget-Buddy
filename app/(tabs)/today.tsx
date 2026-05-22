@@ -43,6 +43,7 @@ import {
   MOCK_UPCOMING_BILLS,
 } from "@/mock/budget";
 import { MOCK_BUD_GREETING } from "@/mock/bud";
+import { MOCK_LEAGUE } from "@/mock/quests";
 import { goalsService } from "@/services/goalsService";
 import type { Goal } from "@/mock/goals";
 import { formatCurrency, secureLog } from "@/utils/security";
@@ -159,6 +160,8 @@ export default function TodayScreen() {
             xp={user.xp}
             savingsRate={30}
           />
+
+          <LeagueSnapshotCard />
 
           {/* Daily Spend Snapshot */}
           <DailySpendCard
@@ -328,6 +331,45 @@ function StatsCard({
         </View>
       </View>
     </View>
+  );
+}
+
+// ─── Wealth League snapshot ─────────────────────────────────────────────────
+
+function LeagueSnapshotCard() {
+  const currentUser = MOCK_LEAGUE.users.find((u) => u.isCurrentUser);
+  const nextRank = MOCK_LEAGUE.users[MOCK_LEAGUE.currentUserRank - 2];
+  const gap = currentUser && nextRank ? Math.max(0, nextRank.xp - currentUser.xp) : 0;
+
+  return (
+    <Pressable
+      style={({ pressed }) => [
+        styles.leagueSnapshot,
+        pressed && { opacity: 0.94 },
+      ]}
+      onPress={() => {
+        Haptics.selectionAsync();
+        router.push("/(tabs)/buds");
+      }}
+    >
+      <View style={styles.leagueSnapshotTop}>
+        <View style={styles.leagueSnapshotTitleRow}>
+          <Icon name="trophy" size={16} color={Colors.gold} strokeWidth={2.4} />
+          <Text style={styles.leagueSnapshotTitle}>Wealth League</Text>
+        </View>
+        <Text style={styles.leagueSnapshotRank}>
+          #{MOCK_LEAGUE.currentUserRank}
+        </Text>
+      </View>
+      <Text style={styles.leagueSnapshotBody}>
+        {gap > 0
+          ? `${gap.toLocaleString()} XP from the advance zone.`
+          : "You're inside the advance zone."}
+      </Text>
+      <View style={styles.leagueMiniTrack}>
+        <View style={[styles.leagueMiniFill, { width: "72%" }]} />
+      </View>
+    </Pressable>
   );
 }
 
@@ -630,6 +672,56 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
   },
   statsCellLabel: { fontSize: 10, color: Colors.muted, fontWeight: "600", marginTop: 1 },
+
+  // League snapshot
+  leagueSnapshot: {
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    padding: 15,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  leagueSnapshotTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  leagueSnapshotTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  leagueSnapshotTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: Colors.navy,
+    letterSpacing: 0,
+  },
+  leagueSnapshotRank: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: Colors.gold,
+    letterSpacing: 0,
+  },
+  leagueSnapshotBody: {
+    fontSize: 12,
+    color: Colors.navyMuted,
+    fontWeight: "700",
+    marginBottom: 10,
+  },
+  leagueMiniTrack: {
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: Colors.border,
+    overflow: "hidden",
+  },
+  leagueMiniFill: {
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: Colors.gold,
+  },
 
   // Daily card
   dailyCard: {
