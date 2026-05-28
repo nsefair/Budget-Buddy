@@ -29,6 +29,7 @@ import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "@/constants/colors";
 import { BrandHeader } from "@/components/BrandLogo";
+import { EmptyState, ScreenHeader } from "@/components/ui";
 import { Icon, type IconName } from "@/components/Icon";
 import { goalsService } from "@/services/goalsService";
 import {
@@ -220,17 +221,15 @@ export default function GoalsScreen() {
       >
         <BrandHeader style={styles.brandHeader} />
 
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.eyebrow}>YOUR GOALS</Text>
-          <Text style={styles.title}>What you're building.</Text>
-        </View>
+        <ScreenHeader eyebrow="YOUR GOALS" title="What you're building." />
 
         {/* Summary — three top stats from the CEO drawing */}
         {summary && <SummaryRow summary={summary} />}
 
         {/* Add new goal CTA */}
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Add a new goal"
           style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.85 }]}
           onPress={openGoalCreator}
         >
@@ -246,13 +245,11 @@ export default function GoalsScreen() {
         </View>
 
         {goals.length === 0 && (
-          <View style={styles.emptyCard}>
-            <Icon name="target" size={28} color={Colors.gold} />
-            <Text style={styles.emptyTitle}>No active goals yet</Text>
-            <Text style={styles.emptyBody}>
-              Bud will help you turn the next milestone into a real, trackable goal.
-            </Text>
-          </View>
+          <EmptyState
+            icon="target"
+            title="No active goals yet"
+            body="Bud will help you turn the next milestone into a real, trackable goal."
+          />
         )}
       </ScrollView>
 

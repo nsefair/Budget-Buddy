@@ -102,6 +102,29 @@ EXPO_PUBLIC_USE_MOCK=true                            # Use local mock data (dev)
 
 Set `EXPO_PUBLIC_USE_MOCK=false` and provide the real `EXPO_PUBLIC_API_URL` when the backend engineer is ready. **No code changes required.**
 
+## Design System
+
+The visual language follows the Developer Review (friend-on-your-side, premium, never bank-cold) and the `ui-ux-pro-max` skill (modular type scale, 150–300 ms motion, no shame copy).
+
+| Layer | File | What it owns |
+|-------|------|--------------|
+| Colors / palette | `src/constants/colors.ts` | Brand accent, semantic surfaces, light/dark resolution |
+| Tokens | `src/constants/tokens.ts` | `Spacing`, `Radius`, `Shadow`, `Type`, `Motion` |
+| Primitives | `src/components/ui/` | `Card`, `ScreenHeader`, `SectionHeader`, `EmptyState` |
+
+When you build a new screen:
+
+1. Open with `<ScreenHeader eyebrow="…" title="…" />`.
+2. Wrap related rows in `<Card>` (variants: `default`, `raised`, `subtle`).
+3. Use `<SectionHeader title="…" action="See all" onAction={…} />` for subsections.
+4. Use `<EmptyState />` instead of leaving a list blank — voice rule.
+5. Pull sizes from `Spacing` / `Radius` / `Type` instead of hard-coding numbers.
+
+### Voice (Dev Review §02)
+- Emoji is only allowed on **spending categories** and **Buds kudos**. Everything else uses Lucide via `<Icon />`.
+- No `ALERT` / `WARNING` / shame copy. Reframe: *"Dining's running hot — $187 over. Want a quick look?"*
+- Avoid: *empower, leverage, level up, financial freedom, take control, embark, delve.*
+
 ## How to Integrate the Real Backend Later
 
 The architecture is layered so backend changes never reach the screen code:

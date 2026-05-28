@@ -26,6 +26,7 @@ import * as Haptics from "expo-haptics";
 
 import { Colors } from "@/constants/colors";
 import { BrandHeader } from "@/components/BrandLogo";
+import { ScreenHeader } from "@/components/ui";
 import { Icon, type IconName } from "@/components/Icon";
 import {
   MOCK_HOLDINGS,
@@ -157,17 +158,16 @@ export default function BudgetScreen() {
       >
         <BrandHeader style={styles.brandHeader} />
 
-        {/* Header */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.eyebrow}>MONEY TRUTH</Text>
-            <Text style={styles.title}>Budget</Text>
-          </View>
-          <View style={styles.syncBadge}>
-            <Icon name="check-circle" size={13} color={Colors.teal} strokeWidth={2.4} />
-            <Text style={styles.syncBadgeText}>Synced</Text>
-          </View>
-        </View>
+        <ScreenHeader
+          eyebrow="MONEY TRUTH"
+          title="Budget"
+          right={
+            <View style={styles.syncBadge}>
+              <Icon name="check-circle" size={13} color={Colors.teal} strokeWidth={2.4} />
+              <Text style={styles.syncBadgeText}>Synced</Text>
+            </View>
+          }
+        />
 
         <MonthNavigator
           months={months}

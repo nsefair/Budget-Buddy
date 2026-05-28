@@ -12,6 +12,7 @@ import {
 } from "react-native";
 
 import { ACTIVE_BRAND_PALETTE, Colors } from "@/constants/colors";
+import { Spacing, Type } from "@/constants/tokens";
 
 const BRAND_MARK_SOURCES = {
   orange: require("../../assets/brand/budget-buddy-mark-orange.png"),
@@ -104,22 +105,23 @@ export function BrandHeader({ dark, style }: BrandHeaderProps) {
 
 const styles = StyleSheet.create({
   logo: { alignItems: "center", justifyContent: "center" },
-  row: { flexDirection: "row", gap: 8 },
-  column: { gap: 10 },
+  row: { flexDirection: "row", gap: Spacing.xs },
+  column: { gap: Spacing.sm },
   mark: {
-    shadowColor: Colors.teal,
-    shadowOpacity: 0.24,
+    // Glow uses the active brand accent so green stays green and orange stays gold.
+    shadowColor: Colors.accent,
+    shadowOpacity: 0.22,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
   },
   wordmark: {
-    fontWeight: "800",
-    letterSpacing: 0,
+    ...Type.bodyStrong,
+    letterSpacing: 0.2,
   },
   header: {
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 14,
+    marginBottom: Spacing.sm,
   },
   darkHeaderText: {
     fontWeight: "800",
