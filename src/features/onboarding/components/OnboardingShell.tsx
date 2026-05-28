@@ -29,6 +29,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { Colors } from "@/constants/colors";
 import { Icon } from "@/components/Icon";
+import { useReducedMotion } from "@/animations";
+import { Motion } from "@/constants/tokens";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -57,17 +59,33 @@ export function OnboardingShell({
   const insets = useSafeAreaInsets();
   const isDark = useColorScheme() === "dark";
 
-  // Slide-in transition each time `step` changes — gives the conversation feel
+  // Slide-in + cross-fade transition each time `step` changes — gives the
+  // conversation feel. Reduce Motion users get a static swap.
+  const reducedMotion = useReducedMotion();
   const slide = useRef(new Animated.Value(0)).current;
+  const fade = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
+    if (reducedMotion) {
+      slide.setValue(0);
+      fade.setValue(1);
+      return;
+    }
     slide.setValue(SCREEN_WIDTH * 0.06);
-    Animated.timing(slide, {
-      toValue: 0,
-      duration: 320,
-      useNativeDriver: true,
-    }).start();
-  }, [step, slide]);
+    fade.setValue(0);
+    Animated.parallel([
+      Animated.timing(slide, {
+        toValue: 0,
+        duration: Motion.slow,
+        useNativeDriver: true,
+      }),
+      Animated.timing(fade, {
+        toValue: 1,
+        duration: Motion.slow,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [step, reducedMotion, slide, fade]);
 
   return (
     <LinearGradient
@@ -109,10 +127,7 @@ export function OnboardingShell({
           style={{
             flex: 1,
             transform: [{ translateX: slide }],
-            opacity: slide.interpolate({
-              inputRange: [0, SCREEN_WIDTH * 0.06],
-              outputRange: [1, 0.6],
-            }),
+            opacity: fade,
           }}
         >
           <ScrollView

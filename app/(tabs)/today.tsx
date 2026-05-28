@@ -47,6 +47,7 @@ import { MOCK_LEAGUE } from "@/mock/quests";
 import { goalsService } from "@/services/goalsService";
 import type { Goal } from "@/mock/goals";
 import { formatCurrency, secureLog } from "@/utils/security";
+import { CountUp, FadeInUp } from "@/animations";
 
 const TAB_BAR_HEIGHT = 80;
 
@@ -151,28 +152,36 @@ export default function TodayScreen() {
 
           <View style={styles.bodyPadding}>
           {/* Stats Card */}
-          <StatsCard
-            netWorth={user.netWorth}
-            netWorthChange={500} // backend will provide; placeholder until then
-            healthScore={user.financialHealthScore || 620}
-            level={user.level}
-            streak={user.streak}
-            xp={user.xp}
-            savingsRate={30}
-          />
+          <FadeInUp delay={60}>
+            <StatsCard
+              netWorth={user.netWorth}
+              netWorthChange={500} // backend will provide; placeholder until then
+              healthScore={user.financialHealthScore || 620}
+              level={user.level}
+              streak={user.streak}
+              xp={user.xp}
+              savingsRate={30}
+            />
+          </FadeInUp>
 
-          <LeagueSnapshotCard />
+          <FadeInUp delay={140}>
+            <LeagueSnapshotCard />
+          </FadeInUp>
 
           {/* Daily Spend Snapshot */}
-          <DailySpendCard
-            onPress={() => {
-              Haptics.selectionAsync();
-              router.push("/(tabs)/budget");
-            }}
-          />
+          <FadeInUp delay={220}>
+            <DailySpendCard
+              onPress={() => {
+                Haptics.selectionAsync();
+                router.push("/(tabs)/budget");
+              }}
+            />
+          </FadeInUp>
 
           {/* Upcoming Bills */}
-          <UpcomingBillsCard />
+          <FadeInUp delay={300}>
+            <UpcomingBillsCard />
+          </FadeInUp>
 
           {/* Recent Transactions */}
           <SectionHeader
@@ -279,7 +288,12 @@ function StatsCard({
       <View style={styles.statsTopRow}>
         <View style={{ flex: 1 }}>
           <Text style={styles.statsEyebrow}>NET WORTH</Text>
-          <Text style={styles.netWorthAmount}>{formatCurrency(netWorth)}</Text>
+          <CountUp
+            value={netWorth}
+            format={(n) => formatCurrency(n)}
+            style={styles.netWorthAmount}
+            accessibilityLabel={`Net worth ${formatCurrency(netWorth)}`}
+          />
           <View style={styles.netWorthChange}>
             <Icon name="trending-up" size={11} color={Colors.emerald} />
             <Text style={styles.netWorthChangeText}>
@@ -290,7 +304,7 @@ function StatsCard({
 
         <View style={styles.healthBox}>
           <Text style={styles.healthLabel}>HEALTH</Text>
-          <Text style={styles.healthScore}>{healthScore}</Text>
+          <CountUp value={healthScore} style={styles.healthScore} />
         </View>
 
         <View style={styles.levelBadge}>
@@ -318,14 +332,22 @@ function StatsCard({
         <View style={styles.statsCell}>
           <Icon name="zap" size={18} color={Colors.teal} strokeWidth={2.4} />
           <View>
-            <Text style={styles.statsCellValue}>{xp.toLocaleString()}</Text>
+            <CountUp
+              value={xp}
+              format={(n) => Math.round(n).toLocaleString()}
+              style={styles.statsCellValue}
+            />
             <Text style={styles.statsCellLabel}>XP</Text>
           </View>
         </View>
         <View style={styles.statsCell}>
           <Icon name="piggy-bank" size={18} color={Colors.emerald} strokeWidth={2.2} />
           <View>
-            <Text style={styles.statsCellValue}>{savingsRate}%</Text>
+            <CountUp
+              value={savingsRate}
+              format={(n) => `${Math.round(n)}%`}
+              style={styles.statsCellValue}
+            />
             <Text style={styles.statsCellLabel}>saving rate</Text>
           </View>
         </View>

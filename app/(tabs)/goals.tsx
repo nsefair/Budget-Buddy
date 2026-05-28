@@ -31,6 +31,7 @@ import { Colors } from "@/constants/colors";
 import { BrandHeader } from "@/components/BrandLogo";
 import { EmptyState, ScreenHeader } from "@/components/ui";
 import { Icon, type IconName } from "@/components/Icon";
+import { Stagger } from "@/animations";
 import { goalsService } from "@/services/goalsService";
 import {
   type Goal,
@@ -237,11 +238,13 @@ export default function GoalsScreen() {
           <Text style={styles.addBtnText}>Add a new goal</Text>
         </Pressable>
 
-        {/* Goal cards */}
+        {/* Goal cards — staggered entrance for premium feel */}
         <View style={styles.grid}>
-          {goals.map((g) => (
-            <GoalCard key={g.id} goal={g} />
-          ))}
+          <Stagger gap={80}>
+            {goals.map((g) => (
+              <GoalCard key={g.id} goal={g} />
+            ))}
+          </Stagger>
         </View>
 
         {goals.length === 0 && (

@@ -5,10 +5,11 @@
  * starts today." Per Section 4 of the developer review.
  */
 
-import React, { useEffect, useRef } from "react";
-import { Animated, StyleSheet, Text, View } from "react-native";
+import React from "react";
+import { StyleSheet, Text, View } from "react-native";
 import { BudOrb } from "../components/BudOrb";
 import { Colors } from "@/constants/colors";
+import { FadeInUp } from "@/animations";
 
 interface Props {
   firstName: string;
@@ -20,38 +21,33 @@ interface Props {
 // step components and for direct-test use cases.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function StepWelcome({ firstName, onNext: _onNext }: Props) {
-  const fade = useRef(new Animated.Value(0)).current;
-  const lift = useRef(new Animated.Value(20)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fade, { toValue: 1, duration: 700, useNativeDriver: true }),
-      Animated.spring(lift, {
-        toValue: 0,
-        damping: 18,
-        stiffness: 120,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [fade, lift]);
-
   const greeting = firstName ? `Hey ${firstName}.` : "Hey there.";
 
   return (
     <View style={styles.container}>
-      <BudOrb size={108} pulse />
-      <Animated.View
-        style={{ opacity: fade, transform: [{ translateY: lift }], alignItems: "center" }}
-      >
-        <Text style={styles.tag}>BUD</Text>
-        <Text style={styles.greeting}>{greeting}</Text>
-        <Text style={styles.line}>Your financial life</Text>
-        <Text style={styles.lineGold}>starts today.</Text>
-        <Text style={styles.body}>
-          A few quick questions and I'll have you set up — your goals,
-          your first quest, your streak. About three minutes.
-        </Text>
-      </Animated.View>
+      <FadeInUp duration={600} distance={24}>
+        <BudOrb size={108} pulse />
+      </FadeInUp>
+      <View style={{ alignItems: "center" }}>
+        <FadeInUp delay={150}>
+          <Text style={styles.tag}>BUD</Text>
+        </FadeInUp>
+        <FadeInUp delay={250}>
+          <Text style={styles.greeting}>{greeting}</Text>
+        </FadeInUp>
+        <FadeInUp delay={350}>
+          <Text style={styles.line}>Your financial life</Text>
+        </FadeInUp>
+        <FadeInUp delay={450}>
+          <Text style={styles.lineGold}>starts today.</Text>
+        </FadeInUp>
+        <FadeInUp delay={600}>
+          <Text style={styles.body}>
+            A few quick questions and I'll have you set up — your goals,
+            your first quest, your streak. About three minutes.
+          </Text>
+        </FadeInUp>
+      </View>
     </View>
   );
 }

@@ -120,6 +120,35 @@ When you build a new screen:
 4. Use `<EmptyState />` instead of leaving a list blank — voice rule.
 5. Pull sizes from `Spacing` / `Radius` / `Type` instead of hard-coding numbers.
 
+### Motion library
+
+Shared in `src/animations/` — all primitives use built-in `Animated` (Expo Go + dev build) and respect `AccessibilityInfo.isReduceMotionEnabled()`.
+
+```ts
+import { FadeInUp, Stagger, PressableScale, CountUp, Shimmer } from "@/animations";
+```
+
+| Primitive | When to use |
+|-----------|-------------|
+| `<FadeInUp delay={…}>` | Section entrance, hero text reveal. |
+| `<Stagger gap={70}>` | Wrap a list of cards/rows; each appears in cascade. |
+| `<PressableScale>` | Replace any `Pressable` that needs a satisfying press feel. |
+| `<CountUp value={…}>` | Hero numbers: net worth, XP, savings rate. |
+| `<Shimmer />` | Skeleton placeholder for any async data > 300 ms. |
+
+**Upgrade path → Moti (when you commit to dev build only):**
+
+1. Add `"react-native-worklets/plugin"` as the *last* Babel plugin in `babel.config.js`.
+2. Replace primitives screen-by-screen with `MotiView`:
+   ```tsx
+   import { MotiView } from "moti";
+
+   <MotiView from={{ opacity: 0, translateY: 14 }} animate={{ opacity: 1, translateY: 0 }} transition={{ delay: 80 }}>
+     <Card>…</Card>
+   </MotiView>
+   ```
+3. The primitives in `src/animations/` stay as a fallback that always works.
+
 ### Voice (Dev Review §02)
 - Emoji is only allowed on **spending categories** and **Buds kudos**. Everything else uses Lucide via `<Icon />`.
 - No `ALERT` / `WARNING` / shame copy. Reframe: *"Dining's running hot — $187 over. Want a quick look?"*
