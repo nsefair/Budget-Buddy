@@ -37,6 +37,9 @@ SplashScreen.preventAutoHideAsync().catch(() => {
   // Splash may already be hidden in dev hot-reload — safe to ignore
 });
 
+// Dependency-level console noise is filtered in src/utils/suppressConsole.ts,
+// which runs from index.ts before expo-router loads.
+
 export default function RootLayout() {
   const isLoading = useAuthLoading();
   const { restoreSession } = useAuthActions();
@@ -77,6 +80,14 @@ export default function RootLayout() {
               <Stack.Screen name="index" options={{ headerShown: false }} />
               <Stack.Screen name="(auth)" options={{ headerShown: false }} />
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen
+                name="profile"
+                options={{ headerShown: false, presentation: "modal", animation: "slide_from_bottom" }}
+              />
+              <Stack.Screen
+                name="goal/[id]"
+                options={{ headerShown: false, animation: "slide_from_right" }}
+              />
             </Stack>
           </QueryProvider>
         </SafeAreaProvider>

@@ -1,10 +1,16 @@
 /**
- * Babel config — Expo SDK 54 + NativeWind v4.
+ * Babel config — Expo SDK 54 + NativeWind v4 + Reanimated 4 (Moti).
  *
- * Note: react-native-reanimated's plugin is intentionally NOT included.
- * The app uses React Native's built-in `Animated` API (works in Expo Go).
- * If/when we move to a dev build and adopt reanimated, also install
- * `react-native-worklets` and add `"react-native-worklets/plugin"` last.
+ * Plugin order matters:
+ *   1. babel-preset-expo (presets array)
+ *   2. ...any other plugins
+ *   3. react-native-worklets/plugin → MUST be last
+ *
+ * The worklets plugin powers both `react-native-reanimated` and `moti`.
+ * It works in Expo Go (SDK 54 bundles the runtime) and in dev/release builds.
+ *
+ * After editing this file: stop Metro and start with `--clear` so the new
+ * transforms are picked up.
  */
 module.exports = function (api) {
   api.cache(true);
@@ -13,6 +19,6 @@ module.exports = function (api) {
       // NativeWind v4: jsxImportSource handles the CSS interop — no separate plugin
       ["babel-preset-expo", { jsxImportSource: "nativewind" }],
     ],
-    plugins: [],
+    plugins: ["react-native-worklets/plugin"],
   };
 };

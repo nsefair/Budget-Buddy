@@ -22,6 +22,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { MotiView } from "moti";
 import * as Haptics from "expo-haptics";
 
 import { Colors } from "@/constants/colors";
@@ -394,27 +395,41 @@ function MonthNavigator({
 
   return (
     <View style={styles.monthPanel}>
+      {/* Big month label flanked by airy circular arrows */}
       <View style={styles.monthPanelTop}>
         <Pressable
           disabled={!canPrevious}
           onPress={onPrevious}
-          style={[styles.monthArrow, !canPrevious && styles.monthArrowDisabled]}
+          hitSlop={8}
+          style={({ pressed }) => [
+            styles.monthArrow,
+            !canPrevious && styles.monthArrowDisabled,
+            pressed && canPrevious && styles.monthArrowPressed,
+          ]}
         >
-          <Icon name="arrow-left" size={16} color={canPrevious ? Colors.navy : Colors.muted} />
+          <Icon name="arrow-left" size={17} color={canPrevious ? Colors.navy : Colors.muted} strokeWidth={2.4} />
         </Pressable>
+
         <View style={styles.monthTitleWrap}>
+          <Text style={styles.monthEyebrow}>VIEWING</Text>
           <Text style={styles.monthTitle}>{selectedMonth?.label ?? "This month"}</Text>
-          <Text style={styles.monthSubtitle}>Switch months to spot spending patterns</Text>
         </View>
+
         <Pressable
           disabled={!canNext}
           onPress={onNext}
-          style={[styles.monthArrow, !canNext && styles.monthArrowDisabled]}
+          hitSlop={8}
+          style={({ pressed }) => [
+            styles.monthArrow,
+            !canNext && styles.monthArrowDisabled,
+            pressed && canNext && styles.monthArrowPressed,
+          ]}
         >
-          <Icon name="chevron-right" size={17} color={canNext ? Colors.navy : Colors.muted} />
+          <Icon name="chevron-right" size={18} color={canNext ? Colors.navy : Colors.muted} strokeWidth={2.4} />
         </Pressable>
       </View>
 
+      {/* Segmented month picker with an animated active pill */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -426,11 +441,21 @@ function MonthNavigator({
             <Pressable
               key={month.id}
               onPress={() => onSelect(month.id)}
-              style={[styles.monthChip, active && styles.monthChipActive]}
+              style={styles.monthChipWrap}
             >
-              <Text style={[styles.monthChipText, active && styles.monthChipTextActive]}>
-                {month.shortLabel}
-              </Text>
+              <MotiView
+                animate={{
+                  backgroundColor: active ? Colors.gold : Colors.surface,
+                  borderColor: active ? Colors.gold : Colors.border,
+                  scale: active ? 1 : 0.97,
+                }}
+                transition={{ type: "timing", duration: 220 }}
+                style={styles.monthChip}
+              >
+                <Text style={[styles.monthChipText, active && styles.monthChipTextActive]}>
+                  {month.shortLabel}
+                </Text>
+              </MotiView>
             </Pressable>
           );
         })}
@@ -757,64 +782,73 @@ const styles = StyleSheet.create({
 
   monthPanel: {
     backgroundColor: Colors.card,
-    borderRadius: 16,
-    padding: 12,
+    borderRadius: 20,
+    paddingVertical: 18,
+    paddingHorizontal: 16,
     borderWidth: 1,
     borderColor: Colors.border,
     marginBottom: 12,
+    shadowColor: Colors.navy,
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   monthPanelTop: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    marginBottom: 10,
+    justifyContent: "space-between",
+    marginBottom: 16,
   },
   monthArrow: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Colors.navy50,
-  },
-  monthArrowDisabled: {
-    opacity: 0.4,
-  },
-  monthTitleWrap: { flex: 1, alignItems: "center" },
-  monthTitle: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: Colors.navy,
-    letterSpacing: 0,
-  },
-  monthSubtitle: {
-    marginTop: 2,
-    fontSize: 11,
-    fontWeight: "600",
-    color: Colors.muted,
-  },
-  monthChips: {
-    gap: 8,
-    paddingHorizontal: 2,
-  },
-  monthChip: {
-    minWidth: 64,
-    alignItems: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  monthChipActive: {
-    backgroundColor: Colors.gold,
-    borderColor: Colors.gold,
+  monthArrowPressed: {
+    backgroundColor: Colors.accentAlpha10,
+    transform: [{ scale: 0.94 }],
+  },
+  monthArrowDisabled: {
+    opacity: 0.35,
+  },
+  monthTitleWrap: { flex: 1, alignItems: "center" },
+  monthEyebrow: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Colors.muted,
+    letterSpacing: 1.6,
+    marginBottom: 3,
+  },
+  monthTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: Colors.navy,
+    letterSpacing: -0.3,
+  },
+  monthChips: {
+    gap: 10,
+    paddingHorizontal: 2,
+  },
+  monthChipWrap: {},
+  monthChip: {
+    minWidth: 72,
+    alignItems: "center",
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    borderWidth: 1,
   },
   monthChipText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "800",
     color: Colors.navyMuted,
+    letterSpacing: 0.3,
   },
   monthChipTextActive: {
     color: Colors.onGreen,

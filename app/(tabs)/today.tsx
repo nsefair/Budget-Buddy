@@ -135,7 +135,26 @@ export default function TodayScreen() {
           >
             <View style={{ paddingTop: insets.top + 12 }}>
               <View style={styles.headerBlock}>
-                <BrandHeader dark style={styles.brandHeader} />
+                <View style={styles.brandTopRow}>
+                  <View style={styles.brandSide} />
+                  <View style={styles.brandCenter}>
+                    <BrandHeader dark style={styles.brandHeader} />
+                  </View>
+                  <View style={styles.brandSide}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Open profile and settings"
+                      hitSlop={8}
+                      style={({ pressed }) => [styles.profileBtn, pressed && styles.profileBtnPressed]}
+                      onPress={() => {
+                        Haptics.selectionAsync();
+                        router.push("/profile");
+                      }}
+                    >
+                      <Icon name="menu" size={22} color={Colors.brandOnDark} strokeWidth={2.6} />
+                    </Pressable>
+                  </View>
+                </View>
                 <View style={styles.greetingRow}>
                   <View style={styles.budAvatar}>
                     <BrandLogo variant="mark" markSize={42} />
@@ -556,7 +575,33 @@ const styles = StyleSheet.create({
   },
 
   headerBlock: { paddingBottom: 16, paddingTop: 0 },
-  brandHeader: { marginBottom: 18 },
+  brandTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 40,
+    marginBottom: 18,
+  },
+  brandSide: {
+    width: 40,
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
+  brandCenter: { flex: 1, alignItems: "center", justifyContent: "center" },
+  brandHeader: { marginBottom: 0 },
+  profileBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+  },
+  profileBtnPressed: {
+    opacity: 0.78,
+    backgroundColor: "rgba(255,255,255,0.16)",
+  },
   greetingRow: { flexDirection: "row", gap: 12, alignItems: "center" },
   budAvatar: { width: 42, height: 42, alignItems: "center", justifyContent: "center" },
   greetingText: {

@@ -25,6 +25,8 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { router } from "expo-router";
+import { MotiView } from "moti";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "@/constants/colors";
@@ -222,21 +224,25 @@ export default function GoalsScreen() {
       >
         <BrandHeader style={styles.brandHeader} />
 
-        <ScreenHeader eyebrow="YOUR GOALS" title="What you're building." />
+        <ScreenHeader
+          eyebrow="YOUR GOALS"
+          title="What you're building."
+          right={
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Add a new goal"
+              hitSlop={8}
+              style={({ pressed }) => [styles.addBtn, pressed && styles.addBtnPressed]}
+              onPress={openGoalCreator}
+            >
+              <Icon name="plus" size={16} color={Colors.gold} strokeWidth={2.8} />
+              <Text style={styles.addBtnText}>New goal</Text>
+            </Pressable>
+          }
+        />
 
         {/* Summary — three top stats from the CEO drawing */}
         {summary && <SummaryRow summary={summary} />}
-
-        {/* Add new goal CTA */}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Add a new goal"
-          style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.85 }]}
-          onPress={openGoalCreator}
-        >
-          <Icon name="plus" size={18} color={Colors.gold} strokeWidth={2.4} />
-          <Text style={styles.addBtnText}>Add a new goal</Text>
-        </Pressable>
 
         {/* Goal cards — staggered entrance for premium feel */}
         <View style={styles.grid}>
@@ -323,15 +329,24 @@ function GoalCard({ goal }: { goal: Goal }) {
     });
   }, [goal.deadline]);
 
+  const pct = Math.round(progress * 100);
+
   return (
     <Pressable
-      style={({ pressed }) => [styles.goalCard, pressed && { opacity: 0.92 }]}
-      onPress={() => Haptics.selectionAsync()}
+      style={({ pressed }) => [
+        styles.goalCard,
+        { borderLeftColor: meta.tint },
+        pressed && styles.goalCardPressed,
+      ]}
+      onPress={() => {
+        Haptics.selectionAsync();
+        router.push(`/goal/${goal.id}`);
+      }}
     >
-      {/* Top — kind icon + name + percent */}
+      {/* Top — kind icon + name + percent badge */}
       <View style={styles.goalTop}>
         <View style={[styles.kindIcon, { backgroundColor: `${meta.tint}1A`, borderColor: `${meta.tint}55` }]}>
-          <Icon name={meta.icon} size={16} color={meta.tint} strokeWidth={2.2} />
+          <Icon name={meta.icon} size={18} color={meta.tint} strokeWidth={2.2} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.goalName} numberOfLines={1}>{goal.name}</Text>
@@ -339,7 +354,9 @@ function GoalCard({ goal }: { goal: Goal }) {
             {duration.label}
           </Text>
         </View>
-        <Text style={styles.goalPercent}>{Math.round(progress * 100)}%</Text>
+        <View style={[styles.percentBadge, { backgroundColor: `${meta.tint}1A` }]}>
+          <Text style={[styles.percentBadgeText, { color: meta.tint }]}>{pct}%</Text>
+        </View>
       </View>
 
       {/* Reason */}
@@ -347,17 +364,22 @@ function GoalCard({ goal }: { goal: Goal }) {
         “{goal.reason}”
       </Text>
 
-      {/* Progress amount + bar */}
+      {/* Progress amount + animated bar */}
       <View style={styles.amountRow}>
         <Text style={styles.amountSaved}>
           {formatCurrency(goal.alreadySaved)}
         </Text>
         <Text style={styles.amountTarget}>
-          / {formatCurrency(goal.targetAmount)}
+          of {formatCurrency(goal.targetAmount)}
         </Text>
       </View>
       <View style={styles.barTrack}>
-        <View style={[styles.barFill, { width: `${progress * 100}%`, backgroundColor: meta.tint }]} />
+        <MotiView
+          from={{ width: "0%" }}
+          animate={{ width: `${pct}%` }}
+          transition={{ type: "timing", duration: 700, delay: 120 }}
+          style={[styles.barFill, { backgroundColor: meta.tint }]}
+        />
       </View>
 
       {/* Bottom — monthly + deadline */}
@@ -683,13 +705,14 @@ function GoalCreationSheet({
                   />
                 </View>
 
+                <Text style={styles.planRowLabel}>TIMELINE</Text>
                 <View style={styles.planRow}>
                   {PLAN_OPTIONS.map((plan) => {
                     const active = draft.months === plan.months;
                     return (
                       <Pressable
                         key={plan.months}
-                        style={[styles.planChip, active && styles.planChipActive]}
+                        style={styles.planChipWrap}
                         onPress={() => {
                           Haptics.selectionAsync();
                           setDraft((current) => ({
@@ -699,22 +722,32 @@ function GoalCreationSheet({
                           }));
                         }}
                       >
-                        <Text
-                          style={[
-                            styles.planChipTitle,
-                            active && styles.planChipTitleActive,
-                          ]}
+                        <MotiView
+                          animate={{
+                            backgroundColor: active ? Colors.greenSurface : Colors.card,
+                            borderColor: active ? Colors.accentAlpha45 : Colors.border,
+                            scale: active ? 1 : 0.98,
+                          }}
+                          transition={{ type: "timing", duration: 200 }}
+                          style={styles.planChip}
                         >
-                          {plan.label}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.planChipSub,
-                            active && styles.planChipSubActive,
-                          ]}
-                        >
-                          {plan.detail}
-                        </Text>
+                          <Text
+                            style={[
+                              styles.planChipTitle,
+                              active && styles.planChipTitleActive,
+                            ]}
+                          >
+                            {plan.label}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.planChipSub,
+                              active && styles.planChipSubActive,
+                            ]}
+                          >
+                            {plan.detail}
+                          </Text>
+                        </MotiView>
                       </Pressable>
                     );
                   })}
@@ -978,47 +1011,55 @@ const styles = StyleSheet.create({
   addBtn: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    backgroundColor: Colors.accentAlpha10,
-    borderWidth: 1.5,
+    paddingVertical: 9,
+    paddingLeft: 12,
+    paddingRight: 14,
+    borderRadius: 999,
+    backgroundColor: Colors.accentAlpha12,
+    borderWidth: 1,
     borderColor: Colors.accentAlpha40,
-    borderStyle: "dashed",
-    borderRadius: 14,
-    paddingVertical: 14,
-    marginBottom: 16,
+  },
+  addBtnPressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.97 }],
   },
   addBtnText: {
-    fontSize: 14,
-    fontWeight: "700",
+    fontSize: 13,
+    fontWeight: "800",
     color: Colors.gold,
     letterSpacing: 0.2,
+    marginLeft: 5,
   },
 
-  grid: { gap: 12 },
+  grid: { gap: 16 },
 
   goalCard: {
     backgroundColor: Colors.card,
-    borderRadius: 18,
-    padding: 16,
+    borderRadius: 20,
+    padding: 18,
     borderWidth: 1,
     borderColor: Colors.border,
+    borderLeftWidth: 4,
     shadowColor: Colors.navy,
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
+  },
+  goalCardPressed: {
+    opacity: 0.95,
+    transform: [{ scale: 0.99 }],
   },
   goalTop: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   kindIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
@@ -1033,12 +1074,18 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "800",
     letterSpacing: 1.2,
-    marginTop: 2,
+    marginTop: 3,
   },
-  goalPercent: {
-    fontSize: 16,
+  percentBadge: {
+    minWidth: 48,
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  percentBadgeText: {
+    fontSize: 14,
     fontWeight: "800",
-    color: Colors.navy,
     letterSpacing: 0,
   },
 
@@ -1047,27 +1094,27 @@ const styles = StyleSheet.create({
     color: Colors.navyMuted,
     fontStyle: "italic",
     lineHeight: 19,
-    marginBottom: 14,
+    marginBottom: 16,
   },
 
-  amountRow: { flexDirection: "row", alignItems: "baseline", gap: 4, marginBottom: 8 },
-  amountSaved: { fontSize: 19, fontWeight: "800", color: Colors.navy, letterSpacing: 0 },
+  amountRow: { flexDirection: "row", alignItems: "baseline", gap: 5, marginBottom: 9 },
+  amountSaved: { fontSize: 22, fontWeight: "800", color: Colors.navy, letterSpacing: -0.3 },
   amountTarget: { fontSize: 13, fontWeight: "600", color: Colors.muted },
 
   barTrack: {
-    height: 6,
-    borderRadius: 4,
+    height: 8,
+    borderRadius: 5,
     backgroundColor: Colors.border,
     overflow: "hidden",
-    marginBottom: 14,
+    marginBottom: 16,
   },
-  barFill: { height: 6, borderRadius: 4 },
+  barFill: { height: 8, borderRadius: 5 },
 
   bottomRow: {
     flexDirection: "row",
     backgroundColor: Colors.navy50,
-    borderRadius: 12,
-    padding: 12,
+    borderRadius: 14,
+    padding: 14,
   },
   bottomCell: { flex: 1, gap: 4 },
   bottomDivider: { width: 1, backgroundColor: Colors.border, marginHorizontal: 12 },
@@ -1230,7 +1277,8 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
   labeledInputGroup: {
-    gap: 7,
+    flex: 1,
+    gap: 8,
   },
   labeledInputLabel: {
     fontSize: 11,
@@ -1240,56 +1288,62 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   labeledInputWrap: {
-    minHeight: 50,
-    borderRadius: 15,
+    minHeight: 60,
+    borderRadius: 16,
     backgroundColor: Colors.card,
     borderWidth: 1,
     borderColor: Colors.border,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
   },
   inputPrefix: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "800",
     color: Colors.gold,
-    marginRight: 4,
+    marginRight: 6,
   },
   labeledInput: {
     flex: 1,
     color: Colors.navy,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "700",
-    paddingVertical: 12,
+    paddingVertical: 14,
   },
   labeledInputWithPrefix: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "800",
   },
   amountGrid: {
     flexDirection: "row",
-    gap: 12,
+    gap: 14,
+  },
+  planRowLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Colors.muted,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    marginTop: 20,
+    marginBottom: 10,
   },
   planRow: {
     flexDirection: "row",
-    gap: 8,
+    gap: 10,
+  },
+  planChipWrap: {
+    flex: 1,
   },
   planChip: {
-    flex: 1,
-    minHeight: 66,
-    borderRadius: 15,
-    backgroundColor: Colors.card,
+    minHeight: 74,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 11,
+    paddingHorizontal: 12,
+    paddingVertical: 13,
     justifyContent: "center",
   },
-  planChipActive: {
-    backgroundColor: Colors.greenSurface,
-    borderColor: Colors.accentAlpha45,
-  },
   planChipTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     color: Colors.navy,
     letterSpacing: 0,
@@ -1300,7 +1354,7 @@ const styles = StyleSheet.create({
   planChipSub: {
     fontSize: 11,
     color: Colors.muted,
-    marginTop: 3,
+    marginTop: 4,
   },
   planChipSubActive: {
     color: Colors.navyMuted,

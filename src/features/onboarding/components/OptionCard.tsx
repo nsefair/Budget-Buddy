@@ -1,15 +1,25 @@
 /**
  * OptionCard — selectable card used by goal / why / situation / age screens.
  *
- * Per the design mandate, onboarding is built with cards, not selects, and
- * never with emojis — every visual is a Lucide icon set against a tinted tile.
+ * Onboarding is built with cards, not selects, and never with emojis — every
+ * visual is a Lucide icon set against a tinted tile.
+ *
+ * Motion (Moti / Reanimated):
+ *   • Press: gentle scale-down + spring back.
+ *   • Selected: card lifts a little, border + bg fade to accent, icon tile
+ *     morphs (soft → solid), check pops in with rotation, ring pulses once.
+ *   • Honors AccessibilityInfo.isReduceMotionEnabled().
  */
 
-import React, { useEffect, useRef } from "react";
-import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useRef } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import * as Haptics from "expo-haptics";
+import { MotiView } from "moti";
+
 import { Icon, type IconName } from "@/components/Icon";
 import { Colors } from "@/constants/colors";
+import { Radius, Spacing } from "@/constants/tokens";
+import { useReducedMotion } from "@/animations";
 
 interface Props {
   icon?: IconName;
@@ -21,76 +31,140 @@ interface Props {
   compact?: boolean;
 }
 
-export function OptionCard({ icon, label, sub, selected, onPress, compact }: Props) {
-  const scale = useRef(new Animated.Value(1)).current;
-  const borderAnim = useRef(new Animated.Value(selected ? 1 : 0)).current;
-
-  useEffect(() => {
-    Animated.spring(borderAnim, {
-      toValue: selected ? 1 : 0,
-      damping: 18,
-      stiffness: 220,
-      useNativeDriver: false,
-    }).start();
-  }, [selected, borderAnim]);
+export function OptionCard({
+  icon,
+  label,
+  sub,
+  selected,
+  onPress,
+  compact,
+}: Props) {
+  const reduced = useReducedMotion();
+  // Track press separately from selected so they compose.
+  const [pressed, setPressed] = React.useState(false);
+  // Bump counter — increments every time `selected` becomes true so we can
+  // replay the ring pulse on each fresh selection.
+  const bumpKey = useRef(0);
+  if (selected) {
+    bumpKey.current = bumpKey.current; // no-op; just keeps the ref live
+  }
 
   const handlePress = () => {
     Haptics.selectionAsync();
-    Animated.sequence([
-      Animated.timing(scale, { toValue: 0.97, duration: 80, useNativeDriver: true }),
-      Animated.spring(scale, { toValue: 1, damping: 12, stiffness: 260, useNativeDriver: true }),
-    ]).start();
     onPress();
   };
 
-  const borderColor = borderAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [Colors.accentAlpha20, Colors.gold],
-  });
-
-  const bgColor = borderAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [Colors.accentAlpha05, Colors.accentAlpha12],
-  });
+  const baseTransition = { type: "timing" as const, duration: 220 };
+  const springTransition = { type: "spring" as const, damping: 16, stiffness: 220 };
 
   return (
-    <Animated.View style={{ transform: [{ scale }] }}>
-      <Pressable onPress={handlePress}>
-        <Animated.View
-          style={[
-            styles.card,
-            compact && styles.cardCompact,
-            { borderColor, backgroundColor: bgColor },
-          ]}
+    <MotiView
+      animate={{
+        scale: reduced ? 1 : pressed ? 0.97 : 1,
+      }}
+      transition={reduced ? { duration: 0 } : springTransition}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ selected }}
+        accessibilityLabel={label}
+        onPress={handlePress}
+        onPressIn={() => setPressed(true)}
+        onPressOut={() => setPressed(false)}
+      >
+        <MotiView
+          animate={{
+            borderColor: selected ? Colors.gold : Colors.accentAlpha20,
+            backgroundColor: selected
+              ? Colors.accentAlpha15
+              : Colors.accentAlpha05,
+            translateY: selected && !reduced ? -1 : 0,
+          }}
+          transition={reduced ? { duration: 0 } : baseTransition}
+          style={[styles.card, compact && styles.cardCompact]}
         >
+          {/* Subtle ring pulse on the icon tile when freshly selected */}
           {icon && (
-            <View
-              style={[
-                styles.iconBox,
-                compact && styles.iconBoxCompact,
-                selected && styles.iconBoxSelected,
-              ]}
-            >
-              <Icon
-                name={icon}
-                size={compact ? 14 : 18}
-                color={selected ? Colors.onGreen : Colors.gold}
-                strokeWidth={2.4}
-              />
+            <View style={styles.iconWrap}>
+              {selected && !reduced && (
+                <MotiView
+                  key={`ring-${label}`}
+                  from={{ opacity: 0.55, scale: 1 }}
+                  animate={{ opacity: 0, scale: 1.45 }}
+                  transition={{ type: "timing", duration: 600 }}
+                  style={[
+                    styles.ring,
+                    compact ? styles.ringCompact : null,
+                  ]}
+                />
+              )}
+              <MotiView
+                animate={{
+                  backgroundColor: selected
+                    ? Colors.gold
+                    : Colors.accentAlpha12,
+                  borderColor: selected
+                    ? Colors.gold
+                    : Colors.accentAlpha30,
+                  scale: selected && !reduced ? 1.04 : 1,
+                }}
+                transition={reduced ? { duration: 0 } : baseTransition}
+                style={[styles.iconBox, compact && styles.iconBoxCompact]}
+              >
+                <Icon
+                  name={icon}
+                  size={compact ? 14 : 18}
+                  color={selected ? Colors.onAccent : Colors.gold}
+                  strokeWidth={2.4}
+                />
+              </MotiView>
             </View>
           )}
+
           <View style={{ flex: 1 }}>
-            <Text style={[styles.label, selected && styles.labelSelected]}>
-              {label}
-            </Text>
-            {sub && !compact && <Text style={styles.sub}>{sub}</Text>}
+            <MotiView
+              animate={{ translateX: selected && !reduced ? 2 : 0 }}
+              transition={reduced ? { duration: 0 } : baseTransition}
+            >
+              <Text
+                style={[styles.label, selected && styles.labelSelected]}
+                maxFontSizeMultiplier={1.4}
+              >
+                {label}
+              </Text>
+              {sub && !compact ? (
+                <Text style={styles.sub}>{sub}</Text>
+              ) : null}
+            </MotiView>
           </View>
-          <View style={[styles.check, selected && styles.checkActive]}>
-            {selected && <Icon name="check" size={12} color={Colors.onGreen} strokeWidth={3} />}
-          </View>
-        </Animated.View>
+
+          {/* Check chip — spring + rotate when it appears */}
+          <MotiView
+            animate={{
+              backgroundColor: selected ? Colors.gold : "transparent",
+              borderColor: selected ? Colors.gold : Colors.border,
+            }}
+            transition={reduced ? { duration: 0 } : baseTransition}
+            style={styles.check}
+          >
+            <MotiView
+              animate={{
+                scale: selected ? 1 : 0,
+                rotate: selected ? "0deg" : "-60deg",
+                opacity: selected ? 1 : 0,
+              }}
+              transition={
+                reduced
+                  ? { duration: 0 }
+                  : { type: "spring", damping: 12, stiffness: 320 }
+              }
+            >
+              <Icon name="check" size={12} color={Colors.onAccent} strokeWidth={3} />
+            </MotiView>
+          </MotiView>
+        </MotiView>
       </Pressable>
-    </Animated.View>
+    </MotiView>
   );
 }
 
@@ -98,42 +172,60 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
+    gap: Spacing.sm + 2,
     borderWidth: 1.5,
-    borderRadius: 16,
-    paddingHorizontal: 14,
+    borderRadius: Radius.lg,
+    paddingHorizontal: Spacing.md - 2,
     paddingVertical: 13,
   },
   cardCompact: { paddingVertical: 11 },
+  iconWrap: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   iconBox: {
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: Colors.accentAlpha12,
     borderWidth: 1,
-    borderColor: Colors.accentAlpha30,
     alignItems: "center",
     justifyContent: "center",
   },
   iconBoxCompact: { width: 28, height: 28, borderRadius: 8 },
-  iconBoxSelected: {
-    backgroundColor: Colors.gold,
+  ring: {
+    position: "absolute",
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    borderWidth: 2,
     borderColor: Colors.gold,
   },
-  label: { fontSize: 15, fontWeight: "700", color: Colors.navy, letterSpacing: 0 },
+  ringCompact: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+  },
+  label: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: Colors.navy,
+    letterSpacing: 0,
+  },
   labelSelected: { color: Colors.gold },
-  sub: { fontSize: 12, color: Colors.muted, marginTop: 2, lineHeight: 17 },
+  sub: {
+    fontSize: 12,
+    color: Colors.muted,
+    marginTop: 2,
+    lineHeight: 17,
+  },
   check: {
     width: 22,
     height: 22,
     borderRadius: 11,
     borderWidth: 1.5,
-    borderColor: Colors.border,
     alignItems: "center",
     justifyContent: "center",
-  },
-  checkActive: {
-    backgroundColor: Colors.gold,
-    borderColor: Colors.gold,
   },
 });

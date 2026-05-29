@@ -9,7 +9,7 @@
  */
 
 import React, { useEffect, useRef, useState } from "react";
-import { Animated, Easing, StyleProp, Text, TextStyle } from "react-native";
+import { StyleProp, Text, TextStyle } from "react-native";
 
 import { Motion } from "@/constants/tokens";
 import { useReducedMotion } from "@/animations/useReducedMotion";
@@ -23,42 +23,71 @@ interface CountUpProps {
   accessibilityLabel?: string;
 }
 
+const defaultFormat = (n: number) => Math.round(n).toString();
+
+// Ease-out cubic — matches the old Animated easing without an Animated.Value,
+// which avoids React Native's "onAnimatedValueUpdate with no listeners" warning.
+const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+
 export function CountUp({
   value,
   from = 0,
   duration = Motion.hero,
-  format = (n) => Math.round(n).toString(),
+  format = defaultFormat,
   style,
   accessibilityLabel,
 }: CountUpProps) {
   const reduced = useReducedMotion();
-  const driver = useRef(new Animated.Value(reduced ? value : from)).current;
-  const [display, setDisplay] = useState(format(reduced ? value : from));
+
+  // Keep the latest format without restarting the animation each render.
+  const formatRef = useRef(format);
+  formatRef.current = format;
+
+  const [display, setDisplay] = useState(() =>
+    formatRef.current(reduced ? value : from)
+  );
+
+  // Tracks the last numeric value we animated to, so a changing `value`
+  // tweens from where it is now instead of snapping back to `from`.
+  const lastValueRef = useRef(reduced ? value : from);
 
   useEffect(() => {
-    const id = driver.addListener(({ value: v }) => setDisplay(format(v)));
-    return () => driver.removeListener(id);
-  }, [driver, format]);
-
-  useEffect(() => {
-    if (reduced) {
-      driver.setValue(value);
-      setDisplay(format(value));
+    if (reduced || duration <= 0) {
+      lastValueRef.current = value;
+      setDisplay(formatRef.current(value));
       return;
     }
-    Animated.timing(driver, {
-      toValue: value,
-      duration,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: false,
-    }).start();
-  }, [value, reduced, driver, duration, format]);
+
+    let raf = 0;
+    let start: number | null = null;
+    const begin = lastValueRef.current;
+    const delta = value - begin;
+
+    const tick = (now: number) => {
+      if (start === null) start = now;
+      const elapsed = now - start;
+      const t = Math.min(1, elapsed / duration);
+      const current = begin + delta * easeOutCubic(t);
+      lastValueRef.current = current;
+      setDisplay(formatRef.current(current));
+      if (t < 1) {
+        raf = requestAnimationFrame(tick);
+      } else {
+        lastValueRef.current = value;
+      }
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+    // `from` intentionally excluded: only re-run when the target value changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, reduced, duration]);
 
   return (
     <Text
       style={style}
       accessibilityRole="text"
-      accessibilityLabel={accessibilityLabel ?? format(value)}
+      accessibilityLabel={accessibilityLabel ?? formatRef.current(value)}
     >
       {display}
     </Text>
