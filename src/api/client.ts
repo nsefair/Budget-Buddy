@@ -60,6 +60,9 @@ export const TokenStore = {
   getRefresh: () => SecureStore.getItemAsync("refresh_token"),
   setAccess: (t: string) => SecureStore.setItemAsync("auth_token", t),
   setRefresh: (t: string) => SecureStore.setItemAsync("refresh_token", t),
+  markKnownAccount: () => SecureStore.setItemAsync("has_known_account", "true"),
+  hasKnownAccount: async () =>
+    (await SecureStore.getItemAsync("has_known_account")) === "true",
   clearAll: async () => {
     await SecureStore.deleteItemAsync("auth_token");
     await SecureStore.deleteItemAsync("refresh_token");

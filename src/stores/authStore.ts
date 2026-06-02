@@ -44,6 +44,7 @@ interface AuthState {
   isLoading: boolean;
   isAuthenticated: boolean;
   hasCompletedOnboarding: boolean;
+  hasKnownAccount: boolean;
 
   // Actions
   login: (payload: LoginPayload) => Promise<void>;
@@ -61,16 +62,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoading: true,
   isAuthenticated: false,
   hasCompletedOnboarding: false,
+  hasKnownAccount: false,
 
   login: async (payload) => {
     const { accessToken, refreshToken, user } = await authService.login(payload);
     await TokenStore.setAccess(accessToken);
     await TokenStore.setRefresh(refreshToken);
+    await TokenStore.markKnownAccount();
     set({
       user,
       token: accessToken,
       isAuthenticated: true,
       hasCompletedOnboarding: user.onboardingComplete,
+      hasKnownAccount: true,
     });
   },
 
@@ -78,22 +82,31 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { accessToken, refreshToken, user } = await authService.register(payload);
     await TokenStore.setAccess(accessToken);
     await TokenStore.setRefresh(refreshToken);
+    await TokenStore.markKnownAccount();
     set({
       user,
       token: accessToken,
       isAuthenticated: true,
       hasCompletedOnboarding: false,
+      hasKnownAccount: true,
     });
   },
 
   logout: async () => {
     await authService.logout();
     await TokenStore.clearAll();
-    set({ user: null, token: null, isAuthenticated: false, hasCompletedOnboarding: false });
+    set({
+      user: null,
+      token: null,
+      isAuthenticated: false,
+      hasCompletedOnboarding: false,
+      hasKnownAccount: true,
+    });
   },
 
   restoreSession: async () => {
     set({ isLoading: true });
+    const hasKnownAccount = await TokenStore.hasKnownAccount();
 
     // In mock/dev mode, boot straight into the app with the mock user.
     // Remove this block (or set EXPO_PUBLIC_USE_MOCK=false) to use the real API.
@@ -103,6 +116,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         token: MOCK_TOKEN,
         isAuthenticated: true,
         hasCompletedOnboarding: MOCK_USER.onboardingComplete,
+        hasKnownAccount: true,
         isLoading: false,
       });
       return;
@@ -112,18 +126,26 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const token = await TokenStore.getAccess();
       if (!token) {
-        set({ isLoading: false, isAuthenticated: false });
+        set({ isLoading: false, isAuthenticated: false, hasKnownAccount });
         return;
       }
       const user = await authService.getMe();
       if (user) {
-        set({ user, token, isAuthenticated: true, hasCompletedOnboarding: user.onboardingComplete, isLoading: false });
+        await TokenStore.markKnownAccount();
+        set({
+          user,
+          token,
+          isAuthenticated: true,
+          hasCompletedOnboarding: user.onboardingComplete,
+          hasKnownAccount: true,
+          isLoading: false,
+        });
       } else {
         await TokenStore.clearAll();
-        set({ isLoading: false, isAuthenticated: false });
+        set({ isLoading: false, isAuthenticated: false, hasKnownAccount });
       }
     } catch {
-      set({ isLoading: false, isAuthenticated: false });
+      set({ isLoading: false, isAuthenticated: false, hasKnownAccount });
     }
   },
 
@@ -134,6 +156,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   setOnboardingComplete: async () => {
+    await TokenStore.markKnownAccount();
     set({ hasCompletedOnboarding: true });
     get().updateUser({ onboardingComplete: true });
   },

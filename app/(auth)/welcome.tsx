@@ -92,7 +92,7 @@ export default function WelcomeScreen() {
       >
         <Pressable
           style={({ pressed }) => [styles.primaryButton, pressed && { opacity: 0.85 }]}
-          onPress={() => router.push("/(auth)/register")}
+          onPress={() => router.push("/(auth)/onboarding")}
         >
           <LinearGradient
             colors={[Colors.gold, Colors.gold600]}

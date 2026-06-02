@@ -10,6 +10,7 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
+  Pressable,
   StyleSheet,
   Text,
   View,
@@ -30,22 +31,57 @@ interface Props {
 
 export function StepFirstQuest({ goalKinds, quest, onLoaded }: Props) {
   const [loading, setLoading] = useState(!quest);
+  const [resolvedQuest, setResolvedQuest] = useState<FirstQuest | null>(quest);
+  const [error, setError] = useState<string | null>(null);
   const fade = useRef(new Animated.Value(quest ? 1 : 0)).current;
   const flame = useRef(new Animated.Value(0)).current;
 
+  const loadQuest = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const q = await onboardingService.suggestFirstQuest(goalKinds);
+      setResolvedQuest(q);
+      onLoaded(q);
+      Animated.timing(fade, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }).start();
+    } catch {
+      setError("Bud couldn't pick a quest yet. Try again or continue in a moment.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    if (quest) return;
+    if (!quest) return;
+    setResolvedQuest(quest);
+    setLoading(false);
+    fade.setValue(1);
+  }, [quest, fade]);
+
+  useEffect(() => {
+    if (resolvedQuest) return;
     let cancelled = false;
     (async () => {
+      setLoading(true);
+      setError(null);
       try {
         const q = await onboardingService.suggestFirstQuest(goalKinds);
         if (cancelled) return;
+        setResolvedQuest(q);
         onLoaded(q);
         Animated.timing(fade, {
           toValue: 1,
           duration: 500,
           useNativeDriver: true,
         }).start();
+      } catch {
+        if (!cancelled) {
+          setError("Bud couldn't pick a quest yet. Try again or continue in a moment.");
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -80,6 +116,24 @@ export function StepFirstQuest({ goalKinds, quest, onLoaded }: Props) {
     );
   }
 
+  if (!resolvedQuest) {
+    return (
+      <View style={styles.emptyWrap}>
+        <BudBubble label="Quest check" />
+        <Headline>Let's try that again.</Headline>
+        <Text style={styles.emptyText}>
+          {error ?? "Bud needs one more moment to assign your first move."}
+        </Text>
+        <Pressable
+          onPress={loadQuest}
+          style={({ pressed }) => [styles.retryButton, pressed && { opacity: 0.75 }]}
+        >
+          <Text style={styles.retryText}>Retry quest</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   return (
     <Animated.View style={{ opacity: fade, gap: 16 }}>
       <BudBubble label="Your first quest" />
@@ -91,14 +145,16 @@ export function StepFirstQuest({ goalKinds, quest, onLoaded }: Props) {
         style={styles.questCard}
       >
         <View style={styles.questHeader}>
-          <Text style={styles.questDuration}>{quest!.durationLabel.toUpperCase()}</Text>
+          <Text style={styles.questDuration}>
+            {resolvedQuest.durationLabel.toUpperCase()}
+          </Text>
           <View style={styles.xpPill}>
-            <Text style={styles.xpText}>+{quest!.xpReward} XP</Text>
+            <Text style={styles.xpText}>+{resolvedQuest.xpReward} XP</Text>
           </View>
         </View>
-        <Text style={styles.questName}>{quest!.name}</Text>
+        <Text style={styles.questName}>{resolvedQuest.name}</Text>
         <Text style={styles.whyLabel}>Why this matters</Text>
-        <Text style={styles.whyText}>{quest!.whyItMatters}</Text>
+        <Text style={styles.whyText}>{resolvedQuest.whyItMatters}</Text>
       </LinearGradient>
 
       {/* Streak ignition */}
@@ -131,6 +187,29 @@ const styles = StyleSheet.create({
     color: Colors.muted,
     fontWeight: "500",
     marginTop: 4,
+  },
+  emptyWrap: {
+    gap: 14,
+    paddingVertical: 40,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: Colors.navyMuted,
+    lineHeight: 21,
+  },
+  retryButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    borderRadius: 14,
+    backgroundColor: Colors.accentAlpha12,
+    borderWidth: 1,
+    borderColor: Colors.accentAlpha40,
+  },
+  retryText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: Colors.gold,
   },
 
   questCard: {

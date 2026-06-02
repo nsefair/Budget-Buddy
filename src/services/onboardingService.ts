@@ -101,6 +101,23 @@ const QUEST_BY_GOAL: Record<GoalKind, FirstQuest> = {
   },
 };
 
+function firstQuestForGoal(goalKind: GoalKind | undefined): FirstQuest {
+  return QUEST_BY_GOAL[goalKind ?? "custom"] ?? QUEST_BY_GOAL.custom;
+}
+
+function isFirstQuest(value: unknown): value is FirstQuest {
+  if (!value || typeof value !== "object") return false;
+  const quest = value as Partial<FirstQuest>;
+  return Boolean(
+    quest.id &&
+      quest.name &&
+      quest.whyItMatters &&
+      quest.durationLabel &&
+      typeof quest.xpReward === "number" &&
+      quest.goalKind
+  );
+}
+
 // ─── Mappers — convert draft → API payload ──────────────────────────────────
 // When the backend renames a field, update only this mapper.
 
@@ -115,6 +132,7 @@ interface ApiOnboardingPayload {
   bankConnected: boolean;
   plan: PlanSelection;
   firstGoal: FirstGoal | null;
+  firstQuest: FirstQuest | null;
   shareToBuds: boolean;
 }
 
@@ -130,6 +148,7 @@ function toApiOnboardingPayload(draft: OnboardingDraft): ApiOnboardingPayload {
     bankConnected: draft.bankConnected,
     plan: draft.plan,
     firstGoal: draft.firstGoal,
+    firstQuest: draft.firstQuest,
     shareToBuds: draft.shareToBuds,
   };
 }
@@ -151,14 +170,21 @@ export const onboardingService = {
 
     if (IS_MOCK) {
       await fakeDelay(700);
-      return QUEST_BY_GOAL[primary];
+      return firstQuestForGoal(primary);
     }
 
-    // Real backend call (server picks the quest based on goal + transactions).
-    const raw = await api.get<FirstQuest>(ENDPOINTS.QUESTS.ACTIVE, {
-      params: { goalKind: primary, mode: "first" },
-    });
-    return raw;
+    try {
+      // Real backend call (server picks the quest based on goal + transactions).
+      const raw = await api.get<FirstQuest>(ENDPOINTS.QUESTS.ACTIVE, {
+        params: { goalKind: primary, mode: "first" },
+      });
+      if (isFirstQuest(raw)) return raw;
+    } catch {
+      // The personalization endpoint is not critical path during early backend
+      // integration. Fall back locally so onboarding can still finish safely.
+    }
+
+    return firstQuestForGoal(primary);
   },
 
   /**
@@ -172,9 +198,7 @@ export const onboardingService = {
       await fakeDelay(1200);
       return { connected: true };
     }
-    const linkToken = await api.post<{ link_token: string }>(
-      ENDPOINTS.PLAID.LINK_TOKEN
-    );
+    const linkToken = await api.post<{ link_token: string }>(ENDPOINTS.PLAID.LINK_TOKEN);
     // The actual Plaid Link SDK flow happens in the screen — see StepBank.
     // After exchange:
     // await api.post(ENDPOINTS.PLAID.EXCHANGE, { public_token });

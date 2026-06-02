@@ -36,10 +36,40 @@ npm run doctor        # Expo's diagnostic tool
 npm run typecheck     # confirms TypeScript is clean
 ```
 
+## Backend
+
+The first Go backend scaffold lives in `backend/`. It includes:
+
+- Go API server with health endpoints
+- Dockerfile
+- Docker Compose service wiring for API + PostgreSQL
+- PostgreSQL migrations for identity, onboarding, and goals
+
+Start there when building backend features:
+
+```bash
+cd backend
+cp .env.example .env
+go run ./cmd/api
+```
+
+For Docker-based local development from the repo root:
+
+```bash
+docker compose up -d db
+docker compose run --rm migrate
+docker compose up -d --build api
+```
+
+Postgres is exposed on local port `5433` to avoid conflicts with any existing
+Postgres running on your Mac. The API container still talks to the database on
+Docker's internal `db:5432` address.
+
 ## Project Structure
 
 ```
 budget-buddy/
+├── backend/                 # Go API, Dockerfile, migrations
 ├── app/                     # Expo Router file-based routing
 │   ├── _layout.tsx          # Root: providers, fonts, error boundary
 │   ├── index.tsx            # Initial redirect by auth state

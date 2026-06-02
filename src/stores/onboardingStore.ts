@@ -17,6 +17,9 @@ import { useShallow } from "zustand/react/shallow";
 import type { OnboardingDraft } from "@/features/onboarding/types";
 
 const INITIAL_DRAFT: OnboardingDraft = {
+  accountEmail: "",
+  accountPassword: "",
+  accountPasswordConfirm: "",
   firstName: "",
   ageRange: null,
   situation: null,

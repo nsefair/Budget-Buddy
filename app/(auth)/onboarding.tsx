@@ -1,7 +1,7 @@
 /**
  * Onboarding Container
  *
- * Implements the 9-step flow specified in Section 4 of the developer review:
+ * Implements the onboarding flow specified in Section 4 of the developer review:
  *
  *   0. Welcome             — Bud hero moment
  *   1. Profile             — name + age + life situation
@@ -11,7 +11,8 @@
  *   5. Pricing             — tier select + monthly/annual + lifetime
  *   6. First Goal          — concrete target + deadline + reason
  *   7. First Quest + Streak — Bud assigns + flame ignites
- *   8. Buds Share          — opt-in starting moment
+ *   8. Account             — create credentials when this is a new user
+ *   9. Buds Share          — opt-in starting moment
  *
  * Architecture:
  *   • Each step is a self-contained component in src/features/onboarding/steps/.
@@ -40,6 +41,7 @@ import { StepBank } from "@/features/onboarding/steps/StepBank";
 import { StepPricing } from "@/features/onboarding/steps/StepPricing";
 import { StepFirstGoal } from "@/features/onboarding/steps/StepFirstGoal";
 import { StepFirstQuest } from "@/features/onboarding/steps/StepFirstQuest";
+import { StepAccount } from "@/features/onboarding/steps/StepAccount";
 import { StepShare } from "@/features/onboarding/steps/StepShare";
 
 import { WHY_OPTIONS } from "@/features/onboarding/data";
@@ -53,11 +55,23 @@ import {
 } from "@/stores/onboardingStore";
 import { useUser, useAuthActions } from "@/hooks/useAuth";
 
-const TOTAL_STEPS = 9;
+type StepKey =
+  | "welcome"
+  | "profile"
+  | "goals"
+  | "why"
+  | "bank"
+  | "pricing"
+  | "firstGoal"
+  | "firstQuest"
+  | "account"
+  | "share";
+
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function OnboardingScreen() {
   const user = useUser();
-  const { updateUser, setOnboardingComplete } = useAuthActions();
+  const { register, updateUser, setOnboardingComplete } = useAuthActions();
 
   const draft = useDraft();
   const { patch, reset } = useDraftActions();
@@ -65,6 +79,29 @@ export default function OnboardingScreen() {
   const setStep = useOnboardingStore((s) => s.setStep);
 
   const [submitting, setSubmitting] = useState(false);
+  const needsAccount = !user;
+  const steps = useMemo<StepKey[]>(
+    () => [
+      "welcome",
+      "profile",
+      "goals",
+      "why",
+      "bank",
+      "pricing",
+      "firstGoal",
+      "firstQuest",
+      ...(needsAccount ? (["account"] as const) : []),
+      "share",
+    ],
+    [needsAccount],
+  );
+  const currentStep = steps[step] ?? "welcome";
+
+  useEffect(() => {
+    if (step >= steps.length) {
+      setStep(steps.length - 1);
+    }
+  }, [setStep, step, steps.length]);
 
   // Pre-fill the draft with the registered user's first name once on mount.
   useEffect(() => {
@@ -77,45 +114,51 @@ export default function OnboardingScreen() {
 
   // ─── Per-step "can advance" gates ──────────────────────────────────────────
   const canAdvance = useMemo(() => {
-    switch (step) {
-      case 0:
+    switch (currentStep) {
+      case "welcome":
         return true;
-      case 1:
+      case "profile":
         return Boolean(draft.firstName.trim() && draft.ageRange && draft.situation);
-      case 2:
+      case "goals":
         if (draft.goalKinds.length === 0) return false;
         if (draft.goalKinds.includes("custom") && !draft.customGoalLabel.trim()) {
           return false;
         }
         return true;
-      case 3:
+      case "why":
         if (!draft.whyId) return false;
         if (draft.whyId === "custom" && !draft.whyText.trim()) return false;
         return true;
-      case 4:
+      case "bank":
         // Bank step is skippable — always allow advance
         return true;
-      case 5:
+      case "pricing":
         return Boolean(draft.plan.tier);
-      case 6:
+      case "firstGoal":
         return Boolean(
           draft.firstGoal &&
             draft.firstGoal.name.trim() &&
             draft.firstGoal.targetAmount > 0
         );
-      case 7:
+      case "firstQuest":
         return Boolean(draft.firstQuest);
-      case 8:
+      case "account":
+        return Boolean(
+          emailPattern.test(draft.accountEmail.trim()) &&
+            draft.accountPassword.length >= 8 &&
+            draft.accountPassword === draft.accountPasswordConfirm
+        );
+      case "share":
         return true;
       default:
         return false;
     }
-  }, [step, draft]);
+  }, [currentStep, draft]);
 
   // ─── Navigation ────────────────────────────────────────────────────────────
   const goNext = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (step < TOTAL_STEPS - 1) setStep(step + 1);
+    if (step < steps.length - 1) setStep(step + 1);
   };
   const goBack = () => {
     if (step === 0) return;
@@ -144,6 +187,15 @@ export default function OnboardingScreen() {
       const finalDraft = { ...draft, whyText: text, whyIcon: icon };
       patch({ whyText: text, whyIcon: icon });
 
+      if (!user) {
+        await register({
+          firstName: finalDraft.firstName.trim(),
+          lastName: "",
+          email: finalDraft.accountEmail.trim().toLowerCase(),
+          password: finalDraft.accountPassword,
+        });
+      }
+
       // Send everything to the backend in one atomic call.
       await onboardingService.complete(finalDraft);
 
@@ -162,7 +214,7 @@ export default function OnboardingScreen() {
     } catch {
       Alert.alert(
         "Couldn't save your setup",
-        "Bud will keep your answers ready. Let's try that again in a moment."
+        "Check the account details and try again. Your answers are still here."
       );
       setSubmitting(false);
     }
@@ -170,10 +222,10 @@ export default function OnboardingScreen() {
 
   // ─── Footer (next / skip / finish) ─────────────────────────────────────────
   const footer = (() => {
-    if (step === 0) {
+    if (currentStep === "welcome") {
       return <PrimaryButton label="Let's start" onPress={goNext} />;
     }
-    if (step === 4) {
+    if (currentStep === "bank") {
       // Bank step has its own connect button inline. Footer offers Continue + Skip.
       return (
         <>
@@ -187,10 +239,10 @@ export default function OnboardingScreen() {
         </>
       );
     }
-    if (step === 7) {
+    if (currentStep === "firstQuest") {
       return <PrimaryButton label="Sounds good" onPress={goNext} />;
     }
-    if (step === TOTAL_STEPS - 1) {
+    if (currentStep === "share") {
       return (
         <PrimaryButton
           label={
@@ -213,17 +265,17 @@ export default function OnboardingScreen() {
   return (
     <OnboardingShell
       step={step}
-      totalSteps={TOTAL_STEPS}
+      totalSteps={steps.length}
       onBack={step === 0 ? undefined : goBack}
-      hideProgress={step === 0}
-      centerContent={step === 0}
+      hideProgress={currentStep === "welcome"}
+      centerContent={currentStep === "welcome"}
       footer={footer}
     >
-      {step === 0 && (
+      {currentStep === "welcome" && (
         <StepWelcome firstName={draft.firstName || user?.firstName || ""} onNext={goNext} />
       )}
 
-      {step === 1 && (
+      {currentStep === "profile" && (
         <StepProfile
           firstName={draft.firstName}
           ageRange={draft.ageRange}
@@ -234,7 +286,7 @@ export default function OnboardingScreen() {
         />
       )}
 
-      {step === 2 && (
+      {currentStep === "goals" && (
         <StepGoals
           selected={draft.goalKinds}
           customLabel={draft.customGoalLabel}
@@ -249,7 +301,7 @@ export default function OnboardingScreen() {
         />
       )}
 
-      {step === 3 && (
+      {currentStep === "why" && (
         <StepWhy
           selectedId={draft.whyId}
           customText={draft.whyText}
@@ -266,14 +318,14 @@ export default function OnboardingScreen() {
         />
       )}
 
-      {step === 4 && (
+      {currentStep === "bank" && (
         <StepBank
           bankConnected={draft.bankConnected}
           onConnected={() => patch({ bankConnected: true })}
         />
       )}
 
-      {step === 5 && (
+      {currentStep === "pricing" && (
         <StepPricing
           selectedTier={draft.plan.tier}
           cycle={draft.plan.cycle}
@@ -290,7 +342,7 @@ export default function OnboardingScreen() {
         />
       )}
 
-      {step === 6 && (
+      {currentStep === "firstGoal" && (
         <StepFirstGoal
           goalKind={draft.goalKinds[0] ?? "custom"}
           customGoalLabel={draft.customGoalLabel}
@@ -299,7 +351,7 @@ export default function OnboardingScreen() {
         />
       )}
 
-      {step === 7 && (
+      {currentStep === "firstQuest" && (
         <StepFirstQuest
           goalKinds={draft.goalKinds.length ? draft.goalKinds : ["custom"]}
           quest={draft.firstQuest}
@@ -307,7 +359,19 @@ export default function OnboardingScreen() {
         />
       )}
 
-      {step === 8 && (
+      {currentStep === "account" && (
+        <StepAccount
+          email={draft.accountEmail}
+          password={draft.accountPassword}
+          passwordConfirm={draft.accountPasswordConfirm}
+          onChangeEmail={(v) => patch({ accountEmail: v })}
+          onChangePassword={(v) => patch({ accountPassword: v })}
+          onChangePasswordConfirm={(v) => patch({ accountPasswordConfirm: v })}
+          onLogin={() => router.replace("/(auth)/login")}
+        />
+      )}
+
+      {currentStep === "share" && (
         <StepShare
           firstName={draft.firstName}
           whyIcon={draft.whyIcon}

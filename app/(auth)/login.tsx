@@ -146,7 +146,7 @@ export default function LoginScreen() {
             </LinearGradient>
           </Pressable>
 
-          <Pressable onPress={() => router.push("/(auth)/register")}>
+          <Pressable onPress={() => router.push("/(auth)/onboarding")}>
             <Text style={styles.signupLink}>
               New here?{" "}
               <Text style={{ color: Colors.gold, fontWeight: "600" }}>

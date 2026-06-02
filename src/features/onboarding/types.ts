@@ -59,6 +59,9 @@ export interface FirstQuest {
  * to the backend in one shot via onboardingService.complete().
  */
 export interface OnboardingDraft {
+  accountEmail: string;
+  accountPassword: string;
+  accountPasswordConfirm: string;
   firstName: string;
   ageRange: AgeRange | null;
   situation: LifeSituation | null;

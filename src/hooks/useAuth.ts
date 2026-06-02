@@ -20,6 +20,8 @@ export const useIsAuthenticated = () => useAuthStore((s) => s.isAuthenticated);
 
 export const useHasOnboarded = () => useAuthStore((s) => s.hasCompletedOnboarding);
 
+export const useHasKnownAccount = () => useAuthStore((s) => s.hasKnownAccount);
+
 export const useAuthLoading = () => useAuthStore((s) => s.isLoading);
 
 // Actions are stable references — useShallow prevents recreated-object re-renders.
