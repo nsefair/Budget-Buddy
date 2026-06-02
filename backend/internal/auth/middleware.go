@@ -10,6 +10,10 @@ type contextKey string
 const userIDContextKey contextKey = "auth.userID"
 
 func (h *Handler) requireAuth(next http.Handler) http.Handler {
+	return h.RequireAuth(next)
+}
+
+func (h *Handler) RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rawToken, err := BearerToken(r.Header.Get("Authorization"))
 		if err != nil {

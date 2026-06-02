@@ -39,7 +39,13 @@ function assertSafeBaseUrl(url: string): string {
       "[Security] EXPO_PUBLIC_API_URL must use HTTPS in production builds."
     );
   }
-  if (__DEV__ && !url.startsWith("https://") && !/^http:\/\/(localhost|127\.0\.0\.1|10\.0\.2\.2)/.test(url)) {
+  const isAllowedDevHttp =
+    /^http:\/\/(localhost|127\.0\.0\.1|10\.0\.2\.2)(:\d+)?(\/|$)/.test(url) ||
+    /^http:\/\/10\.\d+\.\d+\.\d+(:\d+)?(\/|$)/.test(url) ||
+    /^http:\/\/192\.168\.\d+\.\d+(:\d+)?(\/|$)/.test(url) ||
+    /^http:\/\/172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+(:\d+)?(\/|$)/.test(url);
+
+  if (__DEV__ && !url.startsWith("https://") && !isAllowedDevHttp) {
     // Loud in dev — quiet warning instead of throwing so simulator local
     // dev keeps working with localhost variants.
     // eslint-disable-next-line no-console
@@ -113,7 +119,14 @@ apiClient.interceptors.response.use(
       _retry?: boolean;
     };
 
-    if (error.response?.status !== 401 || original._retry) {
+    const isAuthRequest = typeof original?.url === "string" &&
+      [
+        "/auth/login",
+        "/auth/register",
+        "/auth/refresh",
+      ].some((path) => original.url?.endsWith(path));
+
+    if (error.response?.status !== 401 || original._retry || isAuthRequest) {
       return Promise.reject(error);
     }
 

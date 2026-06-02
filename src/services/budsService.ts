@@ -15,11 +15,14 @@ import {
   type FeedPost,
   type BudProfile,
 } from "@/mock/buds";
+import { MOCK_LEAGUE, type League } from "@/mock/quests";
 
 export const BUDS_KEYS = {
   all: ["buds"] as const,
   feed: () => [...BUDS_KEYS.all, "feed"] as const,
+  league: () => [...BUDS_KEYS.all, "league"] as const,
   following: () => [...BUDS_KEYS.all, "following"] as const,
+  followers: () => [...BUDS_KEYS.all, "followers"] as const,
   discover: () => [...BUDS_KEYS.all, "discover"] as const,
   profile: (id: string) => [...BUDS_KEYS.all, "profile", id] as const,
 };
@@ -27,17 +30,51 @@ export const BUDS_KEYS = {
 export const budsService = {
   getFeed: async (): Promise<FeedPost[]> => {
     if (IS_MOCK) return MOCK_FEED;
-    return api.get<FeedPost[]>(ENDPOINTS.BUDS.FEED);
+    try {
+      return await api.get<FeedPost[]>(ENDPOINTS.BUDS.FEED);
+    } catch {
+      return [];
+    }
+  },
+
+  getLeague: async (): Promise<League> => {
+    if (IS_MOCK) return MOCK_LEAGUE;
+    try {
+      const league = await api.get<Omit<League, "tierColor">>(ENDPOINTS.BUDS.LEAGUE);
+      return {
+        ...league,
+        tierColor: MOCK_LEAGUE.tierColor,
+      };
+    } catch {
+      return MOCK_LEAGUE;
+    }
   },
 
   getFollowing: async (): Promise<BudProfile[]> => {
     if (IS_MOCK) return MOCK_BUDS_PROFILES.filter((b) => b.isFollowing);
-    return api.get<BudProfile[]>(ENDPOINTS.BUDS.MY_BUDS);
+    try {
+      return await api.get<BudProfile[]>(ENDPOINTS.BUDS.MY_BUDS);
+    } catch {
+      return [];
+    }
+  },
+
+  getFollowers: async (): Promise<BudProfile[]> => {
+    if (IS_MOCK) return MOCK_BUDS_PROFILES.slice(0, 2);
+    try {
+      return await api.get<BudProfile[]>(ENDPOINTS.BUDS.FOLLOWERS);
+    } catch {
+      return [];
+    }
   },
 
   getDiscover: async (): Promise<BudProfile[]> => {
     if (IS_MOCK) return SUGGESTED_BUDS;
-    return api.get<BudProfile[]>(ENDPOINTS.BUDS.DISCOVER);
+    try {
+      return await api.get<BudProfile[]>(ENDPOINTS.BUDS.DISCOVER);
+    } catch {
+      return [];
+    }
   },
 
   getProfile: async (userId: string): Promise<BudProfile> => {
@@ -57,10 +94,20 @@ export const budsService = {
     await api.post(ENDPOINTS.BUDS.UNFOLLOW(userId));
   },
 
-  fistBump: async (postId: string): Promise<{ newCount: number }> => {
+  block: async (userId: string): Promise<void> => {
+    if (IS_MOCK) return;
+    await api.post(ENDPOINTS.BUDS.BLOCK(userId));
+  },
+
+  report: async (userId: string, payload: { postId?: string; reason?: string; details?: string } = {}): Promise<void> => {
+    if (IS_MOCK) return;
+    await api.post(ENDPOINTS.BUDS.REPORT(userId), payload);
+  },
+
+  fistBump: async (postId: string): Promise<{ newCount: number; hasFistBumped?: boolean }> => {
     if (IS_MOCK) {
       const post = MOCK_FEED.find((p) => p.id === postId);
-      return { newCount: (post?.fistBumps ?? 0) + 1 };
+      return { newCount: (post?.fistBumps ?? 0) + 1, hasFistBumped: true };
     }
     return api.post<{ newCount: number }>(ENDPOINTS.BUDS.FIST_BUMP(postId));
   },
@@ -100,9 +147,19 @@ export const budsService = {
       queryFn: budsService.getFeed,
       staleTime: 1000 * 60,
     }),
+    league: () => ({
+      queryKey: BUDS_KEYS.league(),
+      queryFn: budsService.getLeague,
+      staleTime: 1000 * 60,
+    }),
     following: () => ({
       queryKey: BUDS_KEYS.following(),
       queryFn: budsService.getFollowing,
+      staleTime: 1000 * 60 * 5,
+    }),
+    followers: () => ({
+      queryKey: BUDS_KEYS.followers(),
+      queryFn: budsService.getFollowers,
       staleTime: 1000 * 60 * 5,
     }),
     discover: () => ({

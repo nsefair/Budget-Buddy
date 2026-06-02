@@ -145,6 +145,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         set({ isLoading: false, isAuthenticated: false, hasKnownAccount });
       }
     } catch {
+      await TokenStore.clearAll();
       set({ isLoading: false, isAuthenticated: false, hasKnownAccount });
     }
   },

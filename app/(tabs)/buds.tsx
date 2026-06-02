@@ -7,20 +7,18 @@ import {
   StyleSheet,
   TextInput,
   Animated,
+  ActivityIndicator,
+  RefreshControl,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "@/constants/colors";
 import { useUser } from "@/hooks/useAuth";
 import { BrandHeader } from "@/components/BrandLogo";
-import {
-  MOCK_FEED,
-  MOCK_BUDS_PROFILES,
-  SUGGESTED_BUDS,
-  FeedPost,
-  BudProfile,
-} from "@/mock/buds";
-import { MOCK_LEAGUE } from "@/mock/quests";
+import { FeedPost, BudProfile } from "@/mock/buds";
+import { MOCK_LEAGUE, type League } from "@/mock/quests";
+import { budsService } from "@/services/budsService";
 import * as Haptics from "expo-haptics";
 import { Icon } from "@/components/Icon";
 
@@ -32,13 +30,51 @@ export default function BudsScreen() {
   const insets = useSafeAreaInsets();
   const user = useUser();
   const [activeView, setActiveView] = useState<BudsView>("feed");
-  const [feed, setFeed] = useState(MOCK_FEED);
+  const [feed, setFeed] = useState<FeedPost[]>([]);
+  const [league, setLeague] = useState<League>(MOCK_LEAGUE);
+  const [following, setFollowing] = useState<BudProfile[]>([]);
+  const [discover, setDiscover] = useState<BudProfile[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const followingCount = MOCK_BUDS_PROFILES.filter((b) => b.isFollowing).length;
+  const followingCount = following.length;
 
-  const handleFistBump = (postId: string) => {
+  const loadSocial = async ({ quiet = false }: { quiet?: boolean } = {}) => {
+    if (!quiet) setIsLoading(true);
+    try {
+      const [nextFeed, nextLeague, nextFollowing, nextDiscover] = await Promise.all([
+        budsService.getFeed(),
+        budsService.getLeague(),
+        budsService.getFollowing(),
+        budsService.getDiscover(),
+      ]);
+      setFeed(nextFeed);
+      setLeague(nextLeague);
+      setFollowing(nextFollowing);
+      setDiscover(nextDiscover);
+    } finally {
+      if (!quiet) setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadSocial();
+    const id = setInterval(() => {
+      loadSocial({ quiet: true });
+    }, 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadSocial({ quiet: true });
+    setRefreshing(false);
+  };
+
+  const handleFistBump = async (postId: string) => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    const original = feed;
     setFeed((prev) =>
       prev.map((post) =>
         post.id === postId
@@ -49,6 +85,85 @@ export default function BudsScreen() {
             }
           : post
       )
+    );
+    try {
+      const result = await budsService.fistBump(postId);
+      setFeed((prev) =>
+        prev.map((post) =>
+          post.id === postId
+            ? {
+                ...post,
+                fistBumps: result.newCount,
+                hasFistBumped: result.hasFistBumped ?? post.hasFistBumped,
+              }
+            : post
+        )
+      );
+    } catch {
+      setFeed(original);
+    }
+  };
+
+  const handleFollowToggle = async (bud: BudProfile) => {
+    const nextIsFollowing = !bud.isFollowing;
+    const update = (profile: BudProfile) =>
+      profile.id === bud.id ? { ...profile, isFollowing: nextIsFollowing } : profile;
+    setDiscover((current) => current.map(update));
+    setFollowing((current) =>
+      nextIsFollowing
+        ? [{ ...bud, isFollowing: true }, ...current.filter((b) => b.id !== bud.id)]
+        : current.filter((b) => b.id !== bud.id)
+    );
+
+    try {
+      if (nextIsFollowing) {
+        await budsService.follow(bud.id);
+      } else {
+        await budsService.unfollow(bud.id);
+      }
+      await loadSocial({ quiet: true });
+    } catch {
+      await loadSocial({ quiet: true });
+    }
+  };
+
+  const handleReportPost = (post: FeedPost) => {
+    Alert.alert(
+      "Post safety",
+      "Budget Buddy will review reports. Blocking removes this Bud from your feed and suggestions.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: `Block ${post.user.displayName}`,
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await budsService.block(post.user.id);
+              setFeed((current) => current.filter((item) => item.user.id !== post.user.id));
+              setFollowing((current) => current.filter((bud) => bud.id !== post.user.id));
+              setDiscover((current) => current.filter((bud) => bud.id !== post.user.id));
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            } catch {
+              Alert.alert("Could not block Bud", "Try again in a moment.");
+            }
+          },
+        },
+        {
+          text: "Report",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await budsService.report(post.user.id, {
+                postId: post.id,
+                reason: "unsafe_social_content",
+              });
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            } catch {
+              Alert.alert("Could not report post", "Try again in a moment.");
+            }
+          },
+        },
+      ]
     );
   };
 
@@ -123,7 +238,21 @@ export default function BudsScreen() {
           { paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 24 },
         ]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={Colors.gold}
+          />
+        }
       >
+        {isLoading && (
+          <View style={styles.loadingCard}>
+            <ActivityIndicator color={Colors.gold} />
+            <Text style={styles.loadingText}>Loading Buds activity...</Text>
+          </View>
+        )}
+
         {activeView === "feed" && (
           <>
             {/* Privacy note */}
@@ -134,10 +263,23 @@ export default function BudsScreen() {
               </Text>
             </View>
 
-            <WealthLeagueCard />
+            <WealthLeagueCard league={league} />
+
+            {!isLoading && feed.length === 0 && (
+              <EmptySocialState
+                icon="sparkles"
+                title="No Buds wins yet"
+                body="Follow a few Buds or share your first win to make this feed come alive."
+              />
+            )}
 
             {feed.map((post) => (
-              <FeedCard key={post.id} post={post} onFistBump={handleFistBump} />
+              <FeedCard
+                key={post.id}
+                post={post}
+                onFistBump={handleFistBump}
+                onReport={handleReportPost}
+              />
             ))}
           </>
         )}
@@ -145,7 +287,14 @@ export default function BudsScreen() {
         {activeView === "my-buds" && (
           <>
             <Text style={styles.budsCount}>{followingCount} people you follow</Text>
-            {MOCK_BUDS_PROFILES.filter((b) => b.isFollowing).map((bud) => (
+            {!isLoading && following.length === 0 && (
+              <EmptySocialState
+                icon="users"
+                title="No Buds yet"
+                body="Find people building similar money habits and follow their wins here."
+              />
+            )}
+            {following.map((bud) => (
               <BudCard key={bud.id} bud={bud} />
             ))}
           </>
@@ -169,9 +318,26 @@ export default function BudsScreen() {
               Based on similar goals and activity patterns
             </Text>
 
-            {SUGGESTED_BUDS.map((bud) => (
-              <BudCard key={bud.id} bud={bud} showFollow />
-            ))}
+            {!isLoading && discover.length === 0 && (
+              <EmptySocialState
+                icon="search"
+                title="No suggestions yet"
+                body="As more people join Budget Buddy, Bud will suggest peers with similar goals."
+              />
+            )}
+
+            {discover
+              .filter((bud) =>
+                bud.displayName.toLowerCase().includes(searchQuery.trim().toLowerCase())
+              )
+              .map((bud) => (
+                <BudCard
+                  key={bud.id}
+                  bud={bud}
+                  showFollow
+                  onFollowToggle={handleFollowToggle}
+                />
+              ))}
 
             {/* Phase 2 teaser */}
             <View style={styles.phase2Card}>
@@ -196,9 +362,29 @@ export default function BudsScreen() {
   );
 }
 
-function WealthLeagueCard() {
-  const leaders = MOCK_LEAGUE.users.slice(0, 5);
-  const maxXp = Math.max(...leaders.map((leader) => leader.xp));
+function EmptySocialState({
+  icon,
+  title,
+  body,
+}: {
+  icon: Parameters<typeof Icon>[0]["name"];
+  title: string;
+  body: string;
+}) {
+  return (
+    <View style={styles.emptyCard}>
+      <View style={styles.emptyIcon}>
+        <Icon name={icon} size={18} color={Colors.gold} strokeWidth={2.4} />
+      </View>
+      <Text style={styles.emptyTitle}>{title}</Text>
+      <Text style={styles.emptyBody}>{body}</Text>
+    </View>
+  );
+}
+
+function WealthLeagueCard({ league }: { league: League }) {
+  const leaders = league.users.slice(0, 8);
+  const maxXp = Math.max(1, ...leaders.map((leader) => leader.xp));
 
   return (
     <View style={styles.leagueCard}>
@@ -209,11 +395,13 @@ function WealthLeagueCard() {
           </View>
           <View>
             <Text style={styles.leagueEyebrow}>WEALTH LEAGUE</Text>
-            <Text style={styles.leagueTitle}>{MOCK_LEAGUE.tier} standings</Text>
+            <Text style={styles.leagueTitle}>{league.tier} standings</Text>
           </View>
         </View>
         <View style={styles.rankPill}>
-          <Text style={styles.rankPillText}>#{MOCK_LEAGUE.currentUserRank}</Text>
+          <Text style={styles.rankPillText}>
+            {league.currentUserRank > 0 ? `#${league.currentUserRank}` : "--"}
+          </Text>
         </View>
       </View>
 
@@ -223,7 +411,7 @@ function WealthLeagueCard() {
       </Text>
 
       <View style={styles.leagueResetRow}>
-        <Text style={styles.leagueResetText}>{leagueResetCopy()}</Text>
+        <Text style={styles.leagueResetText}>{leagueResetCopy(league.resetDate)}</Text>
         <Text style={styles.leagueZoneText}>Top 3 advance</Text>
       </View>
 
@@ -288,6 +476,9 @@ function LeagueRow({
           <Text style={styles.leagueName}>
             {leader.isCurrentUser ? "You" : leader.name}
           </Text>
+          <View style={styles.levelPill}>
+            <Text style={styles.levelPillText}>Lv {leader.level}</Text>
+          </View>
           {rank <= 3 && (
             <View style={styles.promotionPill}>
               <Text style={styles.promotionPillText}>Advance</Text>
@@ -306,7 +497,15 @@ function LeagueRow({
   );
 }
 
-function FeedCard({ post, onFistBump }: { post: FeedPost; onFistBump: (id: string) => void }) {
+function FeedCard({
+  post,
+  onFistBump,
+  onReport,
+}: {
+  post: FeedPost;
+  onFistBump: (id: string) => void;
+  onReport: (post: FeedPost) => void;
+}) {
   const scale = useRef(new Animated.Value(1)).current;
 
   const handleBump = () => {
@@ -365,14 +564,24 @@ function FeedCard({ post, onFistBump }: { post: FeedPost; onFistBump: (id: strin
             {post.fistBumps}
           </Text>
         </Pressable>
+        <Pressable style={styles.reportButton} onPress={() => onReport(post)}>
+          <Icon name="shield" size={14} color={Colors.muted} strokeWidth={2.2} />
+          <Text style={styles.reportText}>Report</Text>
+        </Pressable>
       </View>
     </View>
   );
 }
 
-function BudCard({ bud, showFollow }: { bud: BudProfile; showFollow?: boolean }) {
-  const [isFollowing, setIsFollowing] = useState(bud.isFollowing ?? false);
-
+function BudCard({
+  bud,
+  showFollow,
+  onFollowToggle,
+}: {
+  bud: BudProfile;
+  showFollow?: boolean;
+  onFollowToggle?: (bud: BudProfile) => void;
+}) {
   return (
     <View style={styles.budCard}>
       <View style={styles.budCardAvatar}>
@@ -388,14 +597,14 @@ function BudCard({ bud, showFollow }: { bud: BudProfile; showFollow?: boolean })
       </View>
       {showFollow && (
         <Pressable
-          style={[styles.followButton, isFollowing && styles.followButtonActive]}
+          style={[styles.followButton, bud.isFollowing && styles.followButtonActive]}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            setIsFollowing(!isFollowing);
+            onFollowToggle?.(bud);
           }}
         >
-          <Text style={[styles.followText, isFollowing && styles.followTextActive]}>
-            {isFollowing ? "Following" : "Follow"}
+          <Text style={[styles.followText, bud.isFollowing && styles.followTextActive]}>
+            {bud.isFollowing ? "Following" : "Follow"}
           </Text>
         </Pressable>
       )}
@@ -403,7 +612,14 @@ function BudCard({ bud, showFollow }: { bud: BudProfile; showFollow?: boolean })
   );
 }
 
-function leagueResetCopy() {
+function leagueResetCopy(resetDate?: string) {
+  const resetAt = resetDate ? new Date(resetDate).getTime() : NaN;
+  if (Number.isFinite(resetAt)) {
+    const days = Math.max(1, Math.ceil((resetAt - Date.now()) / 86_400_000));
+    if (days === 1) return "Resets tomorrow";
+    return `Resets in ${days} days`;
+  }
+
   const today = new Date();
   const daysUntilMonday = (8 - today.getDay()) % 7 || 7;
 
@@ -434,6 +650,12 @@ const styles = StyleSheet.create({
   switchText: { fontSize: 12, color: Colors.muted, fontWeight: "500" },
   switchTextActive: { color: Colors.gold, fontWeight: "700" },
   scrollContent: { paddingHorizontal: 20, paddingTop: 16, gap: 12 },
+  loadingCard: { flexDirection: "row", alignItems: "center", gap: 10, padding: 14, borderRadius: 14, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border },
+  loadingText: { fontSize: 13, color: Colors.navyMuted, fontWeight: "700" },
+  emptyCard: { alignItems: "center", padding: 18, gap: 8, borderRadius: 16, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border },
+  emptyIcon: { width: 42, height: 42, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: Colors.greenSurface, borderWidth: 1, borderColor: Colors.greenBorder },
+  emptyTitle: { fontSize: 15, color: Colors.navy, fontWeight: "800", letterSpacing: 0 },
+  emptyBody: { fontSize: 13, color: Colors.navyMuted, lineHeight: 19, textAlign: "center" },
   privacyNote: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(16,185,129,0.08)", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: "rgba(16,185,129,0.15)" },
   privacyText: { flex: 1, fontSize: 12, color: Colors.emerald, fontWeight: "500", lineHeight: 17 },
   streakInline: { flexDirection: "row", alignItems: "center", gap: 4 },
@@ -458,6 +680,8 @@ const styles = StyleSheet.create({
   leaguePerson: { flex: 1, gap: 6 },
   leagueNameRow: { flexDirection: "row", alignItems: "center", gap: 7 },
   leagueName: { fontSize: 13, color: Colors.navy, fontWeight: "800", letterSpacing: 0 },
+  levelPill: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 999, backgroundColor: Colors.navy50, borderWidth: 1, borderColor: Colors.border },
+  levelPillText: { fontSize: 9, color: Colors.navyMuted, fontWeight: "900", letterSpacing: 0.2 },
   promotionPill: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 999, backgroundColor: Colors.accentAlpha12 },
   promotionPillText: { fontSize: 9, color: Colors.gold, fontWeight: "900", letterSpacing: 0.4 },
   leagueTrack: { height: 5, borderRadius: 3, backgroundColor: Colors.border, overflow: "hidden" },
@@ -480,12 +704,14 @@ const styles = StyleSheet.create({
   feedContent: { gap: 4 },
   feedTitle: { fontSize: 15, fontWeight: "700", color: Colors.navy },
   feedMessage: { fontSize: 13, color: Colors.navyMuted, lineHeight: 19 },
-  feedFooter: { flexDirection: "row" },
+  feedFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   fistBumpButton: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
   fistBumpButtonActive: { backgroundColor: Colors.accentAlpha10, borderColor: Colors.accentAlpha40 },
   fistBumpEmoji: { fontSize: 16, lineHeight: 20 },
   fistBumpCount: { fontSize: 13, color: Colors.navyMuted, fontWeight: "600" },
   fistBumpCountActive: { color: Colors.gold },
+  reportButton: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 999 },
+  reportText: { fontSize: 12, color: Colors.muted, fontWeight: "700" },
   budsCount: { fontSize: 13, color: Colors.muted, fontWeight: "500", marginBottom: 4 },
   budCard: { flexDirection: "row", alignItems: "center", backgroundColor: Colors.card, borderRadius: 14, padding: 14, gap: 12, shadowColor: Colors.navy, shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
   budCardAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.navy50, alignItems: "center", justifyContent: "center" },

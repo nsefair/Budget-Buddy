@@ -8,6 +8,8 @@ export interface BudProfile {
   leagueTier: string;
   badgeCount: number;
   isFollowing?: boolean;
+  followerCount?: number;
+  followingCount?: number;
   financialHealthScore?: number;
 }
 

@@ -96,6 +96,7 @@ export const ENDPOINTS = {
   // ── Buds (Social) ───────────────────────────────────────────────────────────
   BUDS: {
     FEED: "/buds/feed",
+    LEAGUE: "/buds/league",
     PROFILE: (id: string) => `/buds/profile/${id}`,
     FOLLOW: (id: string) => `/buds/${id}/follow`,
     UNFOLLOW: (id: string) => `/buds/${id}/unfollow`,

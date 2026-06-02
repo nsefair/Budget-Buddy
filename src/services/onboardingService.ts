@@ -22,6 +22,7 @@
 
 import { api, IS_MOCK } from "@/api/client";
 import { ENDPOINTS } from "@/api/endpoints";
+import { budsService } from "@/services/budsService";
 import type {
   FirstGoal,
   FirstQuest,
@@ -157,6 +158,16 @@ function toApiOnboardingPayload(draft: OnboardingDraft): ApiOnboardingPayload {
 const fakeDelay = (ms = 500) =>
   new Promise<void>((r) => setTimeout(() => r(), ms));
 
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const id = setTimeout(() => reject(new Error("timeout")), ms);
+    promise
+      .then(resolve)
+      .catch(reject)
+      .finally(() => clearTimeout(id));
+  });
+}
+
 // ─── Service methods ────────────────────────────────────────────────────────
 
 export const onboardingService = {
@@ -175,9 +186,13 @@ export const onboardingService = {
 
     try {
       // Real backend call (server picks the quest based on goal + transactions).
-      const raw = await api.get<FirstQuest>(ENDPOINTS.QUESTS.ACTIVE, {
-        params: { goalKind: primary, mode: "first" },
-      });
+      const raw = await withTimeout(
+        api.get<FirstQuest>(ENDPOINTS.QUESTS.ACTIVE, {
+          goalKind: primary,
+          mode: "first",
+        }),
+        900
+      );
       if (isFirstQuest(raw)) return raw;
     } catch {
       // The personalization endpoint is not critical path during early backend
@@ -239,5 +254,12 @@ export const onboardingService = {
     }
     const payload = toApiOnboardingPayload(draft);
     await api.post(ENDPOINTS.USER.ONBOARDING, payload);
+    if (draft.shareToBuds) {
+      await budsService.sharePost({
+        type: "quest_complete",
+        title: "Day 1 started",
+        message: "Starting today, I'm building better money habits with Bud.",
+      });
+    }
   },
 };

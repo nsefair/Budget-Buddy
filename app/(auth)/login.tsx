@@ -11,11 +11,13 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { router } from "expo-router";
+import axios from "axios";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "@/constants/colors";
 import { BrandHeader } from "@/components/BrandLogo";
 import { Icon } from "@/components/Icon";
+import { API_BASE_URL } from "@/api/client";
 import { useAuthActions } from "@/hooks/useAuth";
 import { useAuthStore } from "@/stores/authStore";
 import * as Haptics from "expo-haptics";
@@ -44,12 +46,20 @@ export default function LoginScreen() {
       router.replace(
         hasCompletedOnboarding ? "/(tabs)/today" : "/(auth)/onboarding"
       );
-    } catch {
+    } catch (loginError) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      setError("Incorrect email or password. Try again.");
+      setError(loginErrorMessage(loginError));
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace("/(auth)/onboarding");
   };
 
   return (
@@ -69,7 +79,7 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
         >
           {/* Back */}
-          <Pressable onPress={() => router.back()} style={styles.backButton}>
+          <Pressable onPress={handleBack} style={styles.backButton}>
             <Icon name="arrow-left" size={17} color={Colors.muted} strokeWidth={2.4} />
             <Text style={styles.backText}>Back</Text>
           </Pressable>
@@ -146,18 +156,27 @@ export default function LoginScreen() {
             </LinearGradient>
           </Pressable>
 
-          <Pressable onPress={() => router.push("/(auth)/onboarding")}>
-            <Text style={styles.signupLink}>
-              New here?{" "}
-              <Text style={{ color: Colors.gold, fontWeight: "600" }}>
-                Create an account
-              </Text>
-            </Text>
-          </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
     </LinearGradient>
   );
+}
+
+function loginErrorMessage(error: unknown) {
+  if (!axios.isAxiosError(error)) {
+    return "Could not sign in. Try again.";
+  }
+
+  if (!error.response) {
+    return `Cannot reach the API at ${API_BASE_URL}. Make sure Docker is running and your phone is on the same Wi-Fi.`;
+  }
+
+  if (error.response.status === 401) {
+    return "Incorrect email or password. Try again.";
+  }
+
+  const body = error.response.data as { message?: string } | undefined;
+  return body?.message ?? `Login failed with server status ${error.response.status}.`;
 }
 
 const styles = StyleSheet.create({

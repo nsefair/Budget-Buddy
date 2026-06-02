@@ -6,7 +6,7 @@
  */
 
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { BudOrb } from "../components/BudOrb";
 import { Colors } from "@/constants/colors";
 import { FadeInUp } from "@/animations";
@@ -14,13 +14,14 @@ import { FadeInUp } from "@/animations";
 interface Props {
   firstName: string;
   onNext: () => void;
+  onLogin: () => void;
 }
 
 // onNext is intentionally accepted but unused here — the OnboardingShell
 // renders the CTA in its footer. We keep the prop for symmetry with other
 // step components and for direct-test use cases.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function StepWelcome({ firstName, onNext: _onNext }: Props) {
+export function StepWelcome({ firstName, onNext: _onNext, onLogin }: Props) {
   const greeting = firstName ? `Hey ${firstName}.` : "Hey there.";
 
   return (
@@ -46,6 +47,19 @@ export function StepWelcome({ firstName, onNext: _onNext }: Props) {
             A few quick questions and I'll have you set up — your goals,
             your first quest, your streak. About three minutes.
           </Text>
+        </FadeInUp>
+        <FadeInUp delay={720}>
+          <Pressable
+            onPress={onLogin}
+            style={({ pressed }) => [
+              styles.loginLink,
+              pressed && { opacity: 0.7 },
+            ]}
+          >
+            <Text style={styles.loginText}>
+              Already have an account? <Text style={styles.loginAccent}>Sign in</Text>
+            </Text>
+          </Pressable>
         </FadeInUp>
       </View>
     </View>
@@ -97,5 +111,23 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 22,
     paddingHorizontal: 16,
+  },
+  loginLink: {
+    marginTop: 22,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: Colors.accentAlpha08,
+    borderWidth: 1,
+    borderColor: Colors.accentAlpha25,
+  },
+  loginText: {
+    color: Colors.navyMuted,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  loginAccent: {
+    color: Colors.gold,
+    fontWeight: "900",
   },
 });

@@ -6,7 +6,7 @@
  */
 
 import React from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { StyleSheet, Text, TextInput, View } from "react-native";
 import { BudBubble } from "../components/BudBubble";
 import { Headline, Subheadline } from "../components/Headline";
 import { Icon } from "@/components/Icon";
@@ -19,7 +19,6 @@ interface Props {
   onChangeEmail: (value: string) => void;
   onChangePassword: (value: string) => void;
   onChangePasswordConfirm: (value: string) => void;
-  onLogin: () => void;
 }
 
 export function StepAccount({
@@ -29,7 +28,6 @@ export function StepAccount({
   onChangeEmail,
   onChangePassword,
   onChangePasswordConfirm,
-  onLogin,
 }: Props) {
   const passwordStarted = password.length > 0 || passwordConfirm.length > 0;
   const passwordMismatch =
@@ -104,14 +102,6 @@ export function StepAccount({
         </View>
       </View>
 
-      <Pressable
-        onPress={onLogin}
-        style={({ pressed }) => [styles.loginLink, pressed && { opacity: 0.7 }]}
-      >
-        <Text style={styles.loginText}>
-          Already have an account? <Text style={styles.loginAccent}>Sign in</Text>
-        </Text>
-      </Pressable>
     </View>
   );
 }
@@ -158,18 +148,5 @@ const styles = StyleSheet.create({
     color: Colors.coral,
     fontSize: 12,
     fontWeight: "700",
-  },
-  loginLink: {
-    alignItems: "center",
-    paddingVertical: 4,
-  },
-  loginText: {
-    color: Colors.muted,
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  loginAccent: {
-    color: Colors.gold,
-    fontWeight: "800",
   },
 });

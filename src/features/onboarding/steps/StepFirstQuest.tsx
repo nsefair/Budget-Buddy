@@ -33,7 +33,7 @@ export function StepFirstQuest({ goalKinds, quest, onLoaded }: Props) {
   const [loading, setLoading] = useState(!quest);
   const [resolvedQuest, setResolvedQuest] = useState<FirstQuest | null>(quest);
   const [error, setError] = useState<string | null>(null);
-  const fade = useRef(new Animated.Value(quest ? 1 : 0)).current;
+  const fade = useRef(new Animated.Value(1)).current;
   const flame = useRef(new Animated.Value(0)).current;
 
   const loadQuest = async () => {
@@ -43,6 +43,7 @@ export function StepFirstQuest({ goalKinds, quest, onLoaded }: Props) {
       const q = await onboardingService.suggestFirstQuest(goalKinds);
       setResolvedQuest(q);
       onLoaded(q);
+      fade.setValue(0.35);
       Animated.timing(fade, {
         toValue: 1,
         duration: 500,
@@ -73,6 +74,7 @@ export function StepFirstQuest({ goalKinds, quest, onLoaded }: Props) {
         if (cancelled) return;
         setResolvedQuest(q);
         onLoaded(q);
+        fade.setValue(0.35);
         Animated.timing(fade, {
           toValue: 1,
           duration: 500,

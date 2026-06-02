@@ -40,7 +40,11 @@ function sortTransactionsNewestFirst(transactions: Transaction[]) {
 export const budgetService = {
   getAvailableMonths: async (): Promise<BudgetMonthOption[]> => {
     if (IS_MOCK) return MOCK_BUDGET_MONTH_OPTIONS;
-    return api.get<BudgetMonthOption[]>(ENDPOINTS.BUDGET.MONTHS);
+    try {
+      return await api.get<BudgetMonthOption[]>(ENDPOINTS.BUDGET.MONTHS);
+    } catch {
+      return MOCK_BUDGET_MONTH_OPTIONS;
+    }
   },
 
   getOverview: async (month: string): Promise<BudgetOverview> => {
@@ -51,12 +55,24 @@ export const budgetService = {
         MOCK_BUDGET_OVERVIEW
       );
     }
-    return api.get<BudgetOverview>(ENDPOINTS.BUDGET.OVERVIEW, { month });
+    try {
+      return await api.get<BudgetOverview>(ENDPOINTS.BUDGET.OVERVIEW, { month });
+    } catch {
+      return (
+        MOCK_BUDGET_MONTHS.find((overview) => overview.monthId === month) ??
+        MOCK_BUDGET_MONTHS.find((overview) => overview.month === month) ??
+        MOCK_BUDGET_OVERVIEW
+      );
+    }
   },
 
   getCategories: async (month = MOCK_BUDGET_OVERVIEW.monthId): Promise<BudgetCategory[]> => {
     if (IS_MOCK) return (await budgetService.getOverview(month)).categories;
-    return api.get<BudgetCategory[]>(ENDPOINTS.BUDGET.CATEGORIES, { month });
+    try {
+      return await api.get<BudgetCategory[]>(ENDPOINTS.BUDGET.CATEGORIES, { month });
+    } catch {
+      return (await budgetService.getOverview(month)).categories;
+    }
   },
 
   getCategoryTransactions: async (
@@ -70,7 +86,15 @@ export const budgetService = {
         )
       );
     }
-    return api.get<Transaction[]>(ENDPOINTS.BUDGET.CATEGORY_DETAIL(categoryId), { month });
+    try {
+      return await api.get<Transaction[]>(ENDPOINTS.BUDGET.CATEGORY_DETAIL(categoryId), { month });
+    } catch {
+      return sortTransactionsNewestFirst(
+        MOCK_TRANSACTIONS.filter(
+          (t) => t.categoryId === categoryId && isTransactionInMonth(t, month)
+        )
+      );
+    }
   },
 
   getTransactions: async ({
@@ -88,7 +112,14 @@ export const budgetService = {
         : MOCK_TRANSACTIONS;
       return sortTransactionsNewestFirst(scoped).slice((page - 1) * limit, page * limit);
     }
-    return api.get<Transaction[]>(ENDPOINTS.BUDGET.TRANSACTIONS, { page, limit, month });
+    try {
+      return await api.get<Transaction[]>(ENDPOINTS.BUDGET.TRANSACTIONS, { page, limit, month });
+    } catch {
+      const scoped = month
+        ? MOCK_TRANSACTIONS.filter((t) => isTransactionInMonth(t, month))
+        : MOCK_TRANSACTIONS;
+      return sortTransactionsNewestFirst(scoped).slice((page - 1) * limit, page * limit);
+    }
   },
 
   addManualTransaction: async (
@@ -97,12 +128,20 @@ export const budgetService = {
     if (IS_MOCK) {
       return { ...tx, id: `manual_${Date.now()}`, isRecurring: false, isManual: true, isFlagged: false };
     }
-    return api.post<Transaction>(ENDPOINTS.BUDGET.MANUAL_ENTRY, tx);
+    try {
+      return await api.post<Transaction>(ENDPOINTS.BUDGET.MANUAL_ENTRY, tx);
+    } catch {
+      return { ...tx, id: `manual_${Date.now()}`, isRecurring: false, isManual: true, isFlagged: false };
+    }
   },
 
   recategorize: async (transactionId: string, newCategoryId: string): Promise<void> => {
     if (IS_MOCK) return;
-    await api.patch(ENDPOINTS.BUDGET.TRANSACTION_DETAIL(transactionId), { categoryId: newCategoryId });
+    try {
+      await api.patch(ENDPOINTS.BUDGET.TRANSACTION_DETAIL(transactionId), { categoryId: newCategoryId });
+    } catch {
+      return;
+    }
   },
 
   queries: {

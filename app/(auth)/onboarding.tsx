@@ -240,7 +240,13 @@ export default function OnboardingScreen() {
       );
     }
     if (currentStep === "firstQuest") {
-      return <PrimaryButton label="Sounds good" onPress={goNext} />;
+      return (
+        <PrimaryButton
+          label={canAdvance ? "Sounds good" : "Picking your quest..."}
+          onPress={goNext}
+          disabled={!canAdvance}
+        />
+      );
     }
     if (currentStep === "share") {
       return (
@@ -272,7 +278,11 @@ export default function OnboardingScreen() {
       footer={footer}
     >
       {currentStep === "welcome" && (
-        <StepWelcome firstName={draft.firstName || user?.firstName || ""} onNext={goNext} />
+        <StepWelcome
+          firstName={draft.firstName || user?.firstName || ""}
+          onNext={goNext}
+          onLogin={() => router.replace("/(auth)/login")}
+        />
       )}
 
       {currentStep === "profile" && (
@@ -367,7 +377,6 @@ export default function OnboardingScreen() {
           onChangeEmail={(v) => patch({ accountEmail: v })}
           onChangePassword={(v) => patch({ accountPassword: v })}
           onChangePasswordConfirm={(v) => patch({ accountPasswordConfirm: v })}
-          onLogin={() => router.replace("/(auth)/login")}
         />
       )}
 
