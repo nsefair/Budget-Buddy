@@ -258,6 +258,7 @@ function Row({
   label,
   sub,
   onPress,
+  last,
 }: {
   icon: IconName;
   label: string;
@@ -269,18 +270,21 @@ function Row({
     <Pressable
       style={({ pressed }) => [
         styles.row,
+        !last && styles.rowBorder,
         pressed && styles.rowPressed,
       ]}
       onPress={onPress}
     >
-      <View style={styles.rowIcon}>
-        <Icon name={icon} size={17} color={Colors.navy} strokeWidth={2.2} />
+      <View style={styles.rowContent}>
+        <View style={styles.rowIcon}>
+          <Icon name={icon} size={17} color={Colors.navy} strokeWidth={2.2} />
+        </View>
+        <View style={styles.rowTextWrap}>
+          <Text style={styles.rowLabel}>{label}</Text>
+          {sub ? <Text style={styles.rowSub}>{sub}</Text> : null}
+        </View>
+        <Icon name="chevron-right" size={16} color={Colors.muted} strokeWidth={2.2} />
       </View>
-      <View style={styles.rowTextWrap}>
-        <Text style={styles.rowLabel}>{label}</Text>
-        {sub ? <Text style={styles.rowSub}>{sub}</Text> : null}
-      </View>
-      <Icon name="chevron-right" size={17} color={Colors.muted} strokeWidth={2.4} />
     </Pressable>
   );
 }
@@ -432,49 +436,58 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 17, fontWeight: "800", color: Colors.navy, letterSpacing: -0.2 },
   statLabel: { fontSize: 11, fontWeight: "600", color: Colors.muted },
 
-  group: { marginBottom: 20 },
+  group: { marginBottom: 22 },
   groupTitle: {
     fontSize: 11,
     fontWeight: "800",
     color: Colors.muted,
     letterSpacing: 1.2,
     marginBottom: 10,
-    marginLeft: 4,
+    marginLeft: 6,
   },
   groupCard: {
-    gap: 10,
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    minHeight: 68,
-    paddingVertical: 13,
-    paddingHorizontal: 14,
-    borderRadius: 18,
     backgroundColor: Colors.card,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: Colors.border,
+    overflow: "hidden",
+    shadowColor: Colors.navy,
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
   },
-  rowPressed: {
-    backgroundColor: Colors.navy50,
-    transform: [{ scale: 0.99 }],
+  row: {
+    backgroundColor: Colors.card,
+    paddingHorizontal: 14,
   },
+  rowContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 64,
+    paddingVertical: 12,
+  },
+  rowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  rowPressed: { backgroundColor: Colors.navy50 },
   rowIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Colors.greenSurface,
     borderWidth: 1,
     borderColor: Colors.greenBorder,
-    marginRight: 12,
+    marginRight: 13,
   },
   rowTextWrap: {
     flex: 1,
     minWidth: 0,
   },
-  rowLabel: { fontSize: 15, fontWeight: "800", color: Colors.navy },
+  rowLabel: { fontSize: 15, fontWeight: "700", color: Colors.navy },
   rowSub: { fontSize: 12, fontWeight: "600", color: Colors.muted, marginTop: 2 },
 
   signOut: {

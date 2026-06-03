@@ -395,8 +395,10 @@ function ActionButton({
       ]}
       onPress={onPress}
     >
-      <Icon name={icon} size={17} color={Colors.black} strokeWidth={2.5} />
-      <Text style={styles.actionButtonText}>{label}</Text>
+      <View style={styles.actionButtonInner}>
+        <Icon name={icon} size={17} color={Colors.onAccent} strokeWidth={2.5} />
+        <Text style={styles.actionButtonText}>{label}</Text>
+      </View>
     </Pressable>
   );
 }
@@ -549,24 +551,21 @@ const styles = StyleSheet.create({
   },
   infoText: { flex: 1, fontSize: 12, fontWeight: "700", color: Colors.navy, lineHeight: 18 },
   actionButton: {
-    minHeight: 54,
-    borderRadius: 16,
-    backgroundColor: Colors.white,
-    borderWidth: 2,
-    borderColor: Colors.accent,
+    minHeight: 56,
+    borderRadius: 18,
+    backgroundColor: Colors.accent,
     alignItems: "center",
     justifyContent: "center",
-    flexDirection: "row",
-    gap: 9,
-    shadowColor: Colors.black,
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 3,
+    shadowColor: Colors.accent,
+    shadowOpacity: 0.3,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
   },
+  actionButtonInner: { flexDirection: "row", alignItems: "center", gap: 9 },
   actionButtonPressed: { opacity: 0.9, transform: [{ scale: 0.99 }] },
   actionButtonDisabled: { opacity: 0.45 },
-  actionButtonText: { fontSize: 15, fontWeight: "900", color: Colors.black },
+  actionButtonText: { fontSize: 15, fontWeight: "900", color: Colors.onAccent },
   sharePreview: {
     padding: 18,
     borderRadius: 20,

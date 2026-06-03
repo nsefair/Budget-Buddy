@@ -216,8 +216,10 @@ export default function GoalDetailScreen() {
               style={({ pressed }) => [styles.deleteBtn, pressed && { opacity: 0.85 }]}
               onPress={() => openGoalAction(goal.id, "delete")}
             >
-              <Icon name="alert-circle" size={16} color={Colors.coral} strokeWidth={2.4} />
-              <Text style={styles.deleteBtnText}>Delete goal</Text>
+              <View style={styles.deleteBtnInner}>
+                <Icon name="alert-circle" size={16} color={Colors.coral} strokeWidth={2.4} />
+                <Text style={styles.deleteBtnText}>Delete goal</Text>
+              </View>
             </Pressable>
           </View>
         </FadeInUp>
@@ -259,8 +261,12 @@ function SecondaryBtn({
       style={({ pressed }) => [styles.secondaryBtn, pressed && styles.secondaryBtnPressed]}
       onPress={onPress}
     >
-      <Icon name={icon} size={16} color={Colors.navy} strokeWidth={2.2} />
-      <Text style={styles.secondaryBtnText} numberOfLines={1}>{label}</Text>
+      <View style={styles.secondaryBtnInner}>
+        <View style={styles.secondaryBtnIconWrap}>
+          <Icon name={icon} size={17} color={Colors.navy} strokeWidth={2.2} />
+        </View>
+        <Text style={styles.secondaryBtnText} numberOfLines={2}>{label}</Text>
+      </View>
     </Pressable>
   );
 }
@@ -422,33 +428,42 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
   },
 
-  secondaryRow: { flexDirection: "row", gap: 12 },
+  secondaryRow: { flexDirection: "row", gap: 10 },
   secondaryBtn: {
     flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    minHeight: 72,
-    paddingVertical: 13,
+    minHeight: 76,
+    paddingVertical: 14,
     paddingHorizontal: 10,
-    borderRadius: 16,
+    borderRadius: 18,
     backgroundColor: Colors.card,
     borderWidth: 1,
     borderColor: Colors.border,
-  },
-  secondaryBtnPressed: { backgroundColor: Colors.navy50 },
-  secondaryBtnText: { fontSize: 14, fontWeight: "800", color: Colors.navy },
-
-  deleteBtn: {
-    minHeight: 48,
-    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    borderRadius: 14,
-    backgroundColor: "rgba(239, 68, 68, 0.1)",
-    borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.22)",
   },
+  secondaryBtnInner: { alignItems: "center", gap: 8 },
+  secondaryBtnIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.greenSurface,
+    borderWidth: 1,
+    borderColor: Colors.greenBorder,
+  },
+  secondaryBtnPressed: { backgroundColor: Colors.navy50 },
+  secondaryBtnText: { fontSize: 13, fontWeight: "800", color: Colors.navy, textAlign: "center" },
+
+  deleteBtn: {
+    minHeight: 50,
+    borderRadius: 14,
+    backgroundColor: "rgba(239, 68, 68, 0.07)",
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  deleteBtnInner: { flexDirection: "row", alignItems: "center", gap: 8 },
   deleteBtnText: { fontSize: 14, fontWeight: "800", color: Colors.coral },
 });
