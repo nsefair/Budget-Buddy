@@ -35,6 +35,16 @@ const TIER_LABEL: Record<string, string> = {
   elite: "Elite",
 };
 
+type SettingsScreen =
+  | "edit-profile"
+  | "goals"
+  | "notifications"
+  | "privacy"
+  | "bank-connections"
+  | "subscription"
+  | "help"
+  | "legal";
+
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const user = useUser();
@@ -60,6 +70,15 @@ export default function ProfileScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     logout();
     router.replace("/(auth)/welcome");
+  };
+
+  const openRoute = (href: Parameters<typeof router.push>[0]) => {
+    Haptics.selectionAsync();
+    router.push(href);
+  };
+
+  const openSettings = (screen: SettingsScreen) => {
+    openRoute({ pathname: "/settings/[screen]", params: { screen } });
   };
 
   return (
@@ -149,41 +168,37 @@ export default function ProfileScreen() {
         {/* Account */}
         <FadeInUp delay={140}>
           <SettingsGroup title="ACCOUNT">
-            <Row icon="user" label="Edit profile" onPress={() => comingSoon()} />
+            <Row icon="user" label="Edit profile" onPress={() => openSettings("edit-profile")} />
             <Row
               icon="target"
               label="Goal management"
-              onPress={() => {
-                Haptics.selectionAsync();
-                router.back();
-                router.push("/(tabs)/goals");
-              }}
+              onPress={() => openSettings("goals")}
             />
-            <Row icon="building" label="Bank connections" sub="Plaid" onPress={() => comingSoon()} last />
+            <Row icon="building" label="Bank connections" sub="Plaid" onPress={() => openSettings("bank-connections")} last />
           </SettingsGroup>
         </FadeInUp>
 
         {/* Billing */}
         <FadeInUp delay={200}>
           <SettingsGroup title="MEMBERSHIP">
-            <Row icon="badge-check" label="Subscription & billing" sub="Stripe" onPress={() => comingSoon()} />
-            <Row icon="user-plus" label="Invite Buds — earn rewards" onPress={() => comingSoon()} last />
+            <Row icon="badge-check" label="Subscription & billing" sub="Stripe" onPress={() => openSettings("subscription")} />
+            <Row icon="user-plus" label="Invite Buds - earn rewards" onPress={() => openRoute("/buds/invite")} last />
           </SettingsGroup>
         </FadeInUp>
 
         {/* Preferences */}
         <FadeInUp delay={260}>
           <SettingsGroup title="PREFERENCES">
-            <Row icon="bell" label="Notifications" onPress={() => comingSoon()} />
-            <Row icon="lock" label="Privacy & what Buds see" onPress={() => comingSoon()} last />
+            <Row icon="bell" label="Notifications" onPress={() => openSettings("notifications")} />
+            <Row icon="lock" label="Privacy & what Buds see" onPress={() => openSettings("privacy")} last />
           </SettingsGroup>
         </FadeInUp>
 
         {/* Support */}
         <FadeInUp delay={320}>
           <SettingsGroup title="SUPPORT">
-            <Row icon="message-circle" label="Help & contact" onPress={() => comingSoon()} />
-            <Row icon="info" label="Legal & disclaimers" onPress={() => comingSoon()} last />
+            <Row icon="message-circle" label="Help & contact" onPress={() => openSettings("help")} />
+            <Row icon="info" label="Legal & disclaimers" onPress={() => openSettings("legal")} last />
           </SettingsGroup>
         </FadeInUp>
 
@@ -199,11 +214,6 @@ export default function ProfileScreen() {
       </ScrollView>
     </View>
   );
-}
-
-function comingSoon() {
-  Haptics.selectionAsync();
-  // Placeholder until the backend wires this screen up.
 }
 
 function StatCell({
@@ -270,6 +280,7 @@ function Row({
         <Text style={styles.rowLabel}>{label}</Text>
         {sub ? <Text style={styles.rowSub}>{sub}</Text> : null}
       </View>
+      <Icon name="chevron-right" size={17} color={Colors.muted} strokeWidth={2.4} />
     </Pressable>
   );
 }

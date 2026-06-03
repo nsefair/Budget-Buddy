@@ -107,7 +107,7 @@ export default function GoalDetailScreen() {
           <Icon name="arrow-left" size={18} color={Colors.navy} strokeWidth={2.4} />
         </Pressable>
         <Text style={styles.topTitle} numberOfLines={1}>{goal.name}</Text>
-        <Pressable onPress={() => placeholder()} hitSlop={10} style={styles.iconBtn}>
+        <Pressable onPress={() => openGoalAction(goal.id, "edit")} hitSlop={10} style={styles.iconBtn}>
           <Icon name="settings" size={17} color={Colors.navy} strokeWidth={2.2} />
         </Pressable>
       </View>
@@ -200,7 +200,7 @@ export default function GoalDetailScreen() {
           <View style={styles.actionStack}>
             <Pressable
               style={({ pressed }) => [styles.primaryBtn, pressed && styles.primaryBtnPressed]}
-              onPress={() => placeholder(Haptics.ImpactFeedbackStyle.Medium)}
+              onPress={() => openGoalAction(goal.id, "contribute", Haptics.ImpactFeedbackStyle.Medium)}
             >
               <View style={styles.primaryBtnLeft}>
                 <Text style={styles.primaryBtnText}>Log a contribution</Text>
@@ -208,13 +208,13 @@ export default function GoalDetailScreen() {
             </Pressable>
 
             <View style={styles.secondaryRow}>
-              <SecondaryBtn icon="settings" label="Edit" onPress={() => placeholder()} />
-              <SecondaryBtn icon="users" label="Share to Buds" onPress={() => placeholder()} />
+              <SecondaryBtn icon="settings" label="Edit" onPress={() => openGoalAction(goal.id, "edit")} />
+              <SecondaryBtn icon="users" label="Share to Buds" onPress={() => openGoalAction(goal.id, "share")} />
             </View>
 
             <Pressable
               style={({ pressed }) => [styles.deleteBtn, pressed && { opacity: 0.85 }]}
-              onPress={() => placeholder()}
+              onPress={() => openGoalAction(goal.id, "delete")}
             >
               <Icon name="alert-circle" size={16} color={Colors.coral} strokeWidth={2.4} />
               <Text style={styles.deleteBtnText}>Delete goal</Text>
@@ -226,10 +226,14 @@ export default function GoalDetailScreen() {
   );
 }
 
-function placeholder(style?: Haptics.ImpactFeedbackStyle) {
+function openGoalAction(
+  goalId: string,
+  action: "contribute" | "edit" | "share" | "delete",
+  style?: Haptics.ImpactFeedbackStyle,
+) {
   if (style) Haptics.impactAsync(style);
   else Haptics.selectionAsync();
-  // Wired to the backend in a later pass.
+  router.push(`/goal-action?goalId=${encodeURIComponent(goalId)}&action=${action}`);
 }
 
 function NumberCell({ label, value }: { label: string; value: string }) {

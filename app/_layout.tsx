@@ -88,6 +88,30 @@ export default function RootLayout() {
                 name="goal/[id]"
                 options={{ headerShown: false, animation: "slide_from_right" }}
               />
+              <Stack.Screen
+                name="goal-action"
+                options={{ headerShown: false, animation: "slide_from_right" }}
+              />
+              <Stack.Screen
+                name="settings/[screen]"
+                options={{ headerShown: false, animation: "slide_from_right" }}
+              />
+              <Stack.Screen
+                name="buds/profile/[id]"
+                options={{ headerShown: false, animation: "slide_from_right" }}
+              />
+              <Stack.Screen
+                name="buds/list"
+                options={{ headerShown: false, animation: "slide_from_right" }}
+              />
+              <Stack.Screen
+                name="buds/invite"
+                options={{ headerShown: false, animation: "slide_from_right" }}
+              />
+              <Stack.Screen
+                name="buds/league"
+                options={{ headerShown: false, animation: "slide_from_right" }}
+              />
             </Stack>
           </QueryProvider>
         </SafeAreaProvider>

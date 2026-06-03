@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
+import { router } from "expo-router";
 import { Colors } from "@/constants/colors";
 import { useUser } from "@/hooks/useAuth";
 import { BrandHeader } from "@/components/BrandLogo";
@@ -207,7 +208,13 @@ export default function BudsScreen() {
               </View>
             </View>
           </View>
-          <Pressable style={styles.inviteButton}>
+          <Pressable
+            style={styles.inviteButton}
+            onPress={() => {
+              Haptics.selectionAsync();
+              router.push("/buds/invite");
+            }}
+          >
             <Text style={styles.inviteText}>Invite</Text>
           </Pressable>
         </View>
@@ -286,7 +293,17 @@ export default function BudsScreen() {
 
         {activeView === "my-buds" && (
           <>
-            <Text style={styles.budsCount}>{followingCount} people you follow</Text>
+            <View style={styles.listHeader}>
+              <Text style={styles.budsCount}>{followingCount} people you follow</Text>
+              <Pressable
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  router.push("/buds/list?type=followers");
+                }}
+              >
+                <Text style={styles.listHeaderLink}>Followers</Text>
+              </Pressable>
+            </View>
             {!isLoading && following.length === 0 && (
               <EmptySocialState
                 icon="users"
@@ -349,8 +366,19 @@ export default function BudsScreen() {
                 A curated feed of financial wins and community highlights activates at 5,000 users. 
                 Help us get there — invite your people.
               </Text>
-              <Pressable style={styles.phase2Cta}>
-                <LinearGradient colors={[Colors.gold, Colors.gold600]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.phase2CtaGrad}>
+              <Pressable
+                style={styles.phase2Cta}
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  router.push("/buds/invite");
+                }}
+              >
+                <LinearGradient
+                  colors={[Colors.gold, Colors.gold600]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.phase2CtaGrad}
+                >
                   <Text style={styles.phase2CtaText}>Invite a Bud</Text>
                 </LinearGradient>
               </Pressable>
@@ -387,13 +415,19 @@ function WealthLeagueCard({ league }: { league: League }) {
   const maxXp = Math.max(1, ...leaders.map((leader) => leader.xp));
 
   return (
-    <View style={styles.leagueCard}>
+    <Pressable
+      style={({ pressed }) => [styles.leagueCard, pressed && styles.leagueCardPressed]}
+      onPress={() => {
+        Haptics.selectionAsync();
+        router.push("/buds/league");
+      }}
+    >
       <View style={styles.leagueHeader}>
         <View style={styles.leagueTitleRow}>
           <View style={styles.leagueIcon}>
             <Icon name="trophy" size={18} color={Colors.gold} strokeWidth={2.4} />
           </View>
-          <View>
+          <View style={styles.leagueTitleTextBlock}>
             <Text style={styles.leagueEyebrow}>WEALTH LEAGUE</Text>
             <Text style={styles.leagueTitle}>{league.tier} standings</Text>
           </View>
@@ -425,7 +459,7 @@ function WealthLeagueCard({ league }: { league: League }) {
           />
         ))}
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -526,10 +560,22 @@ function FeedCard({
   return (
     <View style={styles.feedCard}>
       <View style={styles.feedCardHeader}>
-        <View style={styles.feedAvatar}>
+        <Pressable
+          style={styles.feedAvatar}
+          onPress={() => {
+            Haptics.selectionAsync();
+            router.push(`/buds/profile/${post.user.id}`);
+          }}
+        >
           <Text style={styles.feedAvatarText}>{post.user.initials}</Text>
-        </View>
-        <View style={styles.feedUserInfo}>
+        </Pressable>
+        <Pressable
+          style={styles.feedUserInfo}
+          onPress={() => {
+            Haptics.selectionAsync();
+            router.push(`/buds/profile/${post.user.id}`);
+          }}
+        >
           <View style={styles.feedNameRow}>
             <Text style={styles.feedName}>{post.user.displayName}</Text>
             <View style={styles.feedLevelBadge}>
@@ -540,7 +586,7 @@ function FeedCard({
             <Icon name="flame" size={11} color={Colors.gold} strokeWidth={2.4} />
             <Text style={styles.feedStreak}>{post.user.streak}-day streak · {post.user.leagueTier}</Text>
           </View>
-        </View>
+        </Pressable>
         <Text style={styles.feedTime}>{timeAgo(post.timestamp)}</Text>
       </View>
 
@@ -583,32 +629,42 @@ function BudCard({
   onFollowToggle?: (bud: BudProfile) => void;
 }) {
   return (
-    <View style={styles.budCard}>
-      <View style={styles.budCardAvatar}>
-        <Text style={styles.budCardInitials}>{bud.initials}</Text>
-      </View>
-      <View style={styles.budCardInfo}>
-        <Text style={styles.budCardName}>{bud.displayName}</Text>
-        <View style={styles.budCardStatsRow}>
-          <Text style={styles.budCardStats}>Lv {bud.level} · </Text>
-          <Icon name="flame" size={11} color={Colors.gold} strokeWidth={2.4} />
-          <Text style={styles.budCardStats}> {bud.streak}d · {bud.leagueTier} · {bud.badgeCount} badges</Text>
+    <Pressable
+      style={({ pressed }) => [styles.budCard, pressed && styles.budCardPressed]}
+      onPress={() => {
+        Haptics.selectionAsync();
+        router.push(`/buds/profile/${bud.id}`);
+      }}
+    >
+      <View style={styles.budCardRow}>
+        <View style={styles.budCardAvatar}>
+          <Text style={styles.budCardInitials}>{bud.initials}</Text>
         </View>
+        <View style={styles.budCardInfo}>
+          <Text style={styles.budCardName} numberOfLines={1}>{bud.displayName}</Text>
+          <View style={styles.budCardStatsRow}>
+            <Text style={styles.budCardStats}>Lv {bud.level} · </Text>
+            <Icon name="flame" size={11} color={Colors.gold} strokeWidth={2.4} />
+            <Text style={styles.budCardStats} numberOfLines={1}> {bud.streak}d · {bud.leagueTier} · {bud.badgeCount} badges</Text>
+          </View>
+        </View>
+        {showFollow && (
+          <Pressable
+            accessibilityLabel={bud.isFollowing ? "Following this Bud" : "Follow this Bud"}
+            style={[styles.followButton, bud.isFollowing && styles.followButtonActive]}
+            onPress={(event) => {
+              event.stopPropagation();
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              onFollowToggle?.(bud);
+            }}
+          >
+            <Text style={[styles.followText, bud.isFollowing && styles.followTextActive]}>
+              {bud.isFollowing ? "Following" : "Follow"}
+            </Text>
+          </Pressable>
+        )}
       </View>
-      {showFollow && (
-        <Pressable
-          style={[styles.followButton, bud.isFollowing && styles.followButtonActive]}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            onFollowToggle?.(bud);
-          }}
-        >
-          <Text style={[styles.followText, bud.isFollowing && styles.followTextActive]}>
-            {bud.isFollowing ? "Following" : "Follow"}
-          </Text>
-        </Pressable>
-      )}
-    </View>
+    </Pressable>
   );
 }
 
@@ -659,20 +715,22 @@ const styles = StyleSheet.create({
   privacyNote: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(16,185,129,0.08)", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: "rgba(16,185,129,0.15)" },
   privacyText: { flex: 1, fontSize: 12, color: Colors.emerald, fontWeight: "500", lineHeight: 17 },
   streakInline: { flexDirection: "row", alignItems: "center", gap: 4 },
-  leagueCard: { backgroundColor: Colors.card, borderRadius: 18, padding: 16, gap: 12, borderWidth: 1, borderColor: Colors.border, shadowColor: Colors.navy, shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 3 },
-  leagueHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  leagueTitleRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  leagueCard: { backgroundColor: Colors.card, borderRadius: 18, padding: 20, borderWidth: 1, borderColor: Colors.border, shadowColor: Colors.navy, shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 3 },
+  leagueCardPressed: { opacity: 0.94, transform: [{ scale: 0.99 }] },
+  leagueHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 18 },
+  leagueTitleRow: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1, minWidth: 0 },
+  leagueTitleTextBlock: { flex: 1, minWidth: 0, gap: 4 },
   leagueIcon: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: Colors.greenSurface, borderWidth: 1, borderColor: Colors.greenBorder },
-  leagueEyebrow: { fontSize: 10, color: Colors.gold, fontWeight: "800", letterSpacing: 1.4 },
-  leagueTitle: { fontSize: 17, color: Colors.navy, fontWeight: "800", letterSpacing: 0, marginTop: 2 },
+  leagueEyebrow: { fontSize: 10, color: Colors.gold, fontWeight: "800", letterSpacing: 1.4, lineHeight: 13 },
+  leagueTitle: { fontSize: 17, color: Colors.navy, fontWeight: "800", letterSpacing: 0, lineHeight: 22 },
   rankPill: { minWidth: 46, alignItems: "center", justifyContent: "center", paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999, backgroundColor: Colors.accentAlpha12, borderWidth: 1, borderColor: Colors.accentAlpha30 },
   rankPillText: { fontSize: 13, color: Colors.gold, fontWeight: "900", letterSpacing: 0 },
-  leagueSub: { fontSize: 12, color: Colors.navyMuted, lineHeight: 18 },
-  leagueResetRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingTop: 2 },
+  leagueSub: { fontSize: 12, color: Colors.navyMuted, lineHeight: 21, marginBottom: 18 },
+  leagueResetRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 12, paddingHorizontal: 12, borderRadius: 13, backgroundColor: Colors.navy50, marginBottom: 18 },
   leagueResetText: { fontSize: 12, color: Colors.muted, fontWeight: "700" },
   leagueZoneText: { fontSize: 12, color: Colors.gold, fontWeight: "800" },
-  leagueRows: { gap: 9 },
-  leagueRow: { flexDirection: "row", alignItems: "center", gap: 10, padding: 10, borderRadius: 14, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
+  leagueRows: { gap: 12 },
+  leagueRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 13, paddingHorizontal: 12, borderRadius: 14, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
   leagueRowCurrent: { backgroundColor: Colors.greenSurface, borderColor: Colors.accentAlpha45 },
   leagueRankBox: { width: 28, height: 28, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: Colors.card },
   leagueRankText: { fontSize: 12, color: Colors.navy, fontWeight: "900" },
@@ -712,18 +770,22 @@ const styles = StyleSheet.create({
   fistBumpCountActive: { color: Colors.gold },
   reportButton: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 999 },
   reportText: { fontSize: 12, color: Colors.muted, fontWeight: "700" },
-  budsCount: { fontSize: 13, color: Colors.muted, fontWeight: "500", marginBottom: 4 },
-  budCard: { flexDirection: "row", alignItems: "center", backgroundColor: Colors.card, borderRadius: 14, padding: 14, gap: 12, shadowColor: Colors.navy, shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
-  budCardAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.navy50, alignItems: "center", justifyContent: "center" },
+  listHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
+  listHeaderLink: { fontSize: 13, color: Colors.gold, fontWeight: "800" },
+  budsCount: { fontSize: 13, color: Colors.muted, fontWeight: "500" },
+  budCard: { backgroundColor: Colors.card, borderRadius: 14, padding: 14, shadowColor: Colors.navy, shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
+  budCardPressed: { backgroundColor: Colors.navy50, transform: [{ scale: 0.99 }] },
+  budCardRow: { flexDirection: "row", alignItems: "center" },
+  budCardAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.navy50, alignItems: "center", justifyContent: "center", marginRight: 12 },
   budCardInitials: { fontSize: 14, fontWeight: "700", color: Colors.navy },
-  budCardInfo: { flex: 1 },
+  budCardInfo: { flex: 1, minWidth: 0, paddingRight: 6 },
   budCardName: { fontSize: 14, fontWeight: "700", color: Colors.navy, marginBottom: 3 },
-  budCardStatsRow: { flexDirection: "row", alignItems: "center" },
-  budCardStats: { fontSize: 11, color: Colors.muted },
-  followButton: { backgroundColor: Colors.gold, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7 },
-  followButtonActive: { backgroundColor: Colors.greenSurface, borderWidth: 1.5, borderColor: Colors.gold },
-  followText: { fontSize: 13, fontWeight: "600", color: Colors.onGreen },
-  followTextActive: { color: Colors.gold },
+  budCardStatsRow: { flexDirection: "row", alignItems: "center", maxWidth: "100%" },
+  budCardStats: { fontSize: 11, color: Colors.muted, flexShrink: 1 },
+  followButton: { alignItems: "center", justifyContent: "center", height: 32, borderRadius: 999, paddingHorizontal: 14, marginLeft: 10, backgroundColor: Colors.accentAlpha10, borderWidth: 1, borderColor: Colors.accentAlpha40 },
+  followButtonActive: { backgroundColor: "transparent", borderColor: Colors.border },
+  followText: { fontSize: 13, fontWeight: "800", color: Colors.gold, letterSpacing: 0.2 },
+  followTextActive: { color: Colors.muted },
   searchContainer: { marginBottom: 16 },
   searchInput: { backgroundColor: Colors.card, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15, color: Colors.navy, borderWidth: 1, borderColor: Colors.border },
   discoverSectionTitle: { fontSize: 16, fontWeight: "700", color: Colors.navy, marginBottom: 4 },

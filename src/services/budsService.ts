@@ -79,7 +79,22 @@ export const budsService = {
 
   getProfile: async (userId: string): Promise<BudProfile> => {
     if (IS_MOCK) {
-      return MOCK_BUDS_PROFILES.find((b) => b.id === userId) ?? MOCK_BUDS_PROFILES[0];
+      const found =
+        MOCK_BUDS_PROFILES.find((b) => b.id === userId) ??
+        SUGGESTED_BUDS.find((b) => b.id === userId);
+
+      return (
+        found ?? {
+          id: userId,
+          displayName: "Budget Buddy member",
+          initials: "BB",
+          level: 1,
+          streak: 0,
+          leagueTier: "Bronze",
+          badgeCount: 0,
+          isFollowing: false,
+        }
+      );
     }
     return api.get<BudProfile>(ENDPOINTS.BUDS.PROFILE(userId));
   },
