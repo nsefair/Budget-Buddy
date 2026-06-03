@@ -389,15 +389,17 @@ function ActionButton({
     <Pressable
       disabled={disabled}
       style={({ pressed }) => [
-        styles.actionButton,
+        styles.actionButtonWrap,
         disabled && styles.actionButtonDisabled,
         pressed && !disabled && styles.actionButtonPressed,
       ]}
       onPress={onPress}
     >
-      <View style={styles.actionButtonInner}>
-        <Icon name={icon} size={17} color={Colors.onAccent} strokeWidth={2.5} />
-        <Text style={styles.actionButtonText}>{label}</Text>
+      <View style={styles.actionButton}>
+        <View style={styles.actionButtonInner}>
+          <Icon name={icon} size={17} color={Colors.onAccent} strokeWidth={2.5} />
+          <Text style={styles.actionButtonText}>{label}</Text>
+        </View>
       </View>
     </Pressable>
   );
@@ -550,17 +552,20 @@ const styles = StyleSheet.create({
     borderColor: Colors.greenBorder,
   },
   infoText: { flex: 1, fontSize: 12, fontWeight: "700", color: Colors.navy, lineHeight: 18 },
+  actionButtonWrap: {
+    borderRadius: 18,
+    shadowColor: Colors.accent,
+    shadowOpacity: 0.3,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
   actionButton: {
     minHeight: 56,
     borderRadius: 18,
     backgroundColor: Colors.accent,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: Colors.accent,
-    shadowOpacity: 0.3,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
   },
   actionButtonInner: { flexDirection: "row", alignItems: "center", gap: 9 },
   actionButtonPressed: { opacity: 0.9, transform: [{ scale: 0.99 }] },
