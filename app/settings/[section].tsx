@@ -20,6 +20,7 @@ import { Colors } from "@/constants/colors";
 import { BrandHeader } from "@/components/BrandLogo";
 import { Icon, type IconName } from "@/components/Icon";
 import { useAuthActions, useUser } from "@/hooks/useAuth";
+import { usePlaidConnection } from "@/hooks/usePlaidConnection";
 import { goalsService } from "@/services/goalsService";
 import type { Goal, GoalsSummary } from "@/mock/goals";
 import { formatCurrency, secureLog } from "@/utils/security";
@@ -65,7 +66,7 @@ const SCREEN_META: Record<
   "bank-connections": {
     eyebrow: "PLAID",
     title: "Bank connections",
-    subtitle: "The front-end home for linked accounts before Plaid is switched on.",
+    subtitle: "Connect and review the accounts Bud can use for private money context.",
     icon: "building",
   },
   subscription: {
@@ -90,8 +91,10 @@ const SCREEN_META: Record<
 
 export default function SettingsDetailScreen() {
   const insets = useSafeAreaInsets();
-  const { screen } = useLocalSearchParams<{ screen?: string }>();
-  const key = normaliseScreen(screen);
+  // NOTE: the dynamic segment is named [section] because "screen" is a
+  // reserved React Navigation param and never reaches useLocalSearchParams.
+  const { section } = useLocalSearchParams<{ section?: string }>();
+  const key = normaliseScreen(section);
   const meta = SCREEN_META[key];
 
   return (
@@ -402,22 +405,111 @@ function PrivacyBody() {
 }
 
 function BankConnectionsBody() {
+  const {
+    status,
+    loadingStatus,
+    linking,
+    readyForLink,
+    hasConnections,
+    startLink,
+  } = usePlaidConnection({
+    source: "settings.plaid",
+    successAlert: {
+      title: "Bank linked",
+      message: "Your Sandbox institution is connected.",
+    },
+  });
+
   return (
     <View style={styles.stack}>
+      {loadingStatus ? (
+        <View style={styles.loadingCard}>
+          <ActivityIndicator color={Colors.accent} />
+          <Text style={styles.loadingText}>Checking Plaid setup...</Text>
+        </View>
+      ) : (
+        <InfoCard
+          icon={readyForLink ? "shield-check" : "lock"}
+          title={readyForLink ? "Sandbox link is ready" : "Plaid setup needed"}
+          body={
+            status?.message ??
+            "Connect a bank here and Bud can use read-only account context inside private app surfaces."
+          }
+        />
+      )}
+
       <InfoCard
-        icon="lock"
-        title="Plaid connection not started"
-        body="This screen is ready for linked banks, cards, and investment accounts. Until Plaid is configured, no bank data is pulled here."
+        icon="eye"
+        title="Private to you"
+        body="Buds never see balances, transactions, income, debts, account names, or dollar amounts."
       />
-      <ConnectionRow title="Checking and savings" body="Budget, Today, goals, and net worth input." />
-      <ConnectionRow title="Credit cards and loans" body="Debt, recurring bills, and net worth input." />
-      <ConnectionRow title="Investment accounts" body="Read-only Invest and net worth input." />
+
+      <View style={styles.stackTight}>
+        {hasConnections ? (
+          status?.connections.map((connection) => (
+            <View key={connection.id} style={styles.connectionCard}>
+              <View style={styles.connectionHeader}>
+                <View style={styles.connectionBankIcon}>
+                  <Icon name="building" size={17} color={Colors.accent} strokeWidth={2.4} />
+                </View>
+                <View style={styles.flex}>
+                  <Text style={styles.connectionTitle}>
+                    {connection.institutionName || "Linked institution"}
+                  </Text>
+                  <Text style={styles.rowBody}>
+                    {connection.accountCount} linked account{connection.accountCount === 1 ? "" : "s"}
+                  </Text>
+                </View>
+                <Text style={styles.linkedText}>{connection.status}</Text>
+              </View>
+              {connection.accounts.map((account) => (
+                <ConnectionRow
+                  key={account.id}
+                  title={account.name}
+                  body={[account.subtype || account.type, account.mask ? `ending ${account.mask}` : ""]
+                    .filter(Boolean)
+                    .join(" / ")}
+                  status={account.active ? "Linked" : "Inactive"}
+                  active={account.active}
+                />
+              ))}
+            </View>
+          ))
+        ) : (
+          <>
+            <ConnectionRow
+              title="Checking and savings"
+              body="Budget, Today, goals, and net worth input."
+              status={readyForLink ? "Ready" : "Pending"}
+              active={readyForLink}
+            />
+            <ConnectionRow
+              title="Credit cards and loans"
+              body="Debt, recurring bills, and net worth input."
+            />
+            <ConnectionRow
+              title="Investment accounts"
+              body="Read-only Invest and net worth input."
+            />
+          </>
+        )}
+      </View>
+
       <ActionButton
-        label="Connect account later"
-        icon="building"
-        onPress={() =>
-          Alert.alert("Plaid is next", "Bank linking stays off until the Plaid setup starts.")
+        label={
+          linking
+            ? "Opening Plaid..."
+            : readyForLink
+              ? hasConnections
+                ? "Connect another bank"
+                : "Connect a bank"
+              : "View Plaid setup"
         }
+        icon="building"
+        onPress={() => {
+          startLink();
+        }}
+        disabled={linking || loadingStatus}
       />
     </View>
   );
@@ -583,15 +675,25 @@ function ToggleRow({
   );
 }
 
-function ConnectionRow({ title, body }: { title: string; body: string }) {
+function ConnectionRow({
+  title,
+  body,
+  status = "Pending",
+  active = false,
+}: {
+  title: string;
+  body: string;
+  status?: string;
+  active?: boolean;
+}) {
   return (
     <View style={styles.connectionRow}>
-      <View style={styles.connectionDot} />
+      <View style={[styles.connectionDot, active && styles.connectionDotActive]} />
       <View style={styles.flex}>
         <Text style={styles.rowTitle}>{title}</Text>
         <Text style={styles.rowBody}>{body}</Text>
       </View>
-      <Text style={styles.pendingText}>Pending</Text>
+      <Text style={[styles.pendingText, active && styles.linkedText]}>{status}</Text>
     </View>
   );
 }
@@ -678,8 +780,17 @@ function ActionButton({
       ]}
       onPress={onPress}
     >
-      <Icon name={icon} size={17} color={Colors.onAccent} strokeWidth={2.5} />
-      <Text style={styles.actionButtonText}>{label}</Text>
+      <Icon
+        name={icon}
+        size={17}
+        color={disabled ? Colors.muted : Colors.onAccent}
+        strokeWidth={2.5}
+      />
+      <Text
+        style={[styles.actionButtonText, disabled && styles.actionButtonTextDisabled]}
+      >
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -867,6 +978,32 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
+  connectionCard: {
+    gap: 10,
+    padding: 12,
+    borderRadius: 18,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  connectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 2,
+    paddingBottom: 2,
+  },
+  connectionBankIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.greenSurface,
+    borderWidth: 1,
+    borderColor: Colors.greenBorder,
+  },
+  connectionTitle: { fontSize: 15, fontWeight: "900", color: Colors.navy },
   connectionDot: {
     width: 12,
     height: 12,
@@ -875,7 +1012,9 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: Colors.accent,
   },
-  pendingText: { fontSize: 11, fontWeight: "900", color: Colors.accent },
+  connectionDotActive: { backgroundColor: Colors.accent },
+  pendingText: { fontSize: 11, fontWeight: "900", color: Colors.muted },
+  linkedText: { fontSize: 11, fontWeight: "900", color: Colors.accent },
   billingToggle: {
     flexDirection: "row",
     padding: 4,
@@ -946,6 +1085,13 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   actionButtonPressed: { opacity: 0.9, transform: [{ scale: 0.99 }] },
-  actionButtonDisabled: { opacity: 0.45 },
+  // Disabled uses an explicit surface instead of opacity so the button stays
+  // visible in dark mode (faded green + near-black label vanished on black).
+  actionButtonDisabled: {
+    backgroundColor: Colors.navy100,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
   actionButtonText: { fontSize: 15, fontWeight: "900", color: Colors.onAccent },
+  actionButtonTextDisabled: { color: Colors.muted },
 });

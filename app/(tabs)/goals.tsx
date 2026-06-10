@@ -874,7 +874,11 @@ function GoalCreationSheet({
             disabled={isSaving}
           >
             <LinearGradient
-              colors={[Colors.gold, Colors.gold600]}
+              colors={
+                !canContinue && !isSaving
+                  ? [Colors.navy100, Colors.navy100]
+                  : [Colors.gold, Colors.gold600]
+              }
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={styles.sheetPrimaryGrad}
@@ -882,7 +886,12 @@ function GoalCreationSheet({
               {isSaving ? (
                 <ActivityIndicator color={Colors.onAccent} />
               ) : (
-                <Text style={styles.sheetPrimaryText}>
+                <Text
+                  style={[
+                    styles.sheetPrimaryText,
+                    !canContinue && styles.sheetPrimaryTextDisabled,
+                  ]}
+                >
                   {step === "review"
                     ? "Create goal"
                     : step === "success"
@@ -1488,8 +1497,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 5 },
     elevation: 6,
   },
+  // Explicit disabled surface; opacity-faded gradient was unreadable in dark mode.
   sheetPrimaryDisabled: {
-    opacity: 0.55,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   sheetPrimaryGrad: {
     minHeight: 54,
@@ -1502,4 +1513,5 @@ const styles = StyleSheet.create({
     color: Colors.onAccent,
     letterSpacing: 0,
   },
+  sheetPrimaryTextDisabled: { color: Colors.muted },
 });

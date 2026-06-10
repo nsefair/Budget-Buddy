@@ -9,7 +9,6 @@
  * Backend integration map (when it's ready):
  *   submitProfile  → POST   ENDPOINTS.USER.UPDATE_PROFILE
  *   selectGoals    → POST   ENDPOINTS.USER.ONBOARDING (partial)
- *   connectBank    → POST   ENDPOINTS.PLAID.LINK_TOKEN + EXCHANGE
  *   subscribe      → POST   ENDPOINTS.PAYMENTS.SUBSCRIBE
  *   createGoal     → POST   ENDPOINTS.GOALS.CREATE
  *   suggestQuest   → GET    ENDPOINTS.QUESTS.ACTIVE  (server picks first)
@@ -200,24 +199,6 @@ export const onboardingService = {
     }
 
     return firstQuestForGoal(primary);
-  },
-
-  /**
-   * Triggers the Plaid Link flow.
-   * In production: get a link_token from /plaid/link-token, then open the
-   * Plaid Link SDK, then exchange the public_token via /plaid/exchange.
-   * In mock: pretend it succeeded after a short pause.
-   */
-  connectBank: async (): Promise<{ connected: boolean }> => {
-    if (IS_MOCK) {
-      await fakeDelay(1200);
-      return { connected: true };
-    }
-    const linkToken = await api.post<{ link_token: string }>(ENDPOINTS.PLAID.LINK_TOKEN);
-    // The actual Plaid Link SDK flow happens in the screen — see StepBank.
-    // After exchange:
-    // await api.post(ENDPOINTS.PLAID.EXCHANGE, { public_token });
-    return { connected: !!linkToken.link_token };
   },
 
   /**

@@ -1,8 +1,9 @@
 /**
- * Account step — creates the login credentials for the profile we just built.
+ * Account step — creates the login credentials for the profile we are building.
  *
  * This keeps sign-up inside onboarding instead of forcing a cold register
  * screen before the user understands what Budget Buddy is doing for them.
+ * It also gives Plaid an authenticated user to attach the bank connection to.
  */
 
 import React from "react";
@@ -39,11 +40,11 @@ export function StepAccount({
   return (
     <View style={{ gap: 22 }}>
       <View>
-        <BudBubble label="Almost there" />
+        <BudBubble label="Quick save" />
         <Headline>Save this setup.</Headline>
         <Subheadline>
-          Create your login so Bud can keep this profile, your first goal, and
-          your streak tied to you.
+          Create your login so your bank connection, first goal, and streak stay
+          tied to you.
         </Subheadline>
       </View>
 

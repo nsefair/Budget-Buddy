@@ -7,11 +7,11 @@
  *   1. Profile             — name + age + life situation
  *   2. Goals               — pick 1–3 goal kinds
  *   3. Why                 — emotional anchor
- *   4. Bank                — Plaid connect (skippable)
- *   5. Pricing             — tier select + monthly/annual + lifetime
- *   6. First Goal          — concrete target + deadline + reason
- *   7. First Quest + Streak — Bud assigns + flame ignites
- *   8. Account             — create credentials when this is a new user
+ *   4. Account             — create credentials before Plaid when this is a new user
+ *   5. Bank                — Plaid connect (skippable)
+ *   6. Pricing             — tier select + monthly/annual + lifetime
+ *   7. First Goal          — concrete target + deadline + reason
+ *   8. First Quest + Streak — Bud assigns + flame ignites
  *   9. Buds Share          — opt-in starting moment
  *
  * Architecture:
@@ -79,21 +79,23 @@ export default function OnboardingScreen() {
   const setStep = useOnboardingStore((s) => s.setStep);
 
   const [submitting, setSubmitting] = useState(false);
-  const needsAccount = !user;
+  const [creatingAccount, setCreatingAccount] = useState(false);
+  const [requiresAccount] = useState(() => !user);
+  const [accountCreated, setAccountCreated] = useState(Boolean(user));
   const steps = useMemo<StepKey[]>(
     () => [
       "welcome",
       "profile",
       "goals",
       "why",
+      ...(requiresAccount ? (["account"] as const) : []),
       "bank",
       "pricing",
       "firstGoal",
       "firstQuest",
-      ...(needsAccount ? (["account"] as const) : []),
       "share",
     ],
-    [needsAccount],
+    [requiresAccount],
   );
   const currentStep = steps[step] ?? "welcome";
 
@@ -166,6 +168,49 @@ export default function OnboardingScreen() {
     setStep(step - 1);
   };
 
+  const createAccount = async (): Promise<boolean> => {
+    if (accountCreated || user) {
+      setAccountCreated(true);
+      return true;
+    }
+    if (
+      !emailPattern.test(draft.accountEmail.trim()) ||
+      draft.accountPassword.length < 8 ||
+      draft.accountPassword !== draft.accountPasswordConfirm
+    ) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return false;
+    }
+
+    setCreatingAccount(true);
+    try {
+      await register({
+        firstName: draft.firstName.trim(),
+        lastName: "",
+        email: draft.accountEmail.trim().toLowerCase(),
+        password: draft.accountPassword,
+      });
+      updateUser({ firstName: draft.firstName.trim() });
+      setAccountCreated(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      return true;
+    } catch {
+      Alert.alert(
+        "Couldn't create your account",
+        "Check the email and password, then try again. Your setup is still here."
+      );
+      return false;
+    } finally {
+      setCreatingAccount(false);
+    }
+  };
+
+  const handleAccountContinue = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const ready = await createAccount();
+    if (ready) goNext();
+  };
+
   // Resolve the final "why" string + icon from the user's selection.
   const resolveWhy = (): { text: string; icon: IconName } => {
     if (draft.whyId === "custom") {
@@ -187,13 +232,12 @@ export default function OnboardingScreen() {
       const finalDraft = { ...draft, whyText: text, whyIcon: icon };
       patch({ whyText: text, whyIcon: icon });
 
-      if (!user) {
-        await register({
-          firstName: finalDraft.firstName.trim(),
-          lastName: "",
-          email: finalDraft.accountEmail.trim().toLowerCase(),
-          password: finalDraft.accountPassword,
-        });
+      if (requiresAccount && !accountCreated) {
+        const ready = await createAccount();
+        if (!ready) {
+          setSubmitting(false);
+          return;
+        }
       }
 
       // Send everything to the backend in one atomic call.
@@ -237,6 +281,16 @@ export default function OnboardingScreen() {
             <SecondaryButton label="I'll connect later" onPress={goNext} />
           )}
         </>
+      );
+    }
+    if (currentStep === "account") {
+      return (
+        <PrimaryButton
+          label={accountCreated ? "Continue" : "Create account"}
+          onPress={handleAccountContinue}
+          disabled={!canAdvance}
+          loading={creatingAccount}
+        />
       );
     }
     if (currentStep === "firstQuest") {

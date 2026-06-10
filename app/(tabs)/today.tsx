@@ -18,7 +18,7 @@
  * real backend is transparent (controlled by EXPO_PUBLIC_USE_MOCK).
  */
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
   Pressable,
@@ -38,13 +38,15 @@ import { useUser } from "@/hooks/useAuth";
 import { BrandHeader, BrandLogo } from "@/components/BrandLogo";
 import { Icon } from "@/components/Icon";
 import {
-  MOCK_TRANSACTIONS,
-  MOCK_DAILY_SNAPSHOT,
   MOCK_UPCOMING_BILLS,
+  type AccountSummary,
+  type Transaction,
 } from "@/mock/budget";
 import { MOCK_BUD_GREETING } from "@/mock/bud";
 import { MOCK_LEAGUE } from "@/mock/quests";
+import { budgetService, linkedAccountNetWorth } from "@/services/budgetService";
 import { goalsService } from "@/services/goalsService";
+import { todayService, type TodaySummary } from "@/services/todayService";
 import type { Goal } from "@/mock/goals";
 import { formatCurrency, secureLog } from "@/utils/security";
 import { CountUp, FadeInUp } from "@/animations";
@@ -62,6 +64,19 @@ const SPENDING_EMOJI: Record<string, string> = {
   education: "📚",
 };
 
+const EMPTY_TODAY_SUMMARY: TodaySummary = {
+  totalSpent: 0,
+  dailyBudget: 0,
+  topCategoryName: "",
+  topCategoryAmount: 0,
+};
+
+function currentMonthId() {
+  const now = new Date();
+  const month = `${now.getMonth() + 1}`.padStart(2, "0");
+  return `${now.getFullYear()}-${month}`;
+}
+
 export default function TodayScreen() {
   const insets = useSafeAreaInsets();
   const user = useUser();
@@ -70,7 +85,55 @@ export default function TodayScreen() {
   const lift = useRef(new Animated.Value(16)).current;
 
   const [activeGoal, setActiveGoal] = useState<Goal | null>(null);
+  const [summary, setSummary] = useState<TodaySummary>(EMPTY_TODAY_SUMMARY);
+  const [recentTxns, setRecentTxns] = useState<Transaction[]>([]);
+  const [linkedAccounts, setLinkedAccounts] = useState<AccountSummary[]>([]);
+  const [accountsLoaded, setAccountsLoaded] = useState(false);
+  const [savingsRate, setSavingsRate] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+
+  const loadActiveGoal = useCallback(async () => {
+    try {
+      const { goals } = await goalsService.list();
+      const sorted = [...goals].sort(
+        (a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime()
+      );
+      setActiveGoal(sorted[0] ?? null);
+    } catch (e) {
+      secureLog.error("today.goals failed", e);
+    }
+  }, []);
+
+  const loadMoneySnapshot = useCallback(async () => {
+    try {
+      const nextSummary = await todayService.getSummary();
+      setSummary(nextSummary);
+    } catch (error) {
+      secureLog.warn("today.summary failed", error);
+    }
+
+    try {
+      const nextTransactions = await todayService.getRecentTransactions();
+      setRecentTxns(nextTransactions);
+    } catch (error) {
+      secureLog.warn("today.transactions failed", error);
+    }
+
+    try {
+      const nextAccounts = await budgetService.getAccounts();
+      setLinkedAccounts(nextAccounts);
+      setAccountsLoaded(true);
+    } catch (error) {
+      secureLog.warn("today.accounts failed", error);
+    }
+
+    try {
+      const currentOverview = await budgetService.getOverview(currentMonthId());
+      setSavingsRate(Math.max(0, Math.round(currentOverview.savingsRate)));
+    } catch (error) {
+      secureLog.warn("today.overview failed", error);
+    }
+  }, []);
 
   useEffect(() => {
     Animated.parallel([
@@ -80,25 +143,14 @@ export default function TodayScreen() {
   }, [fade, lift]);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const { goals } = await goalsService.list();
-        // Pick the goal with the smallest deadline gap as the "most active"
-        const sorted = [...goals].sort(
-          (a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime()
-        );
-        setActiveGoal(sorted[0] ?? null);
-      } catch (e) {
-        secureLog.error("today.goals failed", e);
-      }
-    })();
-  }, []);
+    loadActiveGoal();
+    loadMoneySnapshot();
+  }, [loadActiveGoal, loadMoneySnapshot]);
 
   const onRefresh = async () => {
     setRefreshing(true);
     try {
-      const { goals } = await goalsService.list();
-      setActiveGoal(goals[0] ?? null);
+      await Promise.all([loadActiveGoal(), loadMoneySnapshot()]);
     } finally {
       setRefreshing(false);
     }
@@ -107,7 +159,9 @@ export default function TodayScreen() {
   if (!user) return null;
 
   const greeting = MOCK_BUD_GREETING(user.firstName, user.streak);
-  const recentTxns = MOCK_TRANSACTIONS.slice(0, 4);
+  const linkedNetWorth = accountsLoaded
+    ? linkedAccountNetWorth(linkedAccounts)
+    : user.netWorth;
 
   return (
     <View style={styles.container}>
@@ -173,13 +227,13 @@ export default function TodayScreen() {
           {/* Stats Card */}
           <FadeInUp delay={60}>
             <StatsCard
-              netWorth={user.netWorth}
-              netWorthChange={500} // backend will provide; placeholder until then
+              netWorth={linkedNetWorth}
+              accountCount={linkedAccounts.length}
               healthScore={user.financialHealthScore || 620}
               level={user.level}
               streak={user.streak}
               xp={user.xp}
-              savingsRate={30}
+              savingsRate={savingsRate}
             />
           </FadeInUp>
 
@@ -190,6 +244,7 @@ export default function TodayScreen() {
           {/* Daily Spend Snapshot */}
           <FadeInUp delay={220}>
             <DailySpendCard
+              summary={summary}
               onPress={() => {
                 Haptics.selectionAsync();
                 router.push("/(tabs)/budget");
@@ -209,6 +264,11 @@ export default function TodayScreen() {
             onAction={() => router.push("/(tabs)/budget")}
           />
           <View style={styles.txnCard}>
+            {recentTxns.length === 0 && (
+              <Text style={styles.emptyTransactions}>
+                No synced spending transactions yet.
+              </Text>
+            )}
             {recentTxns.map((t, i) => (
               <React.Fragment key={t.id}>
                 <View style={styles.txnRow}>
@@ -276,7 +336,7 @@ function WhyCard({ firstName, why }: { firstName: string; why: string }) {
 
 function StatsCard({
   netWorth,
-  netWorthChange,
+  accountCount,
   healthScore,
   level,
   streak,
@@ -284,7 +344,7 @@ function StatsCard({
   savingsRate,
 }: {
   netWorth: number;
-  netWorthChange: number;
+  accountCount: number;
   healthScore: number;
   level: number;
   streak: number;
@@ -314,9 +374,11 @@ function StatsCard({
             accessibilityLabel={`Net worth ${formatCurrency(netWorth)}`}
           />
           <View style={styles.netWorthChange}>
-            <Icon name="trending-up" size={11} color={Colors.emerald} />
+            <Icon name="building" size={11} color={Colors.emerald} />
             <Text style={styles.netWorthChangeText}>
-              {formatCurrency(netWorthChange, { sign: true })} this month
+              {accountCount > 0
+                ? `${accountCount} linked ${accountCount === 1 ? "account" : "accounts"}`
+                : "No linked accounts yet"}
             </Text>
           </View>
         </View>
@@ -416,13 +478,23 @@ function LeagueSnapshotCard() {
 
 // ─── Daily spend ────────────────────────────────────────────────────────────
 
-function DailySpendCard({ onPress }: { onPress: () => void }) {
-  const snap = MOCK_DAILY_SNAPSHOT;
-  const pct = Math.min(100, (snap.spentToday / snap.dailyBudget) * 100);
+function DailySpendCard({
+  summary,
+  onPress,
+}: {
+  summary: TodaySummary;
+  onPress: () => void;
+}) {
+  const dailyBudget = Math.max(0, summary.dailyBudget);
+  const pct = dailyBudget > 0 ? Math.min(100, (summary.totalSpent / dailyBudget) * 100) : 0;
   const status =
     pct >= 100 ? { label: "Over today's limit", color: Colors.coral }
     : pct >= 80 ? { label: "Approaching limit", color: Colors.amber }
     : { label: "On track", color: Colors.emerald };
+  const topSpendLabel =
+    summary.topCategoryAmount > 0 && summary.topCategoryName
+      ? `${summary.topCategoryName} · ${formatCurrency(summary.topCategoryAmount)}`
+      : "No spending synced today";
 
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.dailyCard, pressed && { opacity: 0.94 }]}>
@@ -434,17 +506,15 @@ function DailySpendCard({ onPress }: { onPress: () => void }) {
         </View>
       </View>
       <Text style={styles.dailyAmount}>
-        {formatCurrency(snap.spentToday)}
-        <Text style={styles.dailyAmountLight}> / {formatCurrency(snap.dailyBudget)}</Text>
+        {formatCurrency(summary.totalSpent)}
+        <Text style={styles.dailyAmountLight}> / {formatCurrency(dailyBudget)}</Text>
       </Text>
       <View style={styles.dailyTrack}>
         <View style={[styles.dailyFill, { width: `${pct}%`, backgroundColor: status.color }]} />
       </View>
       <View style={styles.merchantRow}>
         <Text style={styles.merchantLabel}>Top spend</Text>
-        <Text style={styles.merchantValue}>
-          {snap.topMerchant} · {formatCurrency(snap.topMerchantAmount)}
-        </Text>
+        <Text style={styles.merchantValue}>{topSpendLabel}</Text>
       </View>
     </Pressable>
   );
@@ -922,6 +992,14 @@ const styles = StyleSheet.create({
   txnCategory: { fontSize: 11, color: Colors.muted, marginTop: 1 },
   txnAmount: { fontSize: 14, fontWeight: "700", color: Colors.navy },
   txnDivider: { height: 1, backgroundColor: Colors.border, marginHorizontal: 14 },
+  emptyTransactions: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    textAlign: "center",
+    fontSize: 13,
+    fontWeight: "700",
+    color: Colors.muted,
+  },
 
   // Goal card
   goalCard: {

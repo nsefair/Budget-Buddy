@@ -9,9 +9,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"budget-buddy/backend/internal/auth"
+	"budget-buddy/backend/internal/budget"
 	"budget-buddy/backend/internal/buds"
 	"budget-buddy/backend/internal/config"
 	"budget-buddy/backend/internal/goals"
+	"budget-buddy/backend/internal/plaid"
 	"budget-buddy/backend/internal/quests"
 	"budget-buddy/backend/internal/respond"
 )
@@ -27,6 +29,8 @@ func New(cfg config.Config, logger *slog.Logger, db *pgxpool.Pool) *http.Server 
 	auth.RegisterRoutes(mux, cfg.APIBasePath, authHandler)
 	buds.RegisterRoutes(mux, cfg.APIBasePath, db, authHandler.RequireAuth)
 	goals.RegisterRoutes(mux, cfg.APIBasePath, db, authHandler.RequireAuth)
+	budget.RegisterRoutes(mux, cfg.APIBasePath, db, authHandler.RequireAuth)
+	plaid.RegisterRoutes(mux, cfg.APIBasePath, db, cfg, authHandler.RequireAuth)
 	quests.RegisterRoutes(mux, cfg.APIBasePath)
 
 	handler := recoverer(logger)(requestLogger(logger)(cors(cfg)(mux)))

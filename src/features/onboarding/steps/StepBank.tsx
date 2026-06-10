@@ -5,11 +5,10 @@
  * Plaid is the engine — but onboarding must never feel mandatory or scary.
  * Users can skip and connect later (CTA persists across the app).
  *
- * The actual Plaid Link SDK call lives in onboardingService.connectBank().
- * This screen only triggers it and reflects state.
+ * The native Plaid Link flow is shared with Settings via usePlaidConnection.
  */
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -17,10 +16,9 @@ import {
   Text,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import { BudBubble } from "../components/BudBubble";
 import { Headline, Subheadline } from "../components/Headline";
-import { onboardingService } from "@/services/onboardingService";
+import { usePlaidConnection } from "@/hooks/usePlaidConnection";
 import { Colors } from "@/constants/colors";
 import { Icon, type IconName } from "@/components/Icon";
 
@@ -30,26 +28,44 @@ interface Props {
 }
 
 export function StepBank({ bankConnected, onConnected }: Props) {
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const {
+    status,
+    loadingStatus,
+    linking,
+    readyForLink,
+    hasConnections,
+    startLink,
+  } = usePlaidConnection({
+    source: "onboarding.plaid",
+    onConnected: () => onConnected(),
+  });
+
+  useEffect(() => {
+    if (!bankConnected && hasConnections) {
+      onConnected();
+    }
+  }, [bankConnected, hasConnections, onConnected]);
 
   const handleConnect = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setLoading(true);
     setError(null);
-    try {
-      const { connected } = await onboardingService.connectBank();
-      if (connected) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        onConnected();
-      } else {
-        setError("Bud couldn't reach your bank. We can try again any time.");
-      }
-    } catch {
-      setError("Connection didn't go through. We can try again any time.");
-    } finally {
-      setLoading(false);
+    const outcome = await startLink();
+    if (outcome.connected) {
+      return;
     }
+    if (outcome.reason === "closed") {
+      setError("No rush. You can try again here or connect later.");
+      return;
+    }
+    if (outcome.reason === "not-configured") {
+      setError("Plaid needs the local backend setup before this can open.");
+      return;
+    }
+    if (outcome.reason === "sdk-unavailable") {
+      setError("Use the Expo development build to open Plaid Link.");
+      return;
+    }
+    setError("Connection didn't go through. We can try again any time.");
   };
 
   return (
@@ -61,6 +77,34 @@ export function StepBank({ bankConnected, onConnected }: Props) {
         You stay in control — read-only, encrypted, secured by Plaid.
       </Subheadline>
 
+      <View style={styles.statusCard}>
+        <View style={styles.statusIcon}>
+          {loadingStatus ? (
+            <ActivityIndicator color={Colors.gold} />
+          ) : (
+            <Icon
+              name={readyForLink || bankConnected ? "shield-check" : "lock"}
+              size={17}
+              color={Colors.gold}
+              strokeWidth={2.5}
+            />
+          )}
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.statusTitle}>
+            {bankConnected || hasConnections
+              ? "Bank connection saved"
+              : readyForLink
+                ? "Sandbox link is ready"
+                : "Plaid setup needed"}
+          </Text>
+          <Text style={styles.statusText}>
+            {status?.message ??
+              "You'll connect through Plaid, then Budget Buddy saves only the read-only connection."}
+          </Text>
+        </View>
+      </View>
+
       {/* Trust strip */}
       <View style={styles.trustCard}>
         <TrustRow icon="lock" text="Bank-level encryption — your credentials never touch our servers." />
@@ -69,7 +113,7 @@ export function StepBank({ bankConnected, onConnected }: Props) {
       </View>
 
       {/* Connect / connected state */}
-      {bankConnected ? (
+      {bankConnected || hasConnections ? (
         <View style={styles.successCard}>
           <View style={styles.successCheck}>
             <Icon name="check" size={18} color={Colors.onGreen} strokeWidth={3} />
@@ -84,22 +128,24 @@ export function StepBank({ bankConnected, onConnected }: Props) {
       ) : (
         <Pressable
           onPress={handleConnect}
-          disabled={loading}
+          disabled={linking || loadingStatus}
           style={({ pressed }) => [
             styles.connectBtn,
-            loading && styles.connectBtnLoading,
-            pressed && !loading && { opacity: 0.85 },
+            (linking || loadingStatus) && styles.connectBtnLoading,
+            pressed && !linking && !loadingStatus && { opacity: 0.85 },
           ]}
         >
-          {loading ? (
+          {linking || loadingStatus ? (
             <>
               <ActivityIndicator color={Colors.gold} />
-              <Text style={styles.connectLoadingText}>Reaching your bank…</Text>
+              <Text style={styles.connectLoadingText}>
+                {linking ? "Opening Plaid..." : "Checking setup..."}
+              </Text>
             </>
           ) : (
             <>
               <Icon name="building" size={20} color={Colors.gold} strokeWidth={2.4} />
-              <Text style={styles.connectText}>Connect with Plaid</Text>
+              <Text style={styles.connectText}>Connect a bank</Text>
             </>
           )}
         </Pressable>
@@ -122,6 +168,38 @@ function TrustRow({ icon, text }: { icon: IconName; text: string }) {
 }
 
 const styles = StyleSheet.create({
+  statusCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 16,
+    padding: 14,
+  },
+  statusIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: Colors.accentAlpha12,
+    borderWidth: 1,
+    borderColor: Colors.accentAlpha30,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  statusTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: Colors.navy,
+    marginBottom: 3,
+  },
+  statusText: {
+    fontSize: 12,
+    color: Colors.navyMuted,
+    lineHeight: 17,
+    fontWeight: "600",
+  },
   trustCard: {
     backgroundColor: Colors.card,
     borderWidth: 1,

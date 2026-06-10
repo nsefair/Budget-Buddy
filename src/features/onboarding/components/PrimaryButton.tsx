@@ -46,6 +46,9 @@ export function PrimaryButton({ label, onPress, disabled, loading, style }: Prop
     }).start();
 
   const isInert = disabled || loading;
+  // Disabled state uses an explicit muted surface instead of fading the
+  // gradient — faded green with a near-black label disappears in dark mode.
+  const showDisabledSurface = disabled && !loading;
 
   return (
     <Animated.View style={[{ transform: [{ scale }] }, style]}>
@@ -57,7 +60,11 @@ export function PrimaryButton({ label, onPress, disabled, loading, style }: Prop
         style={[styles.wrapper, isInert && styles.disabled]}
       >
         <LinearGradient
-          colors={[Colors.gold400, Colors.gold600]}
+          colors={
+            showDisabledSurface
+              ? [Colors.navy100, Colors.navy100]
+              : [Colors.gold400, Colors.gold600]
+          }
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           style={styles.gradient}
@@ -65,7 +72,9 @@ export function PrimaryButton({ label, onPress, disabled, loading, style }: Prop
           {loading ? (
             <ActivityIndicator color={Colors.onGreen} />
           ) : (
-            <Text style={styles.label}>{label}</Text>
+            <Text style={[styles.label, showDisabledSurface && styles.labelDisabled]}>
+              {label}
+            </Text>
           )}
         </LinearGradient>
       </Pressable>
@@ -107,7 +116,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 8,
   },
-  disabled: { opacity: 0.45, shadowOpacity: 0 },
+  disabled: { shadowOpacity: 0, elevation: 0 },
   gradient: {
     paddingVertical: 17,
     alignItems: "center",
@@ -119,6 +128,7 @@ const styles = StyleSheet.create({
     color: Colors.onGreen,
     letterSpacing: 0,
   },
+  labelDisabled: { color: Colors.muted },
   secondary: {
     paddingVertical: 14,
     alignItems: "center",

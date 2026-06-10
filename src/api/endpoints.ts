@@ -51,6 +51,7 @@ export const ENDPOINTS = {
     CATEGORY_DETAIL: (id: string) => `/budget/categories/${id}`,
     UPDATE_CATEGORY_LIMIT: (id: string) => `/budget/categories/${id}/limit`,
     TRANSACTIONS: "/budget/transactions",
+    ACCOUNTS: "/budget/accounts",
     TRANSACTION_DETAIL: (id: string) => `/budget/transactions/${id}`,
     MANUAL_ENTRY: "/budget/transactions/manual",
     MONTH_COMPARISON: "/budget/comparison",
@@ -112,6 +113,7 @@ export const ENDPOINTS = {
 
   // ── Plaid (Bank connection) ──────────────────────────────────────────────────
   PLAID: {
+    STATUS: "/plaid/status",
     LINK_TOKEN: "/plaid/link-token",
     EXCHANGE: "/plaid/exchange",
     ACCOUNTS: "/plaid/accounts",

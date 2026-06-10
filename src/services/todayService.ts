@@ -58,6 +58,11 @@ export const todayService = {
         topCategoryAmount: top.spent,
       };
     }
+    try {
+      await api.post(ENDPOINTS.PLAID.SYNC);
+    } catch {
+      // Budget summary can still load from the last successful sync.
+    }
     return api.get<TodaySummary>(ENDPOINTS.TODAY.SUMMARY);
   },
 

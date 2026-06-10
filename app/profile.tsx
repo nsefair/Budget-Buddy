@@ -10,7 +10,7 @@
  * placeholders so the structure is real and ready to connect.
  */
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   Pressable,
   ScrollView,
@@ -27,7 +27,8 @@ import { Colors } from "@/constants/colors";
 import { Icon, type IconName } from "@/components/Icon";
 import { FadeInUp } from "@/animations";
 import { useUser, useAuthActions } from "@/hooks/useAuth";
-import { formatCurrency } from "@/utils/security";
+import { budgetService, linkedAccountNetWorth } from "@/services/budgetService";
+import { formatCurrency, secureLog } from "@/utils/security";
 
 const TIER_LABEL: Record<string, string> = {
   free: "Free plan",
@@ -49,6 +50,25 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const user = useUser();
   const { logout } = useAuthActions();
+  const [linkedNetWorth, setLinkedNetWorth] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    let alive = true;
+
+    (async () => {
+      try {
+        const accounts = await budgetService.getAccounts();
+        if (alive) setLinkedNetWorth(linkedAccountNetWorth(accounts));
+      } catch (error) {
+        secureLog.warn("profile.accounts failed", error);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [user]);
 
   if (!user) return null;
 
@@ -60,6 +80,7 @@ export default function ProfileScreen() {
   const xpPct = user.xpToNextLevel
     ? Math.min(1, user.xp / user.xpToNextLevel)
     : 0;
+  const displayNetWorth = linkedNetWorth ?? user.netWorth;
 
   const close = () => {
     Haptics.selectionAsync();
@@ -78,7 +99,7 @@ export default function ProfileScreen() {
   };
 
   const openSettings = (screen: SettingsScreen) => {
-    openRoute({ pathname: "/settings/[screen]", params: { screen } });
+    openRoute(`/settings/${screen}`);
   };
 
   return (
@@ -152,7 +173,7 @@ export default function ProfileScreen() {
             <StatCell
               icon="wallet"
               tint={Colors.teal}
-              value={formatCurrency(user.netWorth, { compact: true })}
+              value={formatCurrency(displayNetWorth, { compact: true })}
               label="Net worth"
             />
             <View style={styles.statDivider} />
@@ -174,7 +195,13 @@ export default function ProfileScreen() {
               label="Goal management"
               onPress={() => openSettings("goals")}
             />
-            <Row icon="building" label="Bank connections" sub="Plaid" onPress={() => openSettings("bank-connections")} last />
+            <Row
+              icon="building"
+              label="Bank connections"
+              sub="Connect or manage"
+              onPress={() => openSettings("bank-connections")}
+              last
+            />
           </SettingsGroup>
         </FadeInUp>
 

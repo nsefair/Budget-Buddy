@@ -71,6 +71,34 @@ EXPO_PUBLIC_API_URL=http://192.168.1.25:8080/v1
 Production builds must use HTTPS; the current frontend intentionally refuses
 plain HTTP outside development.
 
+## Plaid Local Setup
+
+Plaid stays backend-only. Do not put `PLAID_SECRET` or Plaid access tokens in
+Expo env vars. For local sandbox work, export the backend variables before
+rebuilding the API container:
+
+```bash
+export PLAID_ENV=sandbox
+export PLAID_CLIENT_NAME="Budget Buddy"
+export PLAID_PRODUCTS=transactions
+export PLAID_COUNTRY_CODES=US
+export PLAID_ANDROID_PACKAGE_NAME=
+export PLAID_CLIENT_ID=...
+export PLAID_SECRET=...
+export PLAID_TOKEN_ENCRYPTION_KEY=...
+docker compose up -d --build api
+```
+
+`PLAID_TOKEN_ENCRYPTION_KEY` must be a long random secret. The API uses it to
+encrypt Plaid access tokens before storing them in Postgres.
+
+Set `PLAID_ANDROID_PACKAGE_NAME=com.budgetbuddy.app` only after that package is
+registered in the Plaid Dashboard. iPhone Sandbox testing can create Link tokens
+without sending the Android package name.
+
+See `docs/plaid-integration-plan.md` for the full order of work, AWS path, and
+production/legal checklist.
+
 ## Auth + Onboarding Contract
 
 The first implemented feature is the account/onboarding boundary:

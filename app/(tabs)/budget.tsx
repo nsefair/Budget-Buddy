@@ -6,7 +6,7 @@
  *   • Spending Breakdown (donut substitute via segmented bar)
  *   • Trends placeholder + Budget Detail (category fill bars)
  *   • Recent | Upcoming transactions (segmented)
- *   • Investment Portfolio (holdings)
+ *   • Investment Portfolio (zero until connected)
  *   • Accounts list (checking / credit / savings / investments + Net Cash)
  *
  * Emojis are reserved for spending categories and transaction context.
@@ -30,16 +30,16 @@ import { BrandHeader } from "@/components/BrandLogo";
 import { ScreenHeader } from "@/components/ui";
 import { Icon, type IconName } from "@/components/Icon";
 import {
-  MOCK_HOLDINGS,
-  MOCK_INVESTMENT_SUMMARY,
-  MOCK_ACCOUNTS,
   MOCK_UPCOMING_BILLS,
+  type AccountSummary,
   type BudgetOverview,
   type BudgetCategory,
   type BudgetMonthOption,
   type Transaction,
 } from "@/mock/budget";
-import { budgetService } from "@/services/budgetService";
+import { IS_MOCK } from "@/api/client";
+import { budgetService, linkedAccountNetWorth } from "@/services/budgetService";
+import { plaidService } from "@/services/plaidService";
 import { formatCurrency, secureLog } from "@/utils/security";
 
 const TAB_BAR_HEIGHT = 80;
@@ -76,12 +76,29 @@ export default function BudgetScreen() {
   const [selectedMonthId, setSelectedMonthId] = useState("");
   const [overview, setOverview] = useState<BudgetOverview | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [accounts, setAccounts] = useState<AccountSummary[]>([]);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     let alive = true;
 
     (async () => {
       try {
+        if (!IS_MOCK) {
+          setSyncing(true);
+          try {
+            await plaidService.sync();
+          } catch (error) {
+            secureLog.warn("budget.sync failed", error);
+          }
+          try {
+            const nextAccounts = await budgetService.getAccounts();
+            if (alive) setAccounts(nextAccounts);
+          } catch (error) {
+            secureLog.warn("budget.accounts failed", error);
+          }
+        }
+
         const availableMonths = await budgetService.getAvailableMonths();
         if (!alive) return;
 
@@ -91,7 +108,9 @@ export default function BudgetScreen() {
         setMonths(availableMonths);
         setSelectedMonthId((existing) => existing || currentMonth?.id || "");
       } catch (error) {
-        secureLog.error("budget.months failed", error);
+        secureLog.error("budget.load failed", error);
+      } finally {
+        if (alive) setSyncing(false);
       }
     })();
 
@@ -164,8 +183,15 @@ export default function BudgetScreen() {
           title="Budget"
           right={
             <View style={styles.syncBadge}>
-              <Icon name="check-circle" size={13} color={Colors.teal} strokeWidth={2.4} />
-              <Text style={styles.syncBadgeText}>Synced</Text>
+              <Icon
+                name={syncing ? "activity" : accounts.length ? "check-circle" : "building"}
+                size={13}
+                color={Colors.teal}
+                strokeWidth={2.4}
+              />
+              <Text style={styles.syncBadgeText}>
+                {syncing ? "Syncing" : accounts.length ? "Synced" : "No bank yet"}
+              </Text>
             </View>
           }
         />
@@ -298,50 +324,26 @@ export default function BudgetScreen() {
             title="Investment portfolio"
             right={
               <Text style={styles.totalValue}>
-                {formatCurrency(MOCK_INVESTMENT_SUMMARY.totalValue, { compact: true })}
+                {formatCurrency(0, { compact: true })}
               </Text>
             }
           />
-          <View style={{ gap: 10 }}>
-            {MOCK_HOLDINGS.map((h) => (
-              <View key={h.id} style={styles.holdingRow}>
-                <View style={styles.tickerBadge}>
-                  <Text style={styles.tickerText}>{h.ticker}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.holdingName}>{h.name}</Text>
-                  <Text style={styles.holdingShares}>
-                    {h.shares} {h.shares === 1 ? "share" : "shares"}
-                  </Text>
-                </View>
-                <View style={{ alignItems: "flex-end" }}>
-                  <Text style={styles.holdingValue}>{formatCurrency(h.value)}</Text>
-                  <View style={styles.holdingChange}>
-                    <Icon
-                      name={h.changePct >= 0 ? "trending-up" : "trending-down"}
-                      size={11}
-                      color={h.changePct >= 0 ? Colors.emerald : Colors.coral}
-                    />
-                    <Text
-                      style={[
-                        styles.holdingChangeText,
-                        { color: h.changePct >= 0 ? Colors.emerald : Colors.coral },
-                      ]}
-                    >
-                      {h.changePct >= 0 ? "+" : ""}
-                      {h.changePct.toFixed(2)}%
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            ))}
+          <View style={styles.emptyInvestment}>
+            <View style={styles.emptyInvestmentIcon}>
+              <Icon name="trending-up" size={16} color={Colors.navyMuted} strokeWidth={2.3} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.emptyInvestmentTitle}>Investment position</Text>
+              <Text style={styles.emptyInvestmentSub}>No connected investment holdings.</Text>
+            </View>
+            <Text style={styles.emptyInvestmentAmount}>{formatCurrency(0)}</Text>
           </View>
         </Card>
 
         {/* Accounts */}
         <Card>
           <CardHeader title="Accounts" />
-          <AccountsBlock />
+          <AccountsBlock accounts={accounts} />
         </Card>
       </ScrollView>
     </View>
@@ -671,14 +673,8 @@ function TransactionRow({
   );
 }
 
-function AccountsBlock() {
-  const totalAssets = MOCK_ACCOUNTS
-    .filter((a) => a.kind !== "credit")
-    .reduce((s, a) => s + a.balance, 0);
-  const totalDebts = Math.abs(
-    MOCK_ACCOUNTS.filter((a) => a.kind === "credit").reduce((s, a) => s + a.balance, 0)
-  );
-  const netCash = totalAssets - totalDebts;
+function AccountsBlock({ accounts }: { accounts: AccountSummary[] }) {
+  const netCash = linkedAccountNetWorth(accounts);
 
   const iconForKind: Record<string, IconName> = {
     checking: "wallet",
@@ -687,9 +683,17 @@ function AccountsBlock() {
     investment: "trending-up",
   };
 
+  if (accounts.length === 0) {
+    return (
+      <Text style={styles.emptyTransactions}>
+        Connect a bank in Profile to see your linked accounts here.
+      </Text>
+    );
+  }
+
   return (
     <View style={{ gap: 8 }}>
-      {MOCK_ACCOUNTS.map((a) => (
+      {accounts.map((a) => (
         <View key={a.id} style={styles.accountRow}>
           <View style={styles.accountLeft}>
             <View style={styles.accountIconBox}>
@@ -1027,31 +1031,30 @@ const styles = StyleSheet.create({
   txnAmount: { fontSize: 14, fontWeight: "700" },
   txnDivider: { height: 1, backgroundColor: Colors.border },
 
-  // Holdings
+  // Investments
   totalValue: {
     fontSize: 16,
     fontWeight: "800",
     color: Colors.navy,
     letterSpacing: 0,
   },
-  holdingRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  tickerBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: Colors.navy,
+  emptyInvestment: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 4,
   },
-  tickerText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: Colors.gold,
-    letterSpacing: 0.6,
+  emptyInvestmentIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: Colors.navy50,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  holdingName: { fontSize: 13, fontWeight: "700", color: Colors.navy },
-  holdingShares: { fontSize: 11, color: Colors.muted, marginTop: 1 },
-  holdingValue: { fontSize: 14, fontWeight: "800", color: Colors.navy },
-  holdingChange: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 2 },
-  holdingChangeText: { fontSize: 11, fontWeight: "700" },
+  emptyInvestmentTitle: { fontSize: 13, fontWeight: "800", color: Colors.navy },
+  emptyInvestmentSub: { fontSize: 11, color: Colors.muted, marginTop: 1 },
+  emptyInvestmentAmount: { fontSize: 14, fontWeight: "800", color: Colors.navy },
 
   // Accounts
   accountRow: {

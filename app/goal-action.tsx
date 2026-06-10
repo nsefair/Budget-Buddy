@@ -395,10 +395,19 @@ function ActionButton({
       ]}
       onPress={onPress}
     >
-      <View style={styles.actionButton}>
+      <View style={[styles.actionButton, disabled && styles.actionButtonSurfaceDisabled]}>
         <View style={styles.actionButtonInner}>
-          <Icon name={icon} size={17} color={Colors.onAccent} strokeWidth={2.5} />
-          <Text style={styles.actionButtonText}>{label}</Text>
+          <Icon
+            name={icon}
+            size={17}
+            color={disabled ? Colors.muted : Colors.onAccent}
+            strokeWidth={2.5}
+          />
+          <Text
+            style={[styles.actionButtonText, disabled && styles.actionButtonTextDisabled]}
+          >
+            {label}
+          </Text>
         </View>
       </View>
     </Pressable>
@@ -569,8 +578,12 @@ const styles = StyleSheet.create({
   },
   actionButtonInner: { flexDirection: "row", alignItems: "center", gap: 9 },
   actionButtonPressed: { opacity: 0.9, transform: [{ scale: 0.99 }] },
-  actionButtonDisabled: { opacity: 0.45 },
+  // Explicit disabled surface: opacity-faded green with dark label was
+  // invisible against the dark-mode background.
+  actionButtonDisabled: { shadowOpacity: 0, elevation: 0 },
+  actionButtonSurfaceDisabled: { backgroundColor: Colors.navy100 },
   actionButtonText: { fontSize: 15, fontWeight: "900", color: Colors.onAccent },
+  actionButtonTextDisabled: { color: Colors.muted },
   sharePreview: {
     padding: 18,
     borderRadius: 20,
