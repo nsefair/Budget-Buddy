@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/mail"
 	"strings"
 	"time"
@@ -14,12 +15,17 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"budget-buddy/backend/internal/config"
+	"budget-buddy/backend/internal/mailer"
 )
 
 type Service struct {
 	db              *pgxpool.Pool
 	tokens          TokenManager
 	refreshTokenTTL time.Duration
+	actionTokenTTL  time.Duration
+	cfg             config.Config
+	logger          *slog.Logger
+	emailSender     mailer.Sender
 }
 
 type RegisterRequest struct {
@@ -79,11 +85,15 @@ type FirstGoalRequest struct {
 	Reason       string  `json:"reason"`
 }
 
-func NewService(db *pgxpool.Pool, cfg config.Config) *Service {
+func NewService(db *pgxpool.Pool, cfg config.Config, logger *slog.Logger) *Service {
 	return &Service{
 		db:              db,
 		tokens:          NewTokenManager(cfg),
 		refreshTokenTTL: cfg.RefreshTokenTTL,
+		actionTokenTTL:  cfg.AuthActionTokenTTL,
+		cfg:             cfg,
+		logger:          logger,
+		emailSender:     mailer.New(cfg, logger),
 	}
 }
 
@@ -117,6 +127,9 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (AuthRespon
 	accessToken, refreshToken, err := s.issueTokens(ctx, user)
 	if err != nil {
 		return AuthResponse{}, err
+	}
+	if _, err := s.sendEmailVerification(ctx, user); err != nil {
+		s.logger.Error("registration verification email failed", "userId", user.ID, "error", err)
 	}
 
 	return AuthResponse{
@@ -269,16 +282,14 @@ func (s *Service) CompleteOnboarding(ctx context.Context, userID string, req Onb
 		ctx,
 		`update users
 		 set first_name = $2,
-		     subscription_tier = $3,
 		     onboarding_complete = true,
-		     why = $4,
-		     why_icon = $5,
+		     why = $3,
+		     why_icon = $4,
 		     streak = greatest(streak, 1),
 		     streak_best_ever = greatest(streak_best_ever, 1)
 		 where id = $1`,
 		userID,
 		firstName,
-		tier,
 		why,
 		whyIcon,
 	); err != nil {
@@ -294,9 +305,10 @@ func (s *Service) CompleteOnboarding(ctx context.Context, userID string, req Onb
 		ctx,
 		`insert into onboarding_profiles (
 		   user_id, age_range, life_situation, goal_kinds, custom_goal_label,
-		   why, why_icon, first_goal, first_quest, completed_at
+		   why, why_icon, first_goal, first_quest, requested_plan_tier,
+		   requested_plan_cycle, requested_plan_lifetime, completed_at
 		 )
-		 values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, now())
+		 values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10, $11, $12, now())
 		 on conflict (user_id) do update set
 		   age_range = excluded.age_range,
 		   life_situation = excluded.life_situation,
@@ -306,6 +318,9 @@ func (s *Service) CompleteOnboarding(ctx context.Context, userID string, req Onb
 		   why_icon = excluded.why_icon,
 		   first_goal = excluded.first_goal,
 		   first_quest = excluded.first_quest,
+		   requested_plan_tier = excluded.requested_plan_tier,
+		   requested_plan_cycle = excluded.requested_plan_cycle,
+		   requested_plan_lifetime = excluded.requested_plan_lifetime,
 		   completed_at = coalesce(onboarding_profiles.completed_at, excluded.completed_at)`,
 		userID,
 		req.AgeRange,
@@ -316,6 +331,9 @@ func (s *Service) CompleteOnboarding(ctx context.Context, userID string, req Onb
 		whyIcon,
 		string(firstGoalJSON),
 		jsonOrNull(req.FirstQuest),
+		tier,
+		normalizeBillingCycle(req.Plan.Cycle),
+		req.Plan.IsLifetime,
 	); err != nil {
 		return APIUser{}, err
 	}
@@ -349,7 +367,7 @@ func (s *Service) insertUser(ctx context.Context, firstName, lastName, email, pa
 			ctx,
 			`insert into users (first_name, last_name, email, password_hash)
 			 values ($1, $2, $3, $4)
-			 returning id::text, email, first_name, last_name, coalesce(avatar_url, ''),
+			 returning id::text, email, (email_verified_at is not null), first_name, last_name, coalesce(avatar_url, ''),
 			           level, xp, xp_to_next_level, streak, streak_best_ever,
 			           net_worth_cents, financial_health_score, subscription_tier,
 			           onboarding_complete, why, why_icon, joined_at`,
@@ -368,7 +386,7 @@ func (s *Service) findUserWithPasswordByEmail(ctx context.Context, email string)
 	var user User
 	err := s.db.QueryRow(
 		ctx,
-		`select password_hash, id::text, email, first_name, last_name, coalesce(avatar_url, ''),
+		`select password_hash, id::text, email, (email_verified_at is not null), first_name, last_name, coalesce(avatar_url, ''),
 		        level, xp, xp_to_next_level, streak, streak_best_ever,
 		        net_worth_cents, financial_health_score, subscription_tier,
 		        onboarding_complete, why, why_icon, joined_at
@@ -379,6 +397,7 @@ func (s *Service) findUserWithPasswordByEmail(ctx context.Context, email string)
 		&passwordHash,
 		&user.ID,
 		&user.Email,
+		&user.EmailVerified,
 		&user.FirstName,
 		&user.LastName,
 		&user.Avatar,
@@ -409,7 +428,7 @@ func (s *Service) findUserByRefreshToken(ctx context.Context, tx pgx.Tx, tokenHa
 	var user User
 	err := tx.QueryRow(
 		ctx,
-		`select rt.id::text, u.id::text, u.email, u.first_name, u.last_name, coalesce(u.avatar_url, ''),
+		`select rt.id::text, u.id::text, u.email, (u.email_verified_at is not null), u.first_name, u.last_name, coalesce(u.avatar_url, ''),
 		        u.level, u.xp, u.xp_to_next_level, u.streak, u.streak_best_ever,
 		        u.net_worth_cents, u.financial_health_score, u.subscription_tier,
 		        u.onboarding_complete, u.why, u.why_icon, u.joined_at
@@ -424,6 +443,7 @@ func (s *Service) findUserByRefreshToken(ctx context.Context, tx pgx.Tx, tokenHa
 		&refreshTokenID,
 		&user.ID,
 		&user.Email,
+		&user.EmailVerified,
 		&user.FirstName,
 		&user.LastName,
 		&user.Avatar,
@@ -510,7 +530,7 @@ func (s *Service) createFirstGoalIfNeeded(ctx context.Context, tx pgx.Tx, userID
 	return err
 }
 
-const userSelectSQL = `select id::text, email, first_name, last_name, coalesce(avatar_url, ''),
+const userSelectSQL = `select id::text, email, (email_verified_at is not null), first_name, last_name, coalesce(avatar_url, ''),
        level, xp, xp_to_next_level, streak, streak_best_ever,
        net_worth_cents, financial_health_score, subscription_tier,
        onboarding_complete, why, why_icon, joined_at
@@ -524,6 +544,7 @@ func scanUser(row userRow, user *User) error {
 	return row.Scan(
 		&user.ID,
 		&user.Email,
+		&user.EmailVerified,
 		&user.FirstName,
 		&user.LastName,
 		&user.Avatar,
@@ -561,6 +582,13 @@ func normalizeTier(value string) string {
 	default:
 		return "free"
 	}
+}
+
+func normalizeBillingCycle(value string) string {
+	if strings.EqualFold(strings.TrimSpace(value), "annual") {
+		return "annual"
+	}
+	return "monthly"
 }
 
 func normalizeGoalKind(value string) string {

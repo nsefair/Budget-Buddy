@@ -5,6 +5,7 @@ import "time"
 type User struct {
 	ID                   string
 	Email                string
+	EmailVerified        bool
 	FirstName            string
 	LastName             string
 	Avatar               string
@@ -27,6 +28,7 @@ type APIUser struct {
 	FirstName            string  `json:"firstName"`
 	LastName             string  `json:"lastName"`
 	Email                string  `json:"email"`
+	EmailVerified        bool    `json:"emailVerified"`
 	Avatar               string  `json:"avatar,omitempty"`
 	Level                int     `json:"level"`
 	XP                   int     `json:"xp"`
@@ -48,6 +50,7 @@ func (u User) API() APIUser {
 		FirstName:            u.FirstName,
 		LastName:             u.LastName,
 		Email:                u.Email,
+		EmailVerified:        u.EmailVerified,
 		Avatar:               u.Avatar,
 		Level:                u.Level,
 		XP:                   u.XP,

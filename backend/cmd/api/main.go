@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"errors"
+	"log"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+	_ "time/tzdata"
 
 	"budget-buddy/backend/internal/config"
 	"budget-buddy/backend/internal/database"
@@ -17,6 +19,9 @@ import (
 
 func main() {
 	cfg := config.Load()
+	if err := cfg.Validate(); err != nil {
+		log.Fatal("invalid production configuration: ", err)
+	}
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: cfg.LogLevel,
 	}))

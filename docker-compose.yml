@@ -28,7 +28,22 @@ services:
       JWT_ACCESS_SECRET: development_only_budget_buddy_access_secret_change_me
       ACCESS_TOKEN_TTL: 15m
       REFRESH_TOKEN_TTL: 720h
+      AUTH_ACTION_TOKEN_TTL: 1h
       LOG_LEVEL: debug
+      RATE_LIMIT_PER_MINUTE: 240
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-budget-buddy://}
+      EMAIL_DELIVERY_MODE: ${EMAIL_DELIVERY_MODE:-log}
+      EMAIL_FROM: ${EMAIL_FROM:-Budget Buddy <no-reply@budgetbuddy.app>}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      BILLING_ENV: ${BILLING_ENV:-sandbox}
+      BILLING_WEBHOOK_SECRET: ${BILLING_WEBHOOK_SECRET:-development_only_billing_webhook_secret}
+      IOS_PREMIUM_MONTHLY_PRODUCT_ID: ${IOS_PREMIUM_MONTHLY_PRODUCT_ID:-budget_buddy_premium_monthly}
+      IOS_PREMIUM_ANNUAL_PRODUCT_ID: ${IOS_PREMIUM_ANNUAL_PRODUCT_ID:-budget_buddy_premium_annual}
+      IOS_ELITE_MONTHLY_PRODUCT_ID: ${IOS_ELITE_MONTHLY_PRODUCT_ID:-budget_buddy_elite_monthly}
+      IOS_ELITE_ANNUAL_PRODUCT_ID: ${IOS_ELITE_ANNUAL_PRODUCT_ID:-budget_buddy_elite_annual}
       PLAID_ENV: ${PLAID_ENV:-sandbox}
       PLAID_CLIENT_NAME: ${PLAID_CLIENT_NAME:-Budget Buddy}
       PLAID_PRODUCTS: ${PLAID_PRODUCTS:-transactions}

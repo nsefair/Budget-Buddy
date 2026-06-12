@@ -19,6 +19,8 @@ export const ENDPOINTS = {
     FORGOT_PASSWORD: "/auth/forgot-password",
     RESET_PASSWORD: "/auth/reset-password",
     VERIFY_EMAIL: "/auth/verify-email",
+    REQUEST_EMAIL_VERIFICATION: "/auth/verify-email/request",
+    CONFIRM_EMAIL_CHANGE: "/auth/change-email/confirm",
   },
 
   // ── User / Profile ──────────────────────────────────────────────────────────
@@ -31,6 +33,8 @@ export const ENDPOINTS = {
     XP: "/user/xp",
     SUBSCRIPTION: "/user/subscription",
     DELETE_ACCOUNT: "/user/account",
+    CHANGE_EMAIL: "/user/email/change",
+    CHANGE_PASSWORD: "/user/password",
   },
 
   // ── Today / Dashboard ───────────────────────────────────────────────────────
@@ -120,6 +124,17 @@ export const ENDPOINTS = {
     SYNC: "/plaid/sync",
   },
 
+  // ── Notifications ────────────────────────────────────────────────────────────
+  NOTIFICATIONS: {
+    LIST: "/notifications",
+    PREFERENCES: "/notifications/preferences",
+    READ: (id: string) => `/notifications/${id}/read`,
+    READ_ALL: "/notifications/read-all",
+    DEVICES: "/notifications/devices",
+    DEVICE: (id: string) => `/notifications/devices/${id}`,
+    TEST: "/notifications/test",
+  },
+
   // ── Payments / Subscriptions ─────────────────────────────────────────────────
   PAYMENTS: {
     PLANS: "/payments/plans",
@@ -127,5 +142,6 @@ export const ENDPOINTS = {
     CANCEL: "/payments/cancel",
     PORTAL: "/payments/portal",
     LIFETIME: "/payments/lifetime",
+    STATUS: "/user/subscription",
   },
 } as const;

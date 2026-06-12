@@ -152,6 +152,9 @@ export const Colors = {
     brand.accentSurfaceStrongDark,
   ),
   greenBorder: systemColor(brand.accentBorderLight, brand.accentBorderDark),
+  actionSurface: systemColor(brand.accent, brand.accentSurfaceStrongDark),
+  actionBorder: systemColor(brand.accent, brand.accentBorderDark),
+  onAction: systemColor(brand.onAccent, "#FFFFFF"),
 
   // Semantic colors. On iOS these follow the user's light/dark setting.
   navy: systemColor(brand.navyLight, brand.navyDark),

@@ -5,7 +5,7 @@
  *   • Monthly / Annual toggle (annual shows ~17% off inline)
  *   • Three tiers: Free, Premium, Elite
  *   • Founders' Lifetime CTA surfaced as scarcity card
- *   • All paid tiers come with a 14-day trial
+ *   • Paid selections are saved as interest until App Store billing is enabled
  *
  * Free is always available. The CTA copy adapts to the selection.
  */
@@ -23,8 +23,6 @@ import { BudBubble } from "../components/BudBubble";
 import { Headline, Subheadline } from "../components/Headline";
 import {
   PRICING,
-  LIFETIME_OFFER,
-  FREE_TRIAL_DAYS,
 } from "../data";
 import type { BillingCycle, SubscriptionTier } from "../types";
 import { Colors } from "@/constants/colors";
@@ -52,7 +50,7 @@ export function StepPricing({
       <BudBubble />
       <Headline>Pick the version that fits.</Headline>
       <Subheadline>
-        Free is real Free. Premium unlocks me — fully personal. Elite is everything.
+        Free is available now. Paid selections are saved as interest until App Store billing opens.
       </Subheadline>
 
       {/* Cycle toggle */}
@@ -94,10 +92,10 @@ export function StepPricing({
         />
       )}
 
-      {/* Trial reminder for paid tiers */}
+      {/* Pre-launch billing reminder for paid tiers */}
       {selectedTier !== "free" && (
         <Text style={styles.trial}>
-          {FREE_TRIAL_DAYS}-day free trial · Cancel anytime · We'll remind you before billing
+          No charge today · Paid access is not enabled in this build
         </Text>
       )}
     </View>
@@ -233,14 +231,9 @@ function LifetimeCard({
     >
       <View style={{ flex: 1 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <Text style={styles.lifetimeName}>{LIFETIME_OFFER.name}</Text>
-          <View style={styles.scarcityPill}>
-            <Text style={styles.scarcityText}>
-              {LIFETIME_OFFER.spotsRemaining} left
-            </Text>
-          </View>
+          <Text style={styles.lifetimeName}>Founding plan interest</Text>
         </View>
-        <Text style={styles.lifetimeBlurb}>{LIFETIME_OFFER.blurb}</Text>
+        <Text style={styles.lifetimeBlurb}>Save your interest now. No purchase or charge is made in this build.</Text>
       </View>
       <View style={[styles.radio, selected && styles.radioActive]}>
         {selected && <View style={styles.radioDot} />}

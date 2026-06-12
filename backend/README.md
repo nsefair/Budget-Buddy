@@ -1,12 +1,16 @@
 # Budget Buddy Backend
 
-Go API service for Budget Buddy. This first pass is intentionally small:
+Go API service for Budget Buddy. The backend now includes production-shaped foundations for:
 
 - standard-library HTTP server
 - environment-based config
 - JSON health endpoints
 - Dockerfile for container builds
-- PostgreSQL migrations for identity, onboarding, and goals
+- PostgreSQL migrations for identity, onboarding, goals, notifications, and billing entitlements
+- password reset, email verification/change, profile updates, and account deletion
+- SMTP or local log-mode email delivery
+- notification preferences, inbox state, and device-token registration
+- signed, idempotent billing entitlement webhooks
 
 The mobile app already centralizes all endpoint paths in `src/api/endpoints.ts`.
 Keep this backend aligned with those paths and only change the frontend endpoint
@@ -98,6 +102,31 @@ without sending the Android package name.
 
 See `docs/plaid-integration-plan.md` for the full order of work, AWS path, and
 production/legal checklist.
+
+## Email Local Setup
+
+Email defaults to `EMAIL_DELIVERY_MODE=log`, so verification and reset links are
+written to the API logs without using a paid provider. For production, set
+`EMAIL_DELIVERY_MODE=smtp` plus `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`,
+`SMTP_PASSWORD`, and `EMAIL_FROM`. Production startup fails closed when those
+values or the JWT/billing secrets are missing.
+
+## Notifications
+
+Notification preferences and inbox records are persisted in Postgres. Expo push
+tokens can be registered through `POST /v1/notifications/devices` once the Expo
+project ID and Apple/Google push credentials exist. In development,
+`POST /v1/notifications/test` creates an inbox notification for the signed-in
+user; that route returns 404 in production.
+
+## Billing Foundation
+
+Paid tiers are never granted from onboarding or another client request. The
+backend accepts entitlement updates only through
+`POST /v1/payments/webhooks/entitlements`, protected by an HMAC SHA-256 signature
+in `X-Budget-Buddy-Signature`. Replayed provider events are idempotent. App Store
+product IDs can be prepared now, while the plans remain unavailable until StoreKit
+or a billing adapter is connected.
 
 ## Auth + Onboarding Contract
 

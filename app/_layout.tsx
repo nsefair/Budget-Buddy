@@ -32,6 +32,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppSplash } from "@/components/AppSplash";
 import { useAuthLoading, useAuthActions } from "@/hooks/useAuth";
 import { Colors } from "@/constants/colors";
+import { useNotificationObserver } from "@/services/notificationService";
 
 SplashScreen.preventAutoHideAsync().catch(() => {
   // Splash may already be hidden in dev hot-reload — safe to ignore
@@ -41,6 +42,7 @@ SplashScreen.preventAutoHideAsync().catch(() => {
 // which runs from index.ts before expo-router loads.
 
 export default function RootLayout() {
+	useNotificationObserver();
   const isLoading = useAuthLoading();
   const { restoreSession } = useAuthActions();
   const colorScheme = useColorScheme();

@@ -9,7 +9,6 @@
  * Backend integration map (when it's ready):
  *   submitProfile  → POST   ENDPOINTS.USER.UPDATE_PROFILE
  *   selectGoals    → POST   ENDPOINTS.USER.ONBOARDING (partial)
- *   subscribe      → POST   ENDPOINTS.PAYMENTS.SUBSCRIBE
  *   createGoal     → POST   ENDPOINTS.GOALS.CREATE
  *   suggestQuest   → GET    ENDPOINTS.QUESTS.ACTIVE  (server picks first)
  *   complete       → POST   ENDPOINTS.USER.ONBOARDING (final flag)
@@ -199,25 +198,6 @@ export const onboardingService = {
     }
 
     return firstQuestForGoal(primary);
-  },
-
-  /**
-   * Subscribes the user to the chosen plan via Stripe.
-   * In production: create a Stripe checkout session or PaymentSheet on the
-   * server (ENDPOINTS.PAYMENTS.SUBSCRIBE), then surface the Stripe SDK.
-   * Free tier is a no-op.
-   */
-  subscribe: async (plan: PlanSelection): Promise<{ tier: PlanSelection["tier"] }> => {
-    if (plan.tier === "free") return { tier: "free" };
-    if (IS_MOCK) {
-      await fakeDelay(800);
-      return { tier: plan.tier };
-    }
-    const result = await api.post<{ tier: PlanSelection["tier"] }>(
-      plan.isLifetime ? ENDPOINTS.PAYMENTS.LIFETIME : ENDPOINTS.PAYMENTS.SUBSCRIBE,
-      plan
-    );
-    return result;
   },
 
   /**

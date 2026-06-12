@@ -131,6 +131,20 @@ func HashRefreshToken(raw string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+func NewActionToken(expiresIn time.Duration) (raw string, hash string, expiresAt time.Time, err error) {
+	bytes := make([]byte, 32)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", "", time.Time{}, err
+	}
+	raw = base64.RawURLEncoding.EncodeToString(bytes)
+	return raw, HashActionToken(raw), time.Now().UTC().Add(expiresIn), nil
+}
+
+func HashActionToken(raw string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(raw)))
+	return hex.EncodeToString(sum[:])
+}
+
 func BearerToken(value string) (string, error) {
 	const prefix = "Bearer "
 	if !strings.HasPrefix(value, prefix) {

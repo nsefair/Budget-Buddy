@@ -15,7 +15,7 @@
  *   Screens always receive a normalised User — they never see raw API shapes.
  */
 
-import { api, IS_MOCK } from "@/api/client";
+import { api, apiClient, IS_MOCK } from "@/api/client";
 import { ENDPOINTS } from "@/api/endpoints";
 import { MOCK_USER, MOCK_TOKEN } from "@/mock/user";
 import type { User } from "@/stores/authStore";
@@ -49,6 +49,7 @@ interface RawUser {
   firstName: string;
   lastName: string;
   email: string;
+  emailVerified: boolean;
   avatar?: string;
   level: number;
   xp: number;
@@ -74,6 +75,7 @@ function toUser(raw: RawUser): User {
     firstName: raw.firstName,
     lastName: raw.lastName,
     email: raw.email,
+    emailVerified: raw.emailVerified,
     avatar: raw.avatar,
     level: raw.level,
     xp: raw.xp,
@@ -128,5 +130,65 @@ export const authService = {
     } catch {
       // Best-effort — always clear tokens regardless
     }
+  },
+
+  forgotPassword: async (email: string) => {
+    if (IS_MOCK) return { message: "Reset link sent.", debugToken: "mock_reset_token" };
+    return api.post<{ message: string; debugToken?: string }>(
+      ENDPOINTS.AUTH.FORGOT_PASSWORD,
+      { email }
+    );
+  },
+
+  resetPassword: async (token: string, newPassword: string) => {
+    if (IS_MOCK) return { message: "Password reset." };
+    return api.post<{ message: string }>(ENDPOINTS.AUTH.RESET_PASSWORD, {
+      token,
+      newPassword,
+    });
+  },
+
+  requestEmailVerification: async () => {
+    if (IS_MOCK) return { message: "Verification email sent.", debugToken: "mock_verify_token" };
+    return api.post<{ message: string; debugToken?: string }>(
+      ENDPOINTS.AUTH.REQUEST_EMAIL_VERIFICATION
+    );
+  },
+
+  verifyEmail: async (token: string) => {
+    if (IS_MOCK) return { message: "Email verified." };
+    return api.post<{ message: string }>(ENDPOINTS.AUTH.VERIFY_EMAIL, { token });
+  },
+
+  requestEmailChange: async (newEmail: string, password: string) => {
+    if (IS_MOCK) return { message: "Confirmation email sent.", debugToken: "mock_email_token" };
+    return api.post<{ message: string; debugToken?: string }>(ENDPOINTS.USER.CHANGE_EMAIL, {
+      newEmail,
+      password,
+    });
+  },
+
+  confirmEmailChange: async (token: string) => {
+    if (IS_MOCK) return { message: "Email changed." };
+    return api.post<{ message: string }>(ENDPOINTS.AUTH.CONFIRM_EMAIL_CHANGE, { token });
+  },
+
+  updateProfile: async (payload: { firstName: string; lastName: string; why: string }) => {
+    if (IS_MOCK) return { ...MOCK_USER, ...payload };
+    const raw = await api.patch<RawUser>(ENDPOINTS.USER.UPDATE_PROFILE, payload);
+    return toUser(raw);
+  },
+
+  changePassword: async (currentPassword: string, newPassword: string) => {
+    if (IS_MOCK) return { message: "Password changed." };
+    return api.post<{ message: string }>(ENDPOINTS.USER.CHANGE_PASSWORD, {
+      currentPassword,
+      newPassword,
+    });
+  },
+
+  deleteAccount: async (password: string) => {
+    if (IS_MOCK) return;
+    await apiClient.delete(ENDPOINTS.USER.DELETE_ACCOUNT, { data: { password } });
   },
 };

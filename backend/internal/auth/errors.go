@@ -8,6 +8,8 @@ var (
 	ErrInvalidRefreshToken = errors.New("invalid refresh token")
 	ErrUnauthorized        = errors.New("unauthorized")
 	ErrUserNotFound        = errors.New("user not found")
+	ErrInvalidActionToken  = errors.New("action token is invalid or expired")
+	ErrPasswordIncorrect   = errors.New("current password is incorrect")
 )
 
 type ValidationError struct {

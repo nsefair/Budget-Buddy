@@ -248,7 +248,7 @@ export default function OnboardingScreen() {
         firstName: finalDraft.firstName,
         why: text,
         whyIcon: icon,
-        subscriptionTier: finalDraft.plan.tier,
+        subscriptionTier: "free",
         streak: 1,
       });
 

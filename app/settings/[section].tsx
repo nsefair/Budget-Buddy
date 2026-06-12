@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -19,9 +20,17 @@ import * as Haptics from "expo-haptics";
 import { Colors } from "@/constants/colors";
 import { BrandHeader } from "@/components/BrandLogo";
 import { Icon, type IconName } from "@/components/Icon";
+import { SectionHeader } from "@/components/ui/SectionHeader";
 import { useAuthActions, useUser } from "@/hooks/useAuth";
 import { usePlaidConnection } from "@/hooks/usePlaidConnection";
 import { goalsService } from "@/services/goalsService";
+import { authService } from "@/services/authService";
+import {
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  notificationService,
+  type NotificationPreferences,
+} from "@/services/notificationService";
+import { billingService, type SubscriptionStatus } from "@/services/billingService";
 import type { Goal, GoalsSummary } from "@/mock/goals";
 import { formatCurrency, secureLog } from "@/utils/security";
 
@@ -144,27 +153,104 @@ export default function SettingsDetailScreen() {
 
 function EditProfileBody() {
   const user = useUser();
-  const { updateUser } = useAuthActions();
+  const { updateUser, logout } = useAuthActions();
   const [firstName, setFirstName] = useState(user?.firstName ?? "");
   const [lastName, setLastName] = useState(user?.lastName ?? "");
   const [why, setWhy] = useState(user?.why ?? "");
+  const [saving, setSaving] = useState(false);
+  const [newEmail, setNewEmail] = useState("");
+  const [emailPassword, setEmailPassword] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [deletePassword, setDeletePassword] = useState("");
 
   if (!user) return null;
 
   const canSave = firstName.trim().length > 0 && lastName.trim().length > 0;
 
-  const save = () => {
+  const save = async () => {
     if (!canSave) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       return;
     }
-    updateUser({
-      firstName: firstName.trim(),
-      lastName: lastName.trim(),
-      why: why.trim(),
-    });
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    Alert.alert("Profile updated", "Bud has the latest context for this session.");
+    setSaving(true);
+    try {
+      const updated = await authService.updateProfile({
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        why: why.trim(),
+      });
+      updateUser(updated);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert("Profile updated", "Your account profile is saved.");
+    } catch {
+      Alert.alert("Could not save", "Check your connection and try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const requestVerification = async () => {
+    try {
+      const result = await authService.requestEmailVerification();
+      Alert.alert("Verification email", result.message);
+    } catch {
+      Alert.alert("Could not send email", "Try again in a moment.");
+    }
+  };
+
+  const changeEmail = async () => {
+    if (!newEmail.trim() || !emailPassword) return;
+    try {
+      const result = await authService.requestEmailChange(newEmail.trim().toLowerCase(), emailPassword);
+      setEmailPassword("");
+      Alert.alert("Check your new email", result.message);
+    } catch {
+      Alert.alert("Could not change email", "Check the email and current password, then try again.");
+    }
+  };
+
+  const changePassword = async () => {
+    if (newPassword.length < 8 || newPassword !== confirmPassword) {
+      Alert.alert("Check the password", "Use at least 8 characters and make sure both new passwords match.");
+      return;
+    }
+    try {
+      const result = await authService.changePassword(currentPassword, newPassword);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      Alert.alert("Password updated", result.message, [
+        { text: "Sign in", onPress: async () => { await logout(); router.replace("/(auth)/login"); } },
+      ]);
+    } catch {
+      Alert.alert("Could not change password", "Check your current password and try again.");
+    }
+  };
+
+  const confirmDelete = () => {
+    if (!deletePassword) return;
+    Alert.alert(
+      "Delete account permanently?",
+      "This removes your Budget Buddy account and stored app data. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete account",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await authService.deleteAccount(deletePassword);
+              await logout();
+              router.replace("/(auth)/welcome");
+            } catch {
+              Alert.alert("Could not delete account", "Check your password and try again.");
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -174,7 +260,7 @@ function EditProfileBody() {
       <View style={styles.fieldWrap}>
         <Text style={styles.fieldLabel}>Email</Text>
         <View style={styles.readOnlyField}>
-          <Text style={styles.readOnlyText}>{user.email}</Text>
+          <Text style={styles.readOnlyText}>{user.email} {user.emailVerified ? "· Verified" : "· Unverified"}</Text>
         </View>
       </View>
       <View style={styles.fieldWrap}>
@@ -189,7 +275,26 @@ function EditProfileBody() {
           textAlignVertical="top"
         />
       </View>
-      <ActionButton label="Save profile" icon="check" onPress={save} disabled={!canSave} />
+      <ActionButton label={saving ? "Saving..." : "Save profile"} icon="check" onPress={save} disabled={!canSave || saving} />
+
+      {!user.emailVerified ? (
+        <ActionButton label="Send verification email" icon="badge-check" onPress={requestVerification} />
+      ) : null}
+
+      <SectionHeader title="CHANGE EMAIL" />
+      <Field label="New email" value={newEmail} onChangeText={setNewEmail} />
+      <SecureField label="Current password" value={emailPassword} onChangeText={setEmailPassword} />
+      <ActionButton label="Confirm new email" icon="user" onPress={changeEmail} disabled={!newEmail.trim() || !emailPassword} />
+
+      <SectionHeader title="CHANGE PASSWORD" />
+      <SecureField label="Current password" value={currentPassword} onChangeText={setCurrentPassword} />
+      <SecureField label="New password" value={newPassword} onChangeText={setNewPassword} />
+      <SecureField label="Confirm new password" value={confirmPassword} onChangeText={setConfirmPassword} />
+      <ActionButton label="Update password" icon="lock" onPress={changePassword} disabled={!currentPassword || !newPassword || !confirmPassword} />
+
+      <SectionHeader title="DANGER ZONE" />
+      <SecureField label="Password to confirm deletion" value={deletePassword} onChangeText={setDeletePassword} />
+      <ActionButton label="Delete account" icon="x" onPress={confirmDelete} disabled={!deletePassword} />
     </View>
   );
 }
@@ -290,19 +395,52 @@ function GoalSettingsBody() {
 }
 
 function NotificationsBody() {
-  const [values, setValues] = useState({
-    streak: true,
-    quests: true,
-    weekly: true,
-    buds: true,
-    bills: true,
-    smart: false,
-  });
+  const [values, setValues] = useState<NotificationPreferences>(DEFAULT_NOTIFICATION_PREFERENCES);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  const set = (key: keyof typeof values, value: boolean) => {
+  useEffect(() => {
+    let active = true;
+    notificationService.getPreferences()
+      .then((preferences) => active && setValues(preferences))
+      .catch((error) => secureLog.error("settings.notifications failed", error))
+      .finally(() => active && setLoading(false));
+    return () => { active = false; };
+  }, []);
+
+  const set = async (key: keyof NotificationPreferences, value: boolean) => {
     Haptics.selectionAsync();
-    setValues((current) => ({ ...current, [key]: value }));
+    let next = { ...values, [key]: value };
+    setValues(next);
+    setSaving(true);
+    try {
+      if (key === "pushEnabled" && value) {
+        const result = await notificationService.registerForPush();
+        if (!result.registered) {
+          next = { ...next, pushEnabled: false };
+          setValues(next);
+          Alert.alert(
+            "Push not ready",
+            result.reason === "project_not_configured"
+              ? "Add EXPO_PUBLIC_EAS_PROJECT_ID after creating the Expo project. Your other preferences are saved."
+              : result.reason === "native_module_unavailable"
+                ? "Rebuild the development client so it includes expo-notifications. Your other preferences are saved."
+              : "Notification permission was not granted."
+          );
+        }
+      }
+      await notificationService.updatePreferences(next);
+    } catch {
+      setValues(values);
+      Alert.alert("Could not save", "Notification preferences were not updated.");
+    } finally {
+      setSaving(false);
+    }
   };
+
+  if (loading) {
+    return <View style={styles.loadingCard}><ActivityIndicator color={Colors.accent} /></View>;
+  }
 
   return (
     <View style={styles.stack}>
@@ -310,43 +448,90 @@ function NotificationsBody() {
         icon="flame"
         title="Streak warning"
         body="One evening reminder when your flame has not checked in."
-        value={values.streak}
-        onValueChange={(value) => set("streak", value)}
+        value={values.streakEnabled}
+        onValueChange={(value) => set("streakEnabled", value)}
       />
       <ToggleRow
         icon="target"
         title="Quest nudges"
         body="Helpful prompts for active quests and progress moments."
-        value={values.quests}
-        onValueChange={(value) => set("quests", value)}
+        value={values.questsEnabled}
+        onValueChange={(value) => set("questsEnabled", value)}
       />
       <ToggleRow
         icon="trophy"
         title="Wealth League"
         body="Promotion, reset, and rank movement updates."
-        value={values.weekly}
-        onValueChange={(value) => set("weekly", value)}
+        value={values.weeklyEnabled}
+        onValueChange={(value) => set("weeklyEnabled", value)}
       />
       <ToggleRow
         icon="users"
         title="Bud activity"
         body="Wins from people you follow and Fist Bumps you receive."
-        value={values.buds}
-        onValueChange={(value) => set("buds", value)}
+        value={values.budsEnabled}
+        onValueChange={(value) => set("budsEnabled", value)}
       />
       <ToggleRow
         icon="calendar"
         title="Bills"
         body="A quiet heads-up before recurring charges."
-        value={values.bills}
-        onValueChange={(value) => set("bills", value)}
+        value={values.billsEnabled}
+        onValueChange={(value) => set("billsEnabled", value)}
       />
       <ToggleRow
         icon="sparkles"
         title="Smart suggestions"
         body="Reserved for post-Plaid context-aware nudges."
-        value={values.smart}
-        onValueChange={(value) => set("smart", value)}
+        value={values.smartEnabled}
+        onValueChange={(value) => set("smartEnabled", value)}
+      />
+      <ToggleRow
+        icon="bell"
+        title="Push notifications"
+        body="Allow alerts on this device when push credentials are configured."
+        value={values.pushEnabled}
+        onValueChange={(value) => set("pushEnabled", value)}
+      />
+      <ToggleRow
+        icon="badge-check"
+        title="Email notifications"
+        body="Security, account, and selected progress emails."
+        value={values.emailEnabled}
+        onValueChange={(value) => set("emailEnabled", value)}
+      />
+      <ActionButton
+        label={saving ? "Saving..." : "Send local test"}
+        icon="bell"
+        disabled={saving}
+        onPress={async () => {
+          try {
+            const result = await notificationService.createLocalTest();
+            if (!result.sent) {
+              Alert.alert(
+                "Notifications are off",
+                result.reason === "native_module_unavailable"
+                  ? "Rebuild the development client so it includes expo-notifications."
+                  : "Enable notification permission before sending a local test.",
+                result.reason === "native_module_unavailable"
+                  ? undefined
+                  : [
+                      { text: "Cancel", style: "cancel" },
+                      { text: "Open settings", onPress: () => Linking.openSettings() },
+                    ]
+              );
+            } else {
+              Alert.alert(
+                result.delivered ? "Local notification delivered" : "Local notification scheduled",
+                result.delivered
+                  ? "Budget Buddy confirmed the test in iOS Notification Center."
+                  : "The test was scheduled, but iOS has not reported it in Notification Center yet."
+              );
+            }
+          } catch {
+            Alert.alert("Could not send test", "Check your connection and try again.");
+          }
+        }}
       />
     </View>
   );
@@ -517,6 +702,21 @@ function BankConnectionsBody() {
 
 function SubscriptionBody() {
   const [annual, setAnnual] = useState(true);
+  const [status, setStatus] = useState<SubscriptionStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    billingService.getStatus()
+      .then((value) => active && setStatus(value))
+      .catch((error) => secureLog.error("settings.subscription failed", error))
+      .finally(() => active && setLoading(false));
+    return () => { active = false; };
+  }, []);
+
+  if (loading) {
+    return <View style={styles.loadingCard}><ActivityIndicator color={Colors.accent} /></View>;
+  }
 
   return (
     <View style={styles.stack}>
@@ -543,31 +743,32 @@ function SubscriptionBody() {
         title="Free"
         price="$0"
         body="Core budget, goals, XP, streaks, and Buds."
-        active
+        active={status?.tier === "free"}
       />
       <PlanCard
         title="Premium"
-        price={annual ? "$120/yr" : "$15/mo"}
+        price={annual ? "Annual" : "Monthly"}
         body="Personalized quests, 90-day blueprint, and more Bud Sessions."
-        badge={annual ? "About 20% off" : undefined}
+        badge="Coming soon"
+        active={status?.tier === "premium"}
       />
       <PlanCard
         title="Elite"
-        price={annual ? "$160/yr" : "$20/mo"}
+        price={annual ? "Annual" : "Monthly"}
         body="Scenario tools, smart suggestions, priority support, and advanced reports."
-        badge={annual ? "About 20% off" : undefined}
+        badge="Coming soon"
+        active={status?.tier === "elite"}
       />
       <InfoCard
         icon="badge-check"
-        title="Lifetime founding member"
-        body="A one-time Elite path belongs here when Stripe pricing is finalized."
+        title="App Store billing foundation ready"
+        body="Product IDs and entitlement webhooks are configured. Purchases stay disabled until App Store Connect is active."
       />
       <ActionButton
-        label="Open billing portal"
+        label="Purchases not enabled"
         icon="credit-card"
-        onPress={() =>
-          Alert.alert("Stripe placeholder", "Billing actions will open Stripe once payments are wired.")
-        }
+        onPress={() => {}}
+        disabled
       />
     </View>
   );
@@ -635,6 +836,30 @@ function Field({
       <TextInput
         value={value}
         onChangeText={onChangeText}
+        placeholderTextColor={Colors.muted}
+        style={styles.input}
+      />
+    </View>
+  );
+}
+
+function SecureField({
+  label,
+  value,
+  onChangeText,
+}: {
+  label: string;
+  value: string;
+  onChangeText: (value: string) => void;
+}) {
+  return (
+    <View style={styles.fieldWrap}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        secureTextEntry
+        autoCapitalize="none"
         placeholderTextColor={Colors.muted}
         style={styles.input}
       />
@@ -772,6 +997,9 @@ function ActionButton({
 }) {
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: Boolean(disabled) }}
       disabled={disabled}
       style={({ pressed }) => [
         styles.actionButton,
@@ -783,7 +1011,7 @@ function ActionButton({
       <Icon
         name={icon}
         size={17}
-        color={disabled ? Colors.muted : Colors.onAccent}
+        color={disabled ? Colors.navyMuted : Colors.onAction}
         strokeWidth={2.5}
       />
       <Text
@@ -1073,7 +1301,9 @@ const styles = StyleSheet.create({
   actionButton: {
     minHeight: 54,
     borderRadius: 16,
-    backgroundColor: Colors.accent,
+    backgroundColor: Colors.actionSurface,
+    borderWidth: 1,
+    borderColor: Colors.actionBorder,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
@@ -1089,9 +1319,10 @@ const styles = StyleSheet.create({
   // visible in dark mode (faded green + near-black label vanished on black).
   actionButtonDisabled: {
     backgroundColor: Colors.navy100,
+    borderColor: Colors.border,
     shadowOpacity: 0,
     elevation: 0,
   },
-  actionButtonText: { fontSize: 15, fontWeight: "900", color: Colors.onAccent },
-  actionButtonTextDisabled: { color: Colors.muted },
+  actionButtonText: { fontSize: 15, fontWeight: "900", color: Colors.onAction },
+  actionButtonTextDisabled: { color: Colors.navyMuted },
 });

@@ -1,8 +1,11 @@
 package config
 
 import (
+	"errors"
+	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -20,6 +23,7 @@ type Config struct {
 	ReadTimeout             time.Duration
 	WriteTimeout            time.Duration
 	IdleTimeout             time.Duration
+	RateLimitPerMinute      int
 	PlaidClientID           string
 	PlaidSecret             string
 	PlaidEnvironment        string
@@ -31,6 +35,20 @@ type Config struct {
 	PlaidAndroidPackageName string
 	PlaidWebhookURL         string
 	PlaidTokenEncryptionKey string
+	AppPublicURL            string
+	AuthActionTokenTTL      time.Duration
+	EmailDeliveryMode       string
+	EmailFrom               string
+	SMTPHost                string
+	SMTPPort                int
+	SMTPUsername            string
+	SMTPPassword            string
+	BillingWebhookSecret    string
+	BillingEnvironment      string
+	IOSPremiumMonthlyID     string
+	IOSPremiumAnnualID      string
+	IOSEliteMonthlyID       string
+	IOSEliteAnnualID        string
 }
 
 func Load() Config {
@@ -50,6 +68,7 @@ func Load() Config {
 		ReadTimeout:             durationEnv("READ_TIMEOUT", 5*time.Second),
 		WriteTimeout:            durationEnv("WRITE_TIMEOUT", 10*time.Second),
 		IdleTimeout:             durationEnv("IDLE_TIMEOUT", 60*time.Second),
+		RateLimitPerMinute:      intEnv("RATE_LIMIT_PER_MINUTE", 240),
 		PlaidClientID:           env("PLAID_CLIENT_ID", ""),
 		PlaidSecret:             env("PLAID_SECRET", ""),
 		PlaidEnvironment:        env("PLAID_ENV", "sandbox"),
@@ -61,7 +80,51 @@ func Load() Config {
 		PlaidAndroidPackageName: env("PLAID_ANDROID_PACKAGE_NAME", ""),
 		PlaidWebhookURL:         env("PLAID_WEBHOOK_URL", ""),
 		PlaidTokenEncryptionKey: env("PLAID_TOKEN_ENCRYPTION_KEY", ""),
+		AppPublicURL:            env("APP_PUBLIC_URL", "budget-buddy://"),
+		AuthActionTokenTTL:      durationEnv("AUTH_ACTION_TOKEN_TTL", time.Hour),
+		EmailDeliveryMode:       strings.ToLower(env("EMAIL_DELIVERY_MODE", "log")),
+		EmailFrom:               env("EMAIL_FROM", "Budget Buddy <no-reply@budgetbuddy.app>"),
+		SMTPHost:                env("SMTP_HOST", ""),
+		SMTPPort:                intEnv("SMTP_PORT", 587),
+		SMTPUsername:            env("SMTP_USERNAME", ""),
+		SMTPPassword:            env("SMTP_PASSWORD", ""),
+		BillingWebhookSecret:    env("BILLING_WEBHOOK_SECRET", ""),
+		BillingEnvironment:      strings.ToLower(env("BILLING_ENV", "sandbox")),
+		IOSPremiumMonthlyID:     env("IOS_PREMIUM_MONTHLY_PRODUCT_ID", "budget_buddy_premium_monthly"),
+		IOSPremiumAnnualID:      env("IOS_PREMIUM_ANNUAL_PRODUCT_ID", "budget_buddy_premium_annual"),
+		IOSEliteMonthlyID:       env("IOS_ELITE_MONTHLY_PRODUCT_ID", "budget_buddy_elite_monthly"),
+		IOSEliteAnnualID:        env("IOS_ELITE_ANNUAL_PRODUCT_ID", "budget_buddy_elite_annual"),
 	}
+}
+
+func (c Config) Validate() error {
+	if c.Env != "production" {
+		return nil
+	}
+
+	var problems []string
+	if len(c.JWTAccessSecret) < 32 || strings.Contains(c.JWTAccessSecret, "development_only") {
+		problems = append(problems, "JWT_ACCESS_SECRET must be a unique production secret of at least 32 characters")
+	}
+	if c.EmailDeliveryMode != "smtp" {
+		problems = append(problems, "EMAIL_DELIVERY_MODE must be smtp in production")
+	}
+	if c.SMTPHost == "" || c.SMTPUsername == "" || c.SMTPPassword == "" {
+		problems = append(problems, "SMTP_HOST, SMTP_USERNAME, and SMTP_PASSWORD are required in production")
+	}
+	if !strings.HasPrefix(c.AppPublicURL, "https://") && !strings.HasPrefix(c.AppPublicURL, "budget-buddy://") {
+		problems = append(problems, "APP_PUBLIC_URL must use https:// or the budget-buddy:// app scheme")
+	}
+	if c.BillingEnvironment != "production" {
+		problems = append(problems, "BILLING_ENV must be production")
+	}
+	if len(c.BillingWebhookSecret) < 32 {
+		problems = append(problems, "BILLING_WEBHOOK_SECRET must be at least 32 characters")
+	}
+	if len(problems) > 0 {
+		return errors.New(strings.Join(problems, "; "))
+	}
+	return nil
 }
 
 func (c Config) PlaidConfigured() bool {
@@ -103,6 +166,22 @@ func durationEnv(key string, fallback time.Duration) time.Duration {
 		return fallback
 	}
 	return value
+}
+
+func intEnv(key string, fallback int) int {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 || value > 65535 {
+		return fallback
+	}
+	return value
+}
+
+func (c Config) SMTPAddress() string {
+	return fmt.Sprintf("%s:%d", c.SMTPHost, c.SMTPPort)
 }
 
 func logLevel(raw string) slog.Level {

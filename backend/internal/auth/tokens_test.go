@@ -59,3 +59,19 @@ func TestAccessTokenRejectsExpiredToken(t *testing.T) {
 		t.Fatalf("ParseAccessToken error = %v, want ErrUnauthorized", err)
 	}
 }
+
+func TestActionTokenIsHashedAndRoundTrips(t *testing.T) {
+	raw, hash, expiresAt, err := NewActionToken(time.Hour)
+	if err != nil {
+		t.Fatalf("NewActionToken returned error: %v", err)
+	}
+	if raw == "" || hash == "" || raw == hash {
+		t.Fatalf("expected distinct raw and hashed action token")
+	}
+	if got := HashActionToken(raw); got != hash {
+		t.Fatalf("HashActionToken(raw) = %q, want %q", got, hash)
+	}
+	if !expiresAt.After(time.Now().UTC()) {
+		t.Fatalf("expiresAt = %v, expected future time", expiresAt)
+	}
+}

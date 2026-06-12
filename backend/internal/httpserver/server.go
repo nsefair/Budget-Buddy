@@ -9,10 +9,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"budget-buddy/backend/internal/auth"
+	"budget-buddy/backend/internal/billing"
 	"budget-buddy/backend/internal/budget"
 	"budget-buddy/backend/internal/buds"
 	"budget-buddy/backend/internal/config"
 	"budget-buddy/backend/internal/goals"
+	"budget-buddy/backend/internal/notifications"
 	"budget-buddy/backend/internal/plaid"
 	"budget-buddy/backend/internal/quests"
 	"budget-buddy/backend/internal/respond"
@@ -25,15 +27,17 @@ func New(cfg config.Config, logger *slog.Logger, db *pgxpool.Pool) *http.Server 
 	mux.HandleFunc("GET /readyz", readyHandler(db))
 	mux.HandleFunc("GET "+cfg.APIBasePath+"/health", healthHandler("ok"))
 
-	authHandler := auth.NewHandler(auth.NewService(db, cfg))
+	authHandler := auth.NewHandler(auth.NewService(db, cfg, logger))
 	auth.RegisterRoutes(mux, cfg.APIBasePath, authHandler)
+	billing.RegisterRoutes(mux, cfg.APIBasePath, db, cfg, authHandler.RequireAuth)
 	buds.RegisterRoutes(mux, cfg.APIBasePath, db, authHandler.RequireAuth)
 	goals.RegisterRoutes(mux, cfg.APIBasePath, db, authHandler.RequireAuth)
+	notifications.RegisterRoutes(mux, cfg.APIBasePath, db, cfg, authHandler.RequireAuth)
 	budget.RegisterRoutes(mux, cfg.APIBasePath, db, authHandler.RequireAuth)
 	plaid.RegisterRoutes(mux, cfg.APIBasePath, db, cfg, authHandler.RequireAuth)
 	quests.RegisterRoutes(mux, cfg.APIBasePath)
 
-	handler := recoverer(logger)(requestLogger(logger)(cors(cfg)(mux)))
+	handler := recoverer(logger)(requestLogger(logger)(securityHeaders(cfg)(rateLimiter(cfg)(cors(cfg)(mux)))))
 
 	return &http.Server{
 		Addr:              cfg.Addr,
@@ -42,6 +46,7 @@ func New(cfg config.Config, logger *slog.Logger, db *pgxpool.Pool) *http.Server 
 		ReadTimeout:       cfg.ReadTimeout,
 		WriteTimeout:      cfg.WriteTimeout,
 		IdleTimeout:       cfg.IdleTimeout,
+		MaxHeaderBytes:    1 << 20,
 	}
 }
 

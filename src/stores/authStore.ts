@@ -23,6 +23,7 @@ export interface User {
   firstName: string;
   lastName: string;
   email: string;
+  emailVerified: boolean;
   avatar?: string;
   level: number;
   xp: number;
