@@ -15,6 +15,7 @@ import (
 	"budget-buddy/backend/internal/config"
 	"budget-buddy/backend/internal/database"
 	"budget-buddy/backend/internal/httpserver"
+	"budget-buddy/backend/internal/plaid"
 )
 
 func main() {
@@ -37,6 +38,9 @@ func main() {
 	defer db.Close()
 
 	server := httpserver.New(cfg, logger, db)
+	workerCtx, workerCancel := context.WithCancel(context.Background())
+	defer workerCancel()
+	go plaid.RunWebhookWorker(workerCtx, db, cfg, logger)
 
 	go func() {
 		logger.Info("api server starting", "addr", cfg.Addr, "env", cfg.Env)
@@ -49,6 +53,7 @@ func main() {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop
+	workerCancel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

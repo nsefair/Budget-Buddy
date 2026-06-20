@@ -42,8 +42,10 @@ in Plaid Dashboard. Until then, leave it blank for iPhone/Sandbox testing.
 - `POST /v1/plaid/exchange`: exchanges a public token, encrypts the access
   token, and stores linked item/account metadata.
 - `GET /v1/plaid/accounts`: same private summary as status for now.
-- `POST /v1/plaid/sync`: placeholder for Transactions Sync.
-- `POST /v1/plaid/webhook`: records Plaid webhook payloads for later workers.
+- `POST /v1/plaid/sync`: runs cursor-based Transactions Sync, reconciles linked
+  goal contributions, and refreshes budget recommendations.
+- `POST /v1/plaid/webhook`: records Plaid webhook payloads for the durable
+  database-backed worker.
 
 ## Frontend Contract
 
@@ -63,6 +65,7 @@ The Bank Connections settings screen should:
 - Public URL: `https://api.<domain>/v1` for Expo `EXPO_PUBLIC_API_URL`.
 - Webhook URL: `https://api.<domain>/v1/plaid/webhook`.
 - Logs/alerts: CloudWatch, plus webhook failure alerting before launch.
+- Verify Plaid webhook JWT signatures before accepting production webhooks.
 
 ## Legal And Compliance Before Production
 

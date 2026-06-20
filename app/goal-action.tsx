@@ -19,7 +19,9 @@ import { Colors } from "@/constants/colors";
 import { BrandHeader } from "@/components/BrandLogo";
 import { Icon, type IconName } from "@/components/Icon";
 import { goalsService } from "@/services/goalsService";
+import { budgetService } from "@/services/budgetService";
 import { budsService } from "@/services/budsService";
+import type { AccountSummary } from "@/mock/budget";
 import type { Goal, GoalCategoryKind } from "@/mock/goals";
 import { formatCurrency } from "@/utils/security";
 
@@ -32,13 +34,13 @@ const ACTION_META: Record<
   contribute: {
     eyebrow: "GOAL",
     title: "Log contribution",
-    subtitle: "Add a manual contribution until Plaid can detect transfers automatically.",
+    subtitle: "Add progress now. Linked savings transfers update the same goal automatically.",
     icon: "banknote",
   },
   edit: {
     eyebrow: "GOAL",
     title: "Edit goal",
-    subtitle: "Polish the goal details before the backend update route lands.",
+    subtitle: "Update the plan and choose which savings account tracks it.",
     icon: "settings",
   },
   share: {
@@ -197,8 +199,8 @@ function ContributeBody({
       <View style={styles.infoCard}>
         <Icon name="target" size={17} color={Colors.accent} strokeWidth={2.4} />
         <Text style={styles.infoText}>
-          This goal is {progress}% complete. A manual contribution updates the
-          progress now; Plaid will automate this later.
+          This goal is {progress}% complete. Manual contributions and linked
+          savings transfers both update its 30-day pace.
         </Text>
       </View>
       <ActionButton
@@ -215,13 +217,56 @@ function EditBody({ goal }: { goal: Goal }) {
   const [name, setName] = useState(goal.name);
   const [reason, setReason] = useState(goal.reason);
   const [monthly, setMonthly] = useState(String(goal.monthlyCommit));
+  const [linkedAccountId, setLinkedAccountId] = useState(goal.linkedAccountId ?? "");
+  const [accounts, setAccounts] = useState<AccountSummary[]>([]);
+  const [unavailableAccountIds, setUnavailableAccountIds] = useState<string[]>([]);
+  const [accountsLoading, setAccountsLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  const saveDraft = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    Alert.alert(
-      "Draft ready",
-      "The edit screen is ready. Backend PATCH /goals/:id can plug in next.",
-    );
+  useEffect(() => {
+    let alive = true;
+    setAccountsLoading(true);
+    Promise.all([budgetService.getAccounts(), goalsService.list()])
+      .then(([nextAccounts, goalList]) => {
+        if (!alive) return;
+        setAccounts(nextAccounts.filter((account) => account.kind === "savings"));
+        setUnavailableAccountIds(
+          goalList.goals.flatMap((item) =>
+            item.id !== goal.id && item.linkedAccountId ? [item.linkedAccountId] : []
+          )
+        );
+      })
+      .catch(() => {
+        if (alive) setAccounts([]);
+      })
+      .finally(() => {
+        if (alive) setAccountsLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [goal.id]);
+
+  const save = async () => {
+    const monthlyCommit = moneyFromInput(monthly);
+    if (!name.trim() || monthlyCommit < 0 || saving) return;
+    setSaving(true);
+    try {
+      await goalsService.update(goal.id, {
+        name: name.trim(),
+        reason: reason.trim(),
+        monthlyCommit,
+        linkedAccountId,
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert("Goal updated", "Your goal details are saved.");
+      router.replace(`/goal/${goal.id}`);
+    } catch {
+      Alert.alert("Could not update goal", "Try again in a moment.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -240,6 +285,19 @@ function EditBody({ goal }: { goal: Goal }) {
         />
       </View>
       <View style={styles.fieldWrap}>
+        <Text style={styles.fieldLabel}>Automatic tracking</Text>
+        <Text style={styles.fieldHelp}>
+          Link one savings account. New Plaid transfers into it will increase this goal.
+        </Text>
+        <EditSavingsAccountPicker
+          accounts={accounts}
+          selectedId={linkedAccountId}
+          unavailableIds={unavailableAccountIds}
+          loading={accountsLoading}
+          onSelect={setLinkedAccountId}
+        />
+      </View>
+      <View style={styles.fieldWrap}>
         <Text style={styles.fieldLabel}>Why it matters</Text>
         <TextInput
           value={reason}
@@ -251,7 +309,12 @@ function EditBody({ goal }: { goal: Goal }) {
           style={[styles.input, styles.textArea]}
         />
       </View>
-      <ActionButton label="Save draft" icon="check" onPress={saveDraft} />
+      <ActionButton
+        label={saving ? "Saving..." : "Save changes"}
+        icon="check"
+        onPress={save}
+        disabled={!name.trim() || saving}
+      />
     </View>
   );
 }
@@ -348,6 +411,90 @@ function GoalMiniCard({ goal }: { goal: Goal }) {
       <View style={styles.track}>
         <View style={[styles.fill, { width: `${Math.round(progress * 100)}%` }]} />
       </View>
+    </View>
+  );
+}
+
+function EditSavingsAccountPicker({
+  accounts,
+  selectedId,
+  unavailableIds,
+  loading,
+  onSelect,
+}: {
+  accounts: AccountSummary[];
+  selectedId: string;
+  unavailableIds: string[];
+  loading: boolean;
+  onSelect: (accountId: string) => void;
+}) {
+  if (loading) {
+    return (
+      <View style={styles.accountLoading}>
+        <ActivityIndicator size="small" color={Colors.accent} />
+        <Text style={styles.accountLoadingText}>Loading savings accounts...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.accountList}>
+      <Pressable
+        style={[styles.accountOption, !selectedId && styles.accountOptionActive]}
+        onPress={() => {
+          Haptics.selectionAsync();
+          onSelect("");
+        }}
+      >
+        <View style={styles.accountOptionIcon}>
+          <Icon name="hand" size={16} color={Colors.navyMuted} strokeWidth={2.3} />
+        </View>
+        <View style={styles.flex}>
+          <Text style={styles.accountOptionName}>Manual only</Text>
+          <Text style={styles.accountOptionMeta}>No account-linked updates</Text>
+        </View>
+        {!selectedId ? <Icon name="check-circle" size={17} color={Colors.emerald} /> : null}
+      </Pressable>
+
+      {accounts.map((account) => {
+        const active = selectedId === account.id;
+        const unavailable = unavailableIds.includes(account.id) && !active;
+        return (
+          <Pressable
+            key={account.id}
+            disabled={unavailable}
+            style={[
+              styles.accountOption,
+              active && styles.accountOptionActive,
+              unavailable && styles.accountOptionDisabled,
+            ]}
+            onPress={() => {
+              Haptics.selectionAsync();
+              onSelect(account.id);
+            }}
+          >
+            <View style={styles.accountOptionIcon}>
+              <Icon name="piggy-bank" size={16} color={Colors.accent} strokeWidth={2.3} />
+            </View>
+            <View style={styles.flex}>
+              <Text style={styles.accountOptionName}>{account.name}</Text>
+              <Text style={styles.accountOptionMeta}>
+                {unavailable
+                  ? "Already linked to another goal"
+                  : `${account.institution ? `${account.institution} · ` : ""}${formatCurrency(account.balance)}`}
+              </Text>
+            </View>
+            {active ? <Icon name="check-circle" size={17} color={Colors.emerald} /> : null}
+          </Pressable>
+        );
+      })}
+
+      {accounts.length === 0 ? (
+        <Text style={styles.accountEmpty}>
+          No savings account is available. Connect one in Profile to enable automatic
+          progress.
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -537,6 +684,14 @@ const styles = StyleSheet.create({
     color: Colors.navyMuted,
     marginLeft: 4,
   },
+  fieldHelp: {
+    marginHorizontal: 4,
+    marginTop: -3,
+    fontSize: 11,
+    fontWeight: "600",
+    color: Colors.muted,
+    lineHeight: 17,
+  },
   input: {
     minHeight: 54,
     borderRadius: 16,
@@ -550,6 +705,58 @@ const styles = StyleSheet.create({
     color: Colors.navy,
   },
   textArea: { minHeight: 112, lineHeight: 20 },
+  accountList: { gap: 9 },
+  accountOption: {
+    minHeight: 60,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+    borderRadius: 15,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  accountOptionActive: {
+    backgroundColor: Colors.greenSurface,
+    borderColor: Colors.accentAlpha45,
+  },
+  accountOptionDisabled: { opacity: 0.45 },
+  accountOptionIcon: {
+    width: 34,
+    height: 34,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 11,
+    backgroundColor: Colors.navy50,
+  },
+  accountOptionName: { fontSize: 13, fontWeight: "800", color: Colors.navy },
+  accountOptionMeta: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: "600",
+    color: Colors.muted,
+  },
+  accountLoading: {
+    minHeight: 60,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 9,
+    borderRadius: 15,
+    backgroundColor: Colors.navy50,
+  },
+  accountLoadingText: { fontSize: 12, fontWeight: "700", color: Colors.navyMuted },
+  accountEmpty: {
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: Colors.navy50,
+    fontSize: 11,
+    fontWeight: "600",
+    color: Colors.navyMuted,
+    lineHeight: 17,
+  },
   infoCard: {
     flexDirection: "row",
     alignItems: "flex-start",

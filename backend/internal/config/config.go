@@ -35,6 +35,7 @@ type Config struct {
 	PlaidAndroidPackageName string
 	PlaidWebhookURL         string
 	PlaidTokenEncryptionKey string
+	PlaidTransactionDays    int
 	AppPublicURL            string
 	AuthActionTokenTTL      time.Duration
 	EmailDeliveryMode       string
@@ -80,6 +81,7 @@ func Load() Config {
 		PlaidAndroidPackageName: env("PLAID_ANDROID_PACKAGE_NAME", ""),
 		PlaidWebhookURL:         env("PLAID_WEBHOOK_URL", ""),
 		PlaidTokenEncryptionKey: env("PLAID_TOKEN_ENCRYPTION_KEY", ""),
+		PlaidTransactionDays:    intEnv("PLAID_TRANSACTION_DAYS", 90),
 		AppPublicURL:            env("APP_PUBLIC_URL", "budget-buddy://"),
 		AuthActionTokenTTL:      durationEnv("AUTH_ACTION_TOKEN_TTL", time.Hour),
 		EmailDeliveryMode:       strings.ToLower(env("EMAIL_DELIVERY_MODE", "log")),
@@ -120,6 +122,18 @@ func (c Config) Validate() error {
 	}
 	if len(c.BillingWebhookSecret) < 32 {
 		problems = append(problems, "BILLING_WEBHOOK_SECRET must be at least 32 characters")
+	}
+	if !c.PlaidConfigured() {
+		problems = append(problems, "PLAID_CLIENT_ID and PLAID_SECRET are required in production")
+	}
+	if len(c.PlaidTokenEncryptionKey) < 32 {
+		problems = append(problems, "PLAID_TOKEN_ENCRYPTION_KEY must be at least 32 characters")
+	}
+	if !strings.HasPrefix(c.PlaidWebhookURL, "https://") {
+		problems = append(problems, "PLAID_WEBHOOK_URL must use https:// in production")
+	}
+	if c.PlaidTransactionDays < 90 || c.PlaidTransactionDays > 730 {
+		problems = append(problems, "PLAID_TRANSACTION_DAYS must be between 90 and 730 in production")
 	}
 	if len(problems) > 0 {
 		return errors.New(strings.Join(problems, "; "))

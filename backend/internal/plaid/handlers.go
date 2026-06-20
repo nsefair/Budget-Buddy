@@ -165,6 +165,7 @@ func (h *Handler) createLinkToken(w http.ResponseWriter, r *http.Request) {
 		WebhookURL:         h.cfg.PlaidWebhookURL,
 		RedirectURI:        h.cfg.PlaidRedirectURI,
 		AndroidPackageName: h.cfg.PlaidAndroidPackageName,
+		TransactionDays:    h.cfg.PlaidTransactionDays,
 	})
 	if err != nil {
 		respond.Error(w, http.StatusBadGateway, "plaid_link_token_failed", safePlaidMessage(err, "Could not create a Plaid Link token."))

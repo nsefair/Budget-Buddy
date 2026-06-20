@@ -1,162 +1,221 @@
 import { Colors } from "@/constants/colors";
+import type {
+  Badge,
+  FinancialScore,
+  League,
+  Quest,
+  QuestCheckInResult,
+  QuestDashboard,
+} from "@/features/quests/types";
 
-export type QuestType = "short" | "medium" | "long";
-export type QuestStatus = "active" | "completed" | "locked";
-
-export interface Quest {
-  id: string;
-  type: QuestType;
-  title: string;
-  whyItMatters: string;
-  xpReward: number;
-  progress: number;
-  total: number;
-  deadline?: string;
-  linkedGoalId?: string;
-  linkedGoalName?: string;
-  status: QuestStatus;
-  completedAt?: string;
+function currentWeek() {
+  const now = new Date();
+  const start = new Date(now);
+  const daysFromMonday = (now.getDay() + 6) % 7;
+  start.setDate(now.getDate() - daysFromMonday);
+  start.setHours(0, 0, 0, 0);
+  const reset = new Date(start);
+  reset.setDate(start.getDate() + 7);
+  return { start, reset };
 }
 
-export interface LeagueUser {
-  id: string;
-  name: string;
-  avatar?: string;
-  level: number;
-  xp: number;
-  streak: number;
-  isCurrentUser?: boolean;
-}
+const { start, reset } = currentWeek();
 
-export interface League {
-  tier: "Bronze" | "Silver" | "Gold" | "Platinum" | "Diamond" | "Champion";
-  tierColor: string;
-  resetDate: string;
-  users: LeagueUser[];
-  currentUserRank: number;
-}
-
-export interface SkillNode {
-  id: string;
-  name: string;
-  branch: "spending" | "saving" | "debt" | "income" | "wealth";
-  status: "locked" | "in_progress" | "unlocked";
-  xpRequired: number;
-  questsRequired: string[];
-  unlockedAt?: string;
-  x: number;
-  y: number;
-}
-
-export interface Badge {
-  id: string;
-  name: string;
-  description: string;
-  icon: string;
-  category: "streak" | "quest" | "social" | "tool" | "league" | "milestone";
-  earned: boolean;
-  earnedAt?: string;
-  requirement?: string;
-}
-
-// ─── Mock Data ────────────────────────────────────────────────────────────────
 export const MOCK_QUESTS: Quest[] = [
-  // Short-term
   {
-    id: "q_short_1",
+    id: "q_week_home_meals",
+    templateId: "home_meals_3",
     type: "short",
-    title: "Cook 3 meals at home this week",
-    whyItMatters: "You spent $160 on delivery last month — cooking 3 meals could save $50 this week alone.",
-    xpReward: 150,
-    progress: 1,
+    category: "spending",
+    title: "Cook 3 meals at home",
+    whyItMatters:
+      "Food and delivery totaled $160 in the last 30 days — a few home-first choices can leave more room for what matters.",
+    instructions:
+      "Check in after a meal you made at home. One check-in counts each day.",
+    checkInLabel: "Meal cooked",
+    iconName: "home",
+    verificationType: "self_report",
+    verificationDescription: "Confirmed by your check-in.",
+    xpReward: 120,
+    scoreImpact: 10,
+    progress: 2,
     total: 3,
-    deadline: "2026-05-10T23:59:59Z",
+    unit: "meals",
+    deadline: reset.toISOString(),
     status: "active",
+    checkedInToday: false,
   },
   {
-    id: "q_short_2",
+    id: "q_week_planned_spend",
+    templateId: "planned_spend_5",
     type: "short",
-    title: "Stay under $20 on coffee this week",
-    whyItMatters: "Starbucks alone hit $45 last month — trimming this adds $25 straight to your Emergency Fund.",
-    xpReward: 100,
-    progress: 7.45,
-    total: 20,
-    deadline: "2026-05-10T23:59:59Z",
-    status: "active",
-  },
-  {
-    id: "q_short_3",
-    type: "short",
-    title: "Open Budget Buddy 5 days in a row",
-    whyItMatters: "You're on a 14-day streak — this keeps your momentum and unlocks your streak badge.",
-    xpReward: 75,
+    category: "planning",
+    title: "Keep surprise spending at zero for 5 days",
+    whyItMatters:
+      "Your score is 620 — planning a few choices before they happen is the clearest path to the next range.",
+    instructions:
+      "At the end of a day when every purchase was planned, add one check-in.",
+    checkInLabel: "Day stayed planned",
+    iconName: "shield-check",
+    verificationType: "bank_no_spend",
+    verificationDescription: "Verified from yesterday's synced transactions.",
+    xpReward: 180,
+    scoreImpact: 15,
     progress: 3,
     total: 5,
-    deadline: "2026-05-10T23:59:59Z",
+    unit: "days",
+    deadline: reset.toISOString(),
     status: "active",
+    checkedInToday: false,
   },
-  // Medium-term
   {
-    id: "q_med_1",
-    type: "medium",
-    title: "Transfer $200 to your Emergency Fund this month",
-    whyItMatters: "You're $340 unallocated this month — putting $200 here gets you 22% closer to your 1-month cushion.",
-    xpReward: 400,
-    progress: 50,
-    total: 200,
-    deadline: "2026-05-31T23:59:59Z",
+    id: "q_week_goal_move",
+    templateId: "goal_move",
+    type: "short",
+    category: "goals",
+    title: "Make one move toward a goal",
+    whyItMatters:
+      "Emergency Fund is $3,450 from its finish line — one small move keeps it real and visible.",
+    instructions:
+      "Open a goal and record any contribution that fits this week.",
+    checkInLabel: "Goal move made",
+    iconName: "target",
+    verificationType: "goal_contribution",
+    verificationDescription: "Verified from a new contribution to one of your goals.",
+    xpReward: 130,
+    scoreImpact: 11,
+    progress: 0,
+    total: 1,
+    unit: "move",
+    deadline: reset.toISOString(),
     linkedGoalId: "goal_1",
     linkedGoalName: "Emergency Fund",
     status: "active",
-  },
-  {
-    id: "q_med_2",
-    type: "medium",
-    title: "Keep Shopping under $250 for May",
-    whyItMatters: "Shopping is your biggest overspend category — staying on budget this month saves $80 vs last month.",
-    xpReward: 350,
-    progress: 287,
-    total: 250,
-    deadline: "2026-05-31T23:59:59Z",
-    status: "active",
-  },
-  // Long-term
-  {
-    id: "q_long_1",
-    type: "long",
-    title: "Maintain a 30-day streak",
-    whyItMatters: "You're at 14 days — 30 days is the threshold where financial habits become automatic. You're halfway.",
-    xpReward: 1000,
-    progress: 14,
-    total: 30,
-    status: "active",
+    checkedInToday: false,
   },
 ];
 
+export const MOCK_SCORE: FinancialScore = {
+  value: 620,
+  previousValue: 612,
+  change: 8,
+  band: "Strong",
+  leagueTier: "Platinum",
+  nextLeagueTier: "Diamond",
+  pointsToNextTier: 70,
+  components: {
+    quests: 72,
+    budgeting: 64,
+    saving: 58,
+    goals: 70,
+    consistency: 67,
+  },
+  updatedAt: new Date().toISOString(),
+};
+
 export const MOCK_LEAGUE: League = {
-  tier: "Gold",
+  tier: "Platinum",
   tierColor: Colors.gold,
-  resetDate: "2026-05-12T00:00:00Z",
+  resetDate: reset.toISOString(),
   currentUserRank: 4,
   users: [
-    { id: "u1", name: "Jordan K.", level: 12, xp: 5800, streak: 30 },
-    { id: "u2", name: "Priya M.", level: 10, xp: 5200, streak: 22 },
-    { id: "u3", name: "Derek T.", level: 9, xp: 4800, streak: 19 },
-    { id: "u_me", name: "Marcus R.", level: 7, xp: 3240, streak: 14, isCurrentUser: true },
-    { id: "u4", name: "Sofia L.", level: 7, xp: 3100, streak: 11 },
-    { id: "u5", name: "Chris A.", level: 6, xp: 2900, streak: 9 },
-    { id: "u6", name: "Aaliyah W.", level: 6, xp: 2750, streak: 7 },
-    { id: "u7", name: "Noah B.", level: 5, xp: 2400, streak: 5 },
+    { id: "u1", name: "Jordan K.", level: 12, xp: 5800, streak: 30, financialScore: 676, rank: 1 },
+    { id: "u2", name: "Priya M.", level: 10, xp: 5200, streak: 22, financialScore: 658, rank: 2 },
+    { id: "u3", name: "Derek T.", level: 9, xp: 4800, streak: 19, financialScore: 637, rank: 3 },
+    { id: "u_me", name: "Andre R.", level: 7, xp: 3240, streak: 14, financialScore: 620, rank: 4, isCurrentUser: true },
+    { id: "u4", name: "Sofia L.", level: 7, xp: 3100, streak: 11, financialScore: 614, rank: 5 },
   ],
 };
 
+let mockDashboard: QuestDashboard = {
+  weekStart: start.toISOString().slice(0, 10),
+  resetDate: reset.toISOString(),
+  quests: MOCK_QUESTS,
+  score: MOCK_SCORE,
+  league: MOCK_LEAGUE,
+};
+
+export function getMockQuestDashboard(): QuestDashboard {
+  return {
+    ...mockDashboard,
+    quests: mockDashboard.quests.map((quest) => ({ ...quest })),
+    score: {
+      ...mockDashboard.score,
+      components: { ...mockDashboard.score.components },
+    },
+    league: {
+      ...mockDashboard.league,
+      users: mockDashboard.league.users.map((user) => ({ ...user })),
+    },
+  };
+}
+
+export function checkInMockQuest(questId: string): QuestCheckInResult {
+  const quest = mockDashboard.quests.find((candidate) => candidate.id === questId);
+  if (!quest) throw new Error("Quest not found");
+
+  if (quest.checkedInToday || quest.status === "completed") {
+    return {
+      quest: { ...quest },
+      score: { ...mockDashboard.score },
+      xpEarned: 0,
+      totalXp: 350,
+      alreadyCheckedIn: true,
+    };
+  }
+
+  const progress = Math.min(quest.total, quest.progress + 1);
+  const completed = progress >= quest.total;
+  const updatedQuest: Quest = {
+    ...quest,
+    progress,
+    checkedInToday: true,
+    status: completed ? "completed" : "active",
+    completedAt: completed ? new Date().toISOString() : undefined,
+  };
+  const scoreIncrease = completed ? Math.max(3, Math.round(quest.scoreImpact * 0.6)) : 0;
+  const score = {
+    ...mockDashboard.score,
+    previousValue: mockDashboard.score.value,
+    value: Math.min(850, mockDashboard.score.value + scoreIncrease),
+    change: scoreIncrease,
+    updatedAt: new Date().toISOString(),
+  };
+  mockDashboard = {
+    ...mockDashboard,
+    quests: mockDashboard.quests.map((candidate) =>
+      candidate.id === questId ? updatedQuest : candidate
+    ),
+    score,
+  };
+
+  return {
+    quest: updatedQuest,
+    score,
+    xpEarned: completed ? quest.xpReward : 0,
+    totalXp: 350 + (completed ? quest.xpReward : 0),
+    alreadyCheckedIn: false,
+  };
+}
+
 export const MOCK_BADGES: Badge[] = [
-  { id: "b1", name: "First Step", description: "Complete your first quest", icon: "🥇", category: "quest", earned: true, earnedAt: "2025-11-02T00:00:00Z" },
-  { id: "b2", name: "Streak Starter", description: "Reach a 7-day streak", icon: "🔥", category: "streak", earned: true, earnedAt: "2025-11-08T00:00:00Z" },
-  { id: "b3", name: "Connected", description: "Follow your first Bud", icon: "🤝", category: "social", earned: true, earnedAt: "2025-11-10T00:00:00Z" },
-  { id: "b4", name: "Budget Boss", description: "Stay under budget for a full month", icon: "💪", category: "milestone", earned: false, requirement: "Stay within budget in all categories for one month" },
-  { id: "b5", name: "Curious Learner", description: "Ask Bud 5 questions", icon: "🎓", category: "tool", earned: false, requirement: "Use Ask Bud 5 times" },
-  { id: "b6", name: "Streak Legend", description: "Reach a 30-day streak", icon: "⚡", category: "streak", earned: false, requirement: "Maintain a 30-day streak" },
-  { id: "b7", name: "League Climber", description: "Rank top 3 in Wealth League", icon: "🏆", category: "league", earned: false, requirement: "Finish in top 3 during a weekly league reset" },
-  { id: "b8", name: "Community Member", description: "Follow 10 Buds", icon: "👥", category: "social", earned: false, requirement: "Follow 10 people on Budget Buddy" },
+  { id: "b1", name: "First Step", description: "Complete your first quest", icon: "medal", category: "quest", earned: true, earnedAt: "2025-11-02T00:00:00Z" },
+  { id: "b2", name: "Streak Starter", description: "Reach a 7-day streak", icon: "flame", category: "streak", earned: true, earnedAt: "2025-11-08T00:00:00Z" },
+  { id: "b3", name: "Connected", description: "Follow your first Bud", icon: "users", category: "social", earned: true, earnedAt: "2025-11-10T00:00:00Z" },
+  { id: "b4", name: "On Plan", description: "Stay within plan for a full month", icon: "shield-check", category: "milestone", earned: false, requirement: "Stay within plan in all categories for one month" },
+  { id: "b5", name: "Curious Learner", description: "Ask Bud 5 questions", icon: "sparkles", category: "tool", earned: false, requirement: "Use Ask Bud 5 times" },
+  { id: "b6", name: "Streak Legend", description: "Reach a 30-day streak", icon: "zap", category: "streak", earned: false, requirement: "Maintain a 30-day streak" },
 ];
+
+export type {
+  Badge,
+  FinancialScore,
+  League,
+  LeagueUser,
+  Quest,
+  QuestCheckInResult,
+  QuestDashboard,
+  QuestStatus,
+  QuestType,
+  SkillNode,
+} from "@/features/quests/types";

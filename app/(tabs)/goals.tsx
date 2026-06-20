@@ -9,9 +9,10 @@
  *   no shame, no childish emojis, supportive coach tone.
  */
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   KeyboardAvoidingView,
   Modal,
@@ -25,7 +26,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { MotiView } from "moti";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
@@ -35,6 +36,8 @@ import { EmptyState, ScreenHeader } from "@/components/ui";
 import { Icon, type IconName } from "@/components/Icon";
 import { Stagger } from "@/animations";
 import { goalsService } from "@/services/goalsService";
+import { budgetService } from "@/services/budgetService";
+import type { AccountSummary } from "@/mock/budget";
 import {
   type Goal,
   type GoalCategoryKind,
@@ -42,6 +45,7 @@ import {
   type GoalsSummary,
 } from "@/mock/goals";
 import { formatCurrency, secureLog } from "@/utils/security";
+import { QuestHub } from "@/features/quests/QuestHub";
 
 const TAB_BAR_HEIGHT = 80;
 
@@ -78,6 +82,7 @@ type GoalDraft = {
   duration: GoalDuration;
   months: number;
   reason: string;
+  linkedAccountId: string;
 };
 
 const CREATE_STEPS: CreateStep[] = [
@@ -96,6 +101,7 @@ const DEFAULT_DRAFT: GoalDraft = {
   duration: "medium",
   months: 12,
   reason: "",
+  linkedAccountId: "",
 };
 
 const GOAL_TEMPLATES: Array<{
@@ -158,7 +164,7 @@ export default function GoalsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       const { goals, summary } = await goalsService.list();
       setGoals(goals);
@@ -166,11 +172,13 @@ export default function GoalsScreen() {
     } catch (e) {
       secureLog.error("goals.list failed", e);
     }
-  };
-
-  useEffect(() => {
-    load();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -225,8 +233,8 @@ export default function GoalsScreen() {
         <BrandHeader style={styles.brandHeader} />
 
         <ScreenHeader
-          eyebrow="YOUR GOALS"
-          title="What you're building."
+          eyebrow="QUESTS & PROGRESS"
+          title="Make this week count."
           right={
             <Pressable
               accessibilityRole="button"
@@ -240,6 +248,13 @@ export default function GoalsScreen() {
             </Pressable>
           }
         />
+
+        <QuestHub />
+
+        <View style={styles.goalsSectionHeading}>
+          <Text style={styles.goalsSectionEyebrow}>YOUR GOALS</Text>
+          <Text style={styles.goalsSectionTitle}>What you're building.</Text>
+        </View>
 
         {/* Summary — three top stats from the CEO drawing */}
         {summary && <SummaryRow summary={summary} />}
@@ -266,6 +281,9 @@ export default function GoalsScreen() {
         visible={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
         onCreated={handleGoalCreated}
+        usedAccountIds={goals.flatMap((goal) =>
+          goal.linkedAccountId ? [goal.linkedAccountId] : []
+        )}
       />
     </View>
   );
@@ -353,6 +371,12 @@ function GoalCard({ goal }: { goal: Goal }) {
           <Text style={[styles.durationLabel, { color: duration.tint }]}>
             {duration.label}
           </Text>
+          {goal.linkedAccountId ? (
+            <View style={styles.autoTrackPill}>
+              <Icon name="activity" size={10} color={Colors.teal} strokeWidth={2.5} />
+              <Text style={styles.autoTrackText}>Auto tracking</Text>
+            </View>
+          ) : null}
         </View>
         <View style={[styles.percentBadge, { backgroundColor: `${meta.tint}1A` }]}>
           <Text style={[styles.percentBadgeText, { color: meta.tint }]}>{pct}%</Text>
@@ -422,21 +446,27 @@ function GoalCreationSheet({
   visible,
   onClose,
   onCreated,
+  usedAccountIds,
 }: {
   visible: boolean;
   onClose: () => void;
   onCreated: (goal: Goal) => void;
+  usedAccountIds: string[];
 }) {
   const [step, setStep] = useState<CreateStep>("kind");
   const [draft, setDraft] = useState<GoalDraft>(DEFAULT_DRAFT);
   const [createdGoal, setCreatedGoal] = useState<Goal | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [accounts, setAccounts] = useState<AccountSummary[]>([]);
+  const [accountsLoading, setAccountsLoading] = useState(false);
 
   const entrance = useRef(new Animated.Value(0)).current;
   const successPulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     if (!visible) return;
+
+    let alive = true;
 
     setStep("kind");
     setDraft(DEFAULT_DRAFT);
@@ -449,6 +479,21 @@ function GoalCreationSheet({
       stiffness: 160,
       useNativeDriver: true,
     }).start();
+
+    setAccountsLoading(true);
+    budgetService
+      .getAccounts()
+      .then((nextAccounts) => {
+        if (alive) setAccounts(nextAccounts.filter((account) => account.kind === "savings"));
+      })
+      .catch((error) => secureLog.warn("goals.accounts failed", error))
+      .finally(() => {
+        if (alive) setAccountsLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
   }, [entrance, visible]);
 
   useEffect(() => {
@@ -478,6 +523,7 @@ function GoalCreationSheet({
   const monthlyCommit = moneyFromInput(draft.monthlyCommit);
   const selectedMeta = KIND_META[draft.kind];
   const selectedPlan = PLAN_OPTIONS.find((p) => p.months === draft.months);
+  const selectedAccount = accounts.find((account) => account.id === draft.linkedAccountId);
 
   const canContinue = useMemo(() => {
     if (step === "kind") return Boolean(draft.kind && draft.name.trim());
@@ -519,6 +565,7 @@ function GoalCreationSheet({
         alreadySaved: 0,
         monthlyCommit,
         deadline: deadlineFromMonths(draft.months),
+        linkedAccountId: draft.linkedAccountId || undefined,
       });
       onCreated(goal);
       setCreatedGoal(goal);
@@ -527,6 +574,10 @@ function GoalCreationSheet({
     } catch (e) {
       secureLog.error("goals.create failed", e);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert(
+        "Could not create goal",
+        "Check the details and make sure the savings account is not linked to another goal."
+      );
     } finally {
       setIsSaving(false);
     }
@@ -752,6 +803,23 @@ function GoalCreationSheet({
                     );
                   })}
                 </View>
+
+                <View style={styles.accountPickerSection}>
+                  <Text style={styles.planRowLabel}>AUTOMATIC TRACKING</Text>
+                  <Text style={styles.accountPickerHelp}>
+                    Optional. Link one savings account and Plaid transfers into it will
+                    move this goal automatically.
+                  </Text>
+                  <SavingsAccountPicker
+                    accounts={accounts}
+                    selectedId={draft.linkedAccountId}
+                    unavailableIds={usedAccountIds}
+                    loading={accountsLoading}
+                    onSelect={(linkedAccountId) =>
+                      setDraft((current) => ({ ...current, linkedAccountId }))
+                    }
+                  />
+                </View>
               </View>
             )}
 
@@ -785,8 +853,8 @@ function GoalCreationSheet({
                 <Text style={styles.sheetEyebrow}>READY TO SAVE</Text>
                 <Text style={styles.sheetTitle}>This becomes your next goal.</Text>
                 <Text style={styles.sheetBody}>
-                  Bud will use this to shape quests and check-ins once the backend is
-                  connected.
+                  Bud will use this target for check-ins and recalculate the finish date
+                  from your latest 30-day pace.
                 </Text>
 
                 <View style={styles.reviewCard}>
@@ -823,6 +891,25 @@ function GoalCreationSheet({
                     />
                     <ReviewStat label="Starts with" value="+50 XP" />
                   </View>
+
+                  <View style={styles.reviewTrackingRow}>
+                    <Icon
+                      name={selectedAccount ? "activity" : "piggy-bank"}
+                      size={15}
+                      color={selectedAccount ? Colors.teal : Colors.muted}
+                      strokeWidth={2.4}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.reviewTrackingTitle}>
+                        {selectedAccount ? "Automatic tracking on" : "Manual tracking"}
+                      </Text>
+                      <Text style={styles.reviewTrackingBody}>
+                        {selectedAccount
+                          ? `${selectedAccount.institution ? `${selectedAccount.institution} · ` : ""}${selectedAccount.name}`
+                          : "You can link a savings account later from Edit goal."}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
               </View>
             )}
@@ -852,13 +939,21 @@ function GoalCreationSheet({
                   {createdGoal?.name ?? draft.name} is live.
                 </Text>
                 <Text style={[styles.sheetBody, styles.successBody]}>
-                  Your next move is simple: make one transfer or mark one action
-                  that moves this goal forward.
+                  {selectedAccount
+                    ? `Transfers into ${selectedAccount.name} will now update this goal automatically.`
+                    : "Log a contribution now, or link a savings account later for automatic progress."}
                 </Text>
                 <View style={styles.questTeaser}>
-                  <Icon name="zap" size={17} color={Colors.gold} strokeWidth={2.4} />
+                  <Icon
+                    name={selectedAccount ? "activity" : "zap"}
+                    size={17}
+                    color={Colors.gold}
+                    strokeWidth={2.4}
+                  />
                   <Text style={styles.questTeaserText}>
-                    Quest queued · Create the first contribution
+                    {selectedAccount
+                      ? "Automatic tracking enabled"
+                      : "Quest queued · Create the first contribution"}
                   </Text>
                 </View>
               </View>
@@ -937,6 +1032,93 @@ function LabeledInput({
           returnKeyType="done"
         />
       </View>
+    </View>
+  );
+}
+
+function SavingsAccountPicker({
+  accounts,
+  selectedId,
+  unavailableIds,
+  loading,
+  onSelect,
+}: {
+  accounts: AccountSummary[];
+  selectedId: string;
+  unavailableIds: string[];
+  loading: boolean;
+  onSelect: (accountId: string) => void;
+}) {
+  if (loading) {
+    return (
+      <View style={styles.accountPickerLoading}>
+        <ActivityIndicator size="small" color={Colors.gold} />
+        <Text style={styles.accountPickerLoadingText}>Loading savings accounts...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.accountPickerList}>
+      <Pressable
+        style={[
+          styles.accountPickerCard,
+          !selectedId && styles.accountPickerCardActive,
+        ]}
+        onPress={() => {
+          Haptics.selectionAsync();
+          onSelect("");
+        }}
+      >
+        <View style={styles.accountPickerIcon}>
+          <Icon name="hand" size={16} color={Colors.navyMuted} strokeWidth={2.3} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.accountPickerName}>Manual only</Text>
+          <Text style={styles.accountPickerMeta}>Log contributions yourself</Text>
+        </View>
+        {!selectedId ? <Icon name="check-circle" size={17} color={Colors.teal} /> : null}
+      </Pressable>
+
+      {accounts.map((account) => {
+        const active = selectedId === account.id;
+        const unavailable = unavailableIds.includes(account.id) && !active;
+        return (
+          <Pressable
+            key={account.id}
+            disabled={unavailable}
+            style={[
+              styles.accountPickerCard,
+              active && styles.accountPickerCardActive,
+              unavailable && styles.accountPickerCardDisabled,
+            ]}
+            onPress={() => {
+              Haptics.selectionAsync();
+              onSelect(account.id);
+            }}
+          >
+            <View style={styles.accountPickerIcon}>
+              <Icon name="piggy-bank" size={16} color={Colors.gold} strokeWidth={2.3} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.accountPickerName}>{account.name}</Text>
+              <Text style={styles.accountPickerMeta}>
+                {unavailable
+                  ? "Already tracking another goal"
+                  : `${account.institution ? `${account.institution} · ` : ""}${formatCurrency(account.balance)}`}
+              </Text>
+            </View>
+            {active ? <Icon name="check-circle" size={17} color={Colors.teal} /> : null}
+          </Pressable>
+        );
+      })}
+
+      {accounts.length === 0 ? (
+        <Text style={styles.accountPickerEmpty}>
+          No savings account is available yet. Connect one in Profile, then edit this
+          goal to turn on automatic tracking.
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -1040,6 +1222,20 @@ const styles = StyleSheet.create({
     marginLeft: 5,
   },
 
+  goalsSectionHeading: { marginBottom: 12 },
+  goalsSectionEyebrow: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Colors.gold,
+    letterSpacing: 1.5,
+  },
+  goalsSectionTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: Colors.navy,
+    marginTop: 3,
+  },
+
   grid: { gap: 16 },
 
   goalCard: {
@@ -1084,6 +1280,26 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 1.2,
     marginTop: 3,
+  },
+  autoTrackPill: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 5,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: Colors.greenSurface,
+    borderWidth: 1,
+    borderColor: Colors.greenBorder,
+  },
+  autoTrackText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Colors.teal,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
   },
   percentBadge: {
     minWidth: 48,
@@ -1368,6 +1584,67 @@ const styles = StyleSheet.create({
   planChipSubActive: {
     color: Colors.navyMuted,
   },
+  accountPickerSection: { marginTop: 2 },
+  accountPickerHelp: {
+    marginTop: -4,
+    marginBottom: 10,
+    fontSize: 12,
+    fontWeight: "600",
+    color: Colors.navyMuted,
+    lineHeight: 18,
+  },
+  accountPickerList: { gap: 9 },
+  accountPickerCard: {
+    minHeight: 62,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+    borderRadius: 15,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  accountPickerCardActive: {
+    backgroundColor: Colors.greenSurface,
+    borderColor: Colors.accentAlpha45,
+  },
+  accountPickerCardDisabled: { opacity: 0.45 },
+  accountPickerIcon: {
+    width: 34,
+    height: 34,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 11,
+    backgroundColor: Colors.navy50,
+  },
+  accountPickerName: { fontSize: 13, fontWeight: "800", color: Colors.navy },
+  accountPickerMeta: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: "600",
+    color: Colors.muted,
+  },
+  accountPickerLoading: {
+    minHeight: 64,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 9,
+    borderRadius: 15,
+    backgroundColor: Colors.navy50,
+  },
+  accountPickerLoadingText: { fontSize: 12, fontWeight: "700", color: Colors.navyMuted },
+  accountPickerEmpty: {
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: Colors.navy50,
+    fontSize: 11,
+    fontWeight: "600",
+    color: Colors.navyMuted,
+    lineHeight: 17,
+  },
   whyInputWrap: {
     minHeight: 142,
     backgroundColor: Colors.card,
@@ -1424,6 +1701,24 @@ const styles = StyleSheet.create({
   reviewStats: {
     flexDirection: "row",
     gap: 8,
+  },
+  reviewTrackingRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 9,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: Colors.greenSurface,
+    borderWidth: 1,
+    borderColor: Colors.greenBorder,
+  },
+  reviewTrackingTitle: { fontSize: 12, fontWeight: "800", color: Colors.navy },
+  reviewTrackingBody: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: "600",
+    color: Colors.navyMuted,
+    lineHeight: 16,
   },
   reviewStat: {
     flex: 1,

@@ -43,7 +43,7 @@ const ICON_MAP: Record<
   today: { label: "Today", Icon: TodayIcon },
   budget: { label: "Budget", Icon: BudgetIcon },
   bud: { label: "Bud", Icon: BudIcon },
-  goals: { label: "Goals", Icon: GoalsIcon },
+  goals: { label: "Quests", Icon: GoalsIcon },
   buds: { label: "Buds", Icon: BudsIcon },
 };
 

@@ -11,7 +11,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"budget-buddy/backend/internal/budget"
 	"budget-buddy/backend/internal/config"
+	"budget-buddy/backend/internal/goals"
 )
 
 type SyncResult struct {
@@ -71,6 +73,7 @@ func SyncUserItems(ctx context.Context, db *pgxpool.Pool, cfg config.Config, use
 	if len(results) == 0 && len(syncErrors) > 0 {
 		return nil, syncErrors[0]
 	}
+	_ = budget.RefreshRecommendations(ctx, db, userID)
 
 	return results, nil
 }
@@ -104,6 +107,10 @@ func syncItem(
 				_ = tx.Rollback(ctx)
 				return result, err
 			}
+			if err := goals.ReconcilePlaidTransaction(ctx, tx, userID, added.TransactionID); err != nil {
+				_ = tx.Rollback(ctx)
+				return result, err
+			}
 			result.AddedCount++
 		}
 		for _, modified := range response.Modified {
@@ -111,9 +118,17 @@ func syncItem(
 				_ = tx.Rollback(ctx)
 				return result, err
 			}
+			if err := goals.ReconcilePlaidTransaction(ctx, tx, userID, modified.TransactionID); err != nil {
+				_ = tx.Rollback(ctx)
+				return result, err
+			}
 			result.ModifiedCount++
 		}
 		for _, removed := range response.Removed {
+			if err := goals.RemovePlaidContribution(ctx, tx, userID, removed.TransactionID); err != nil {
+				_ = tx.Rollback(ctx)
+				return result, err
+			}
 			if _, err := tx.Exec(
 				ctx,
 				`delete from plaid_transactions
@@ -317,4 +332,3 @@ func parseOptionalDate(value string) any {
 	}
 	return parsed.Format("2006-01-02")
 }
-

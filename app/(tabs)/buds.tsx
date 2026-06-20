@@ -22,6 +22,7 @@ import { MOCK_LEAGUE, type League } from "@/mock/quests";
 import { budsService } from "@/services/budsService";
 import * as Haptics from "expo-haptics";
 import { Icon } from "@/components/Icon";
+import { WealthLeagueVisual } from "@/features/quests/WealthLeagueVisual";
 
 const TAB_BAR_HEIGHT = 80;
 
@@ -270,7 +271,13 @@ export default function BudsScreen() {
               </Text>
             </View>
 
-            <WealthLeagueCard league={league} />
+            <WealthLeagueVisual
+              league={league}
+              onPress={() => {
+                Haptics.selectionAsync();
+                router.push("/buds/league");
+              }}
+            />
 
             {!isLoading && feed.length === 0 && (
               <EmptySocialState
@@ -406,127 +413,6 @@ function EmptySocialState({
       </View>
       <Text style={styles.emptyTitle}>{title}</Text>
       <Text style={styles.emptyBody}>{body}</Text>
-    </View>
-  );
-}
-
-function WealthLeagueCard({ league }: { league: League }) {
-  const leaders = league.users.slice(0, 8);
-  const maxXp = Math.max(1, ...leaders.map((leader) => leader.xp));
-
-  return (
-    <Pressable
-      style={({ pressed }) => [styles.leagueCard, pressed && styles.leagueCardPressed]}
-      onPress={() => {
-        Haptics.selectionAsync();
-        router.push("/buds/league");
-      }}
-    >
-      <View style={styles.leagueHeader}>
-        <View style={styles.leagueTitleRow}>
-          <View style={styles.leagueIcon}>
-            <Icon name="trophy" size={18} color={Colors.gold} strokeWidth={2.4} />
-          </View>
-          <View style={styles.leagueTitleTextBlock}>
-            <Text style={styles.leagueEyebrow}>WEALTH LEAGUE</Text>
-            <Text style={styles.leagueTitle}>{league.tier} standings</Text>
-          </View>
-        </View>
-        <View style={styles.rankPill}>
-          <Text style={styles.rankPillText}>
-            {league.currentUserRank > 0 ? `#${league.currentUserRank}` : "--"}
-          </Text>
-        </View>
-      </View>
-
-      <Text style={styles.leagueSub}>
-        XP from quests and streak actions only. No balances, budgets, or
-        transaction details are shared.
-      </Text>
-
-      <View style={styles.leagueResetRow}>
-        <Text style={styles.leagueResetText}>{leagueResetCopy(league.resetDate)}</Text>
-        <Text style={styles.leagueZoneText}>Top 3 advance</Text>
-      </View>
-
-      <View style={styles.leagueRows}>
-        {leaders.map((leader, index) => (
-          <LeagueRow
-            key={leader.id}
-            leader={leader}
-            rank={index + 1}
-            maxXp={maxXp}
-          />
-        ))}
-      </View>
-    </Pressable>
-  );
-}
-
-function LeagueRow({
-  leader,
-  rank,
-  maxXp,
-}: {
-  leader: (typeof MOCK_LEAGUE.users)[number];
-  rank: number;
-  maxXp: number;
-}) {
-  const fill = useRef(new Animated.Value(0)).current;
-  const ratio = maxXp === 0 ? 0 : leader.xp / maxXp;
-
-  useEffect(() => {
-    Animated.timing(fill, {
-      toValue: ratio,
-      duration: 520 + rank * 70,
-      useNativeDriver: false,
-    }).start();
-  }, [fill, rank, ratio]);
-
-  const width = fill.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0%", "100%"],
-  });
-
-  return (
-    <View
-      style={[
-        styles.leagueRow,
-        leader.isCurrentUser && styles.leagueRowCurrent,
-      ]}
-    >
-      <View style={styles.leagueRankBox}>
-        <Text
-          style={[
-            styles.leagueRankText,
-            leader.isCurrentUser && styles.leagueRankTextCurrent,
-          ]}
-        >
-          {rank}
-        </Text>
-      </View>
-      <View style={styles.leaguePerson}>
-        <View style={styles.leagueNameRow}>
-          <Text style={styles.leagueName}>
-            {leader.isCurrentUser ? "You" : leader.name}
-          </Text>
-          <View style={styles.levelPill}>
-            <Text style={styles.levelPillText}>Lv {leader.level}</Text>
-          </View>
-          {rank <= 3 && (
-            <View style={styles.promotionPill}>
-              <Text style={styles.promotionPillText}>Advance</Text>
-            </View>
-          )}
-        </View>
-        <View style={styles.leagueTrack}>
-          <Animated.View style={[styles.leagueFill, { width }]} />
-        </View>
-      </View>
-      <View style={styles.leagueXpBox}>
-        <Text style={styles.leagueXp}>{leader.xp.toLocaleString()}</Text>
-        <Text style={styles.leagueXpLabel}>XP</Text>
-      </View>
     </View>
   );
 }

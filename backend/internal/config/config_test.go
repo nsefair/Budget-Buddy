@@ -18,15 +18,20 @@ func TestProductionValidationRejectsDevelopmentDefaults(t *testing.T) {
 
 func TestProductionValidationAcceptsConfiguredSecrets(t *testing.T) {
 	cfg := Config{
-		Env:                  "production",
-		JWTAccessSecret:      "a_unique_production_access_secret_123456789",
-		EmailDeliveryMode:    "smtp",
-		SMTPHost:             "smtp.example.com",
-		SMTPUsername:         "budget-buddy",
-		SMTPPassword:         "smtp-password",
-		AppPublicURL:         "https://budgetbuddy.app",
-		BillingEnvironment:   "production",
-		BillingWebhookSecret: "a_unique_billing_webhook_secret_123456789",
+		Env:                     "production",
+		JWTAccessSecret:         "a_unique_production_access_secret_123456789",
+		EmailDeliveryMode:       "smtp",
+		SMTPHost:                "smtp.example.com",
+		SMTPUsername:            "budget-buddy",
+		SMTPPassword:            "smtp-password",
+		AppPublicURL:            "https://budgetbuddy.app",
+		BillingEnvironment:      "production",
+		BillingWebhookSecret:    "a_unique_billing_webhook_secret_123456789",
+		PlaidClientID:           "production-client-id",
+		PlaidSecret:             "production-secret",
+		PlaidTokenEncryptionKey: "a_unique_plaid_token_encryption_key_123456789",
+		PlaidWebhookURL:         "https://api.budgetbuddy.app/v1/plaid/webhook",
+		PlaidTransactionDays:    90,
 	}
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("Validate returned error: %v", err)

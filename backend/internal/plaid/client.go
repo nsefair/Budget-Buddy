@@ -30,6 +30,7 @@ type LinkTokenRequest struct {
 	WebhookURL         string
 	RedirectURI        string
 	AndroidPackageName string
+	TransactionDays    int
 }
 
 type LinkTokenResponse struct {
@@ -92,6 +93,13 @@ func (c *Client) CreateLinkToken(ctx context.Context, req LinkTokenRequest) (Lin
 	}
 	if len(req.OptionalProducts) > 0 {
 		payload["optional_products"] = req.OptionalProducts
+	}
+	if containsString(req.Products, "transactions") {
+		daysRequested := req.TransactionDays
+		if daysRequested <= 0 {
+			daysRequested = 90
+		}
+		payload["transactions"] = map[string]int{"days_requested": daysRequested}
 	}
 	if strings.TrimSpace(req.WebhookURL) != "" {
 		payload["webhook"] = strings.TrimSpace(req.WebhookURL)
@@ -183,6 +191,15 @@ func defaultStrings(values, fallback []string) []string {
 		return fallback
 	}
 	return clean
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if strings.EqualFold(strings.TrimSpace(value), target) {
+			return true
+		}
+	}
+	return false
 }
 
 func firstNonEmpty(values ...string) string {

@@ -7,6 +7,8 @@ export interface BudgetCategory {
   budgetLimit: number;
   spent: number;
   color: string;
+  source?: "default" | "bud_recommended" | "user_adjusted";
+  recommendedLimit?: number;
 }
 
 export interface Transaction {
@@ -152,12 +154,16 @@ export const MOCK_BUDGET_MONTH_OPTIONS: BudgetMonthOption[] = MOCK_BUDGET_MONTHS
 );
 
 export const MOCK_TRANSACTIONS: Transaction[] = [
+  { id: "txn_paycheck_may_15", merchant: "Payroll deposit", category: "Income", categoryId: "income", amount: -1900, date: "2026-05-15T09:00:00Z", isRecurring: true, isManual: false, isFlagged: false },
+  { id: "txn_icloud_may", merchant: "iCloud+", category: "Entertainment", categoryId: "entertainment", amount: 2.99, date: "2026-05-12T00:00:00Z", isRecurring: true, isManual: false, isFlagged: false },
   { id: "txn_001", merchant: "Chipotle", category: "Food & Drink", categoryId: "food", amount: 14.75, date: "2026-05-06T12:30:00Z", isRecurring: false, isManual: false, isFlagged: false },
   { id: "txn_002", merchant: "Uber", category: "Transportation", categoryId: "transport", amount: 23.50, date: "2026-05-06T09:15:00Z", isRecurring: false, isManual: false, isFlagged: false },
   { id: "txn_003", merchant: "Netflix", category: "Entertainment", categoryId: "entertainment", amount: 15.49, date: "2026-05-05T00:00:00Z", isRecurring: true, isManual: false, isFlagged: false },
   { id: "txn_004", merchant: "Amazon", category: "Shopping", categoryId: "shopping", amount: 89.99, date: "2026-05-05T14:22:00Z", isRecurring: false, isManual: false, isFlagged: true },
   { id: "txn_005", merchant: "Whole Foods", category: "Food & Drink", categoryId: "food", amount: 67.30, date: "2026-05-04T18:00:00Z", isRecurring: false, isManual: false, isFlagged: false },
   { id: "txn_006", merchant: "Planet Fitness", category: "Health & Wellness", categoryId: "health", amount: 24.99, date: "2026-05-01T00:00:00Z", isRecurring: true, isManual: false, isFlagged: false },
+  { id: "txn_rent_may", merchant: "Landlord", category: "Housing", categoryId: "housing", amount: 1200, date: "2026-05-01T08:00:00Z", isRecurring: true, isManual: false, isFlagged: false },
+  { id: "txn_paycheck_may_01", merchant: "Payroll deposit", category: "Income", categoryId: "income", amount: -1900, date: "2026-05-01T09:00:00Z", isRecurring: true, isManual: false, isFlagged: false },
   { id: "txn_007", merchant: "Starbucks", category: "Food & Drink", categoryId: "food", amount: 7.45, date: "2026-05-06T08:05:00Z", isRecurring: false, isManual: false, isFlagged: false },
   { id: "txn_008", merchant: "Shell Gas Station", category: "Transportation", categoryId: "transport", amount: 52.00, date: "2026-05-03T11:30:00Z", isRecurring: false, isManual: false, isFlagged: false },
   { id: "txn_009", merchant: "Target", category: "Shopping", categoryId: "shopping", amount: 72.40, date: "2026-04-28T16:10:00Z", isRecurring: false, isManual: false, isFlagged: false },

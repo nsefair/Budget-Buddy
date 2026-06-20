@@ -55,13 +55,14 @@ type WealthLeague struct {
 }
 
 type LeagueUser struct {
-	ID            string `json:"id"`
-	Name          string `json:"name"`
-	Avatar        string `json:"avatar,omitempty"`
-	Level         int    `json:"level"`
-	XP            int    `json:"xp"`
-	Streak        int    `json:"streak"`
-	IsCurrentUser bool   `json:"isCurrentUser,omitempty"`
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Avatar         string `json:"avatar,omitempty"`
+	Level          int    `json:"level"`
+	XP             int    `json:"xp"`
+	Streak         int    `json:"streak"`
+	FinancialScore int    `json:"financialScore"`
+	IsCurrentUser  bool   `json:"isCurrentUser,omitempty"`
 }
 
 type createPostRequest struct {
@@ -148,7 +149,17 @@ func (h *Handler) league(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.db.Query(
 		r.Context(),
-		`with ranked as (
+		`with current_tier as (
+		   select case
+		            when financial_health_score >= 770 then 6
+		            when financial_health_score >= 690 then 5
+		            when financial_health_score >= 610 then 4
+		            when financial_health_score >= 530 then 3
+		            when financial_health_score >= 450 then 2
+		            else 1
+		          end as tier
+		     from users where id = $1
+		 ), ranked as (
 		   select u.id::text,
 		          u.first_name,
 		          u.last_name,
@@ -156,18 +167,28 @@ func (h *Handler) league(w http.ResponseWriter, r *http.Request) {
 		          u.level,
 		          u.xp,
 		          u.streak,
+		          u.financial_health_score,
 		          row_number() over (
-		            order by u.xp desc, u.level desc, u.streak desc, u.joined_at asc
+		            order by u.financial_health_score desc, u.xp desc, u.streak desc, u.joined_at asc
 		          )::integer as league_rank
 		     from users u
+		     cross join current_tier ct
 		    where u.onboarding_complete = true
+		      and (case
+		             when u.financial_health_score >= 770 then 6
+		             when u.financial_health_score >= 690 then 5
+		             when u.financial_health_score >= 610 then 4
+		             when u.financial_health_score >= 530 then 3
+		             when u.financial_health_score >= 450 then 2
+		             else 1
+		           end) = ct.tier
 		      and not exists (
 		        select 1 from bud_blocks b
 		         where (b.blocker_id = $1::uuid and b.blocked_id = u.id)
 		            or (b.blocker_id = u.id and b.blocked_id = $1::uuid)
 		      )
 		 )
-		 select id, first_name, last_name, avatar_url, level, xp, streak,
+		 select id, first_name, last_name, avatar_url, level, xp, streak, financial_health_score,
 		        league_rank, id = $1::text as is_current_user
 		   from ranked
 		  where league_rank <= 30 or id = $1::text
@@ -182,7 +203,7 @@ func (h *Handler) league(w http.ResponseWriter, r *http.Request) {
 
 	users := []LeagueUser{}
 	currentRank := 0
-	currentLevel := 1
+	currentScore := 500
 	for rows.Next() {
 		var user LeagueUser
 		var firstName string
@@ -196,6 +217,7 @@ func (h *Handler) league(w http.ResponseWriter, r *http.Request) {
 			&user.Level,
 			&user.XP,
 			&user.Streak,
+			&user.FinancialScore,
 			&rank,
 			&user.IsCurrentUser,
 		); err != nil {
@@ -205,7 +227,7 @@ func (h *Handler) league(w http.ResponseWriter, r *http.Request) {
 		user.Name, _ = displayName(firstName, lastName)
 		if user.IsCurrentUser {
 			currentRank = rank
-			currentLevel = user.Level
+			currentScore = user.FinancialScore
 		}
 		users = append(users, user)
 	}
@@ -215,7 +237,7 @@ func (h *Handler) league(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respond.JSON(w, http.StatusOK, WealthLeague{
-		Tier:            leagueTier(currentLevel),
+		Tier:            financialScoreLeagueTier(currentScore),
 		ResetDate:       nextLeagueReset().Format(time.RFC3339),
 		Users:           users,
 		CurrentUserRank: currentRank,
@@ -700,7 +722,7 @@ func scanFeedPost(row feedRow) (FeedPost, error) {
 		return FeedPost{}, err
 	}
 	post.User.DisplayName, post.User.Initials = displayName(firstName, lastName)
-	post.User.LeagueTier = leagueTier(post.User.Level)
+	post.User.LeagueTier = financialScoreLeagueTier(post.User.FinancialHealthScore)
 	post.User.BadgeCount = badgeCount(post.User.Level, post.User.Streak)
 	post.Timestamp = createdAt.UTC().Format(time.RFC3339)
 	return post, nil
@@ -741,7 +763,7 @@ func scanProfile(row profileRow, profile *BudProfile) error {
 		return err
 	}
 	profile.DisplayName, profile.Initials = displayName(firstName, lastName)
-	profile.LeagueTier = leagueTier(profile.Level)
+	profile.LeagueTier = financialScoreLeagueTier(profile.FinancialHealthScore)
 	profile.BadgeCount = badgeCount(profile.Level, profile.Streak)
 	return nil
 }
@@ -821,6 +843,23 @@ func leagueTier(level int) string {
 	case level >= 10:
 		return "Gold"
 	case level >= 5:
+		return "Silver"
+	default:
+		return "Bronze"
+	}
+}
+
+func financialScoreLeagueTier(score int) string {
+	switch {
+	case score >= 770:
+		return "Champion"
+	case score >= 690:
+		return "Diamond"
+	case score >= 610:
+		return "Platinum"
+	case score >= 530:
+		return "Gold"
+	case score >= 450:
 		return "Silver"
 	default:
 		return "Bronze"

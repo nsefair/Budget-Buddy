@@ -3,7 +3,8 @@
  *
  * Matches the CEO's drawing:
  *   • Top 4 stat cards (Income, Spent, Saving Rate, Avg Daily Spend)
- *   • Spending Breakdown (donut substitute via segmented bar)
+ *   • Spending Breakdown (interactive visual category donut)
+ *   • Monthly transaction calendar for recurring bills and income
  *   • Trends placeholder + Budget Detail (category fill bars)
  *   • Recent | Upcoming transactions (segmented)
  *   • Investment Portfolio (zero until connected)
@@ -13,15 +14,18 @@
  * Everything else stays Lucide/icon-system based.
  */
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { router, useFocusEffect } from "expo-router";
 import { MotiView } from "moti";
 import * as Haptics from "expo-haptics";
 
@@ -38,9 +42,19 @@ import {
   type Transaction,
 } from "@/mock/budget";
 import { IS_MOCK } from "@/api/client";
-import { budgetService, linkedAccountNetWorth } from "@/services/budgetService";
+import {
+  budgetService,
+  linkedAccountNetWorth,
+  type BudgetSuggestionSet,
+} from "@/services/budgetService";
 import { plaidService } from "@/services/plaidService";
+import { goalsService } from "@/services/goalsService";
+import type { GoalsSummary } from "@/mock/goals";
 import { formatCurrency, secureLog } from "@/utils/security";
+import {
+  SpendingDonutChart,
+  TransactionCalendar,
+} from "@/features/budget/BudgetVisuals";
 
 const TAB_BAR_HEIGHT = 80;
 
@@ -69,6 +83,21 @@ function emojiForCategory(value: string) {
   return "💸";
 }
 
+function moneyInput(value: string) {
+  const cleaned = value.replace(/[^0-9.]/g, "");
+  const [whole, ...decimals] = cleaned.split(".");
+  return decimals.length ? `${whole}.${decimals.join("").slice(0, 2)}` : whole;
+}
+
+function suggestionDraftsFrom(suggestions: BudgetSuggestionSet) {
+  return Object.fromEntries(
+    suggestions.categories.map((category) => [
+      category.categoryId,
+      String(Math.round(category.suggestedLimit * 100) / 100),
+    ])
+  );
+}
+
 export default function BudgetScreen() {
   const insets = useSafeAreaInsets();
   const [txnTab, setTxnTab] = useState<"recent" | "upcoming">("recent");
@@ -77,6 +106,15 @@ export default function BudgetScreen() {
   const [overview, setOverview] = useState<BudgetOverview | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<AccountSummary[]>([]);
+  const [goalsSummary, setGoalsSummary] = useState<GoalsSummary | null>(null);
+  const [suggestions, setSuggestions] = useState<BudgetSuggestionSet | null>(null);
+  const [suggestionDrafts, setSuggestionDrafts] = useState<Record<string, string>>({});
+  const [savingSuggestions, setSavingSuggestions] = useState(false);
+  const [suggestionMessage, setSuggestionMessage] = useState("");
+  const [editingLimits, setEditingLimits] = useState(false);
+  const [limitDrafts, setLimitDrafts] = useState<Record<string, string>>({});
+  const [savingLimits, setSavingLimits] = useState(false);
+  const [limitMessage, setLimitMessage] = useState("");
   const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
@@ -91,20 +129,32 @@ export default function BudgetScreen() {
           } catch (error) {
             secureLog.warn("budget.sync failed", error);
           }
-          try {
-            const nextAccounts = await budgetService.getAccounts();
-            if (alive) setAccounts(nextAccounts);
-          } catch (error) {
-            secureLog.warn("budget.accounts failed", error);
-          }
         }
 
-        const availableMonths = await budgetService.getAvailableMonths();
+        const [availableMonths, nextAccounts, nextSuggestions] = await Promise.all([
+          budgetService.getAvailableMonths(),
+          budgetService.getAccounts().catch((error) => {
+            secureLog.warn("budget.accounts failed", error);
+            return [];
+          }),
+          budgetService.getSuggestions().catch((error) => {
+            secureLog.warn(
+              "budget.suggestions unavailable",
+              error instanceof Error ? error.message : error
+            );
+            return null;
+          }),
+        ]);
         if (!alive) return;
 
         const currentMonth =
           availableMonths.find((month) => month.isCurrent) ??
           availableMonths[availableMonths.length - 1];
+        setAccounts(nextAccounts);
+        if (nextSuggestions) {
+          setSuggestions(nextSuggestions);
+          setSuggestionDrafts(suggestionDraftsFrom(nextSuggestions));
+        }
         setMonths(availableMonths);
         setSelectedMonthId((existing) => existing || currentMonth?.id || "");
       } catch (error) {
@@ -119,6 +169,22 @@ export default function BudgetScreen() {
     };
   }, []);
 
+  useFocusEffect(
+    useCallback(() => {
+      let alive = true;
+      goalsService
+        .list()
+        .then((result) => {
+          if (alive) setGoalsSummary(result.summary);
+        })
+        .catch((error) => secureLog.warn("budget.goals-summary failed", error));
+
+      return () => {
+        alive = false;
+      };
+    }, [])
+  );
+
   useEffect(() => {
     if (!selectedMonthId) return;
     let alive = true;
@@ -127,7 +193,7 @@ export default function BudgetScreen() {
       try {
         const [nextOverview, nextTransactions] = await Promise.all([
           budgetService.getOverview(selectedMonthId),
-          budgetService.getTransactions({ month: selectedMonthId, limit: 12 }),
+          budgetService.getTransactions({ month: selectedMonthId, limit: 200 }),
         ]);
         if (!alive) return;
         setOverview(nextOverview);
@@ -151,6 +217,93 @@ export default function BudgetScreen() {
     if (!next) return;
     Haptics.selectionAsync();
     setSelectedMonthId(next.id);
+  };
+
+  const saveSuggestedBudget = async () => {
+    if (!suggestions?.ready || savingSuggestions) return;
+
+    const categories = suggestions.categories.map((category) => ({
+      categoryId: category.categoryId,
+      amount: Number(suggestionDrafts[category.categoryId] ?? 0),
+    }));
+
+    if (categories.some((category) => !Number.isFinite(category.amount) || category.amount < 0)) {
+      setSuggestionMessage("Enter a valid limit for every category.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
+
+    setSavingSuggestions(true);
+    setSuggestionMessage("");
+    try {
+      await budgetService.applySuggestions(categories);
+      const [nextOverview, nextMonths] = await Promise.all([
+        budgetService.getOverview(selectedMonthId),
+        budgetService.getAvailableMonths(),
+      ]);
+      setOverview(nextOverview);
+      setMonths(nextMonths);
+      setSuggestionMessage("Saved. These limits will carry into future months.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      secureLog.error("budget.suggestions.save failed", error);
+      setSuggestionMessage("Could not save your budget. Try again in a moment.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setSavingSuggestions(false);
+    }
+  };
+
+  const beginLimitEditing = () => {
+    if (!overview) return;
+    Haptics.selectionAsync();
+    setLimitMessage("");
+    setLimitDrafts(
+      Object.fromEntries(
+        overview.categories.map((category) => [category.id, String(category.budgetLimit)])
+      )
+    );
+    setEditingLimits(true);
+  };
+
+  const cancelLimitEditing = () => {
+    Haptics.selectionAsync();
+    setEditingLimits(false);
+    setLimitMessage("");
+  };
+
+  const saveCategoryLimits = async () => {
+    if (!overview || savingLimits) return;
+    const limits = overview.categories.map((category) => ({
+      categoryId: category.id,
+      amount: Number(limitDrafts[category.id] ?? category.budgetLimit),
+    }));
+    if (limits.some(({ amount }) => !Number.isFinite(amount) || amount < 0)) {
+      setLimitMessage("Enter a valid amount for every category.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
+
+    setSavingLimits(true);
+    setLimitMessage("");
+    try {
+      await budgetService.applySuggestions(limits);
+      const [nextOverview, nextMonths] = await Promise.all([
+        budgetService.getOverview(selectedMonthId),
+        budgetService.getAvailableMonths(),
+      ]);
+      setOverview(nextOverview);
+      setMonths(nextMonths);
+      setEditingLimits(false);
+      setLimitMessage("Your category limits are saved for future months.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      secureLog.error("budget.category-limits.save failed", error);
+      setLimitMessage("Could not save category limits. Try again in a moment.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setSavingLimits(false);
+    }
   };
 
   if (!overview) {
@@ -244,35 +397,147 @@ export default function BudgetScreen() {
           />
         </View>
 
-        {/* Spending breakdown — segmented bar */}
+        {/* Spending breakdown — category donut */}
         <Card>
           <CardHeader title="Spending breakdown" hint={overview.month} />
-          <SegmentedBar categories={overview.categories} totalSpent={overview.totalSpent} />
-          <View style={styles.legend}>
-            {overview.categories.slice(0, 6).map((c) => (
-              <View key={c.id} style={styles.legendItem}>
-                <View style={[styles.legendSwatch, { backgroundColor: c.color }]} />
-                <Text style={styles.legendText} numberOfLines={1}>
-                  {c.name}
-                </Text>
-              </View>
-            ))}
-          </View>
+          <SpendingDonutChart
+            categories={overview.categories}
+            totalSpent={overview.totalSpent}
+          />
         </Card>
+
+        <Card>
+          <CardHeader
+            title="Money calendar"
+            hint="Spot paydays, subscriptions, and spending patterns"
+          />
+          <TransactionCalendar
+            monthId={selectedMonthId}
+            monthLabel={overview.month}
+            transactions={transactions}
+          />
+        </Card>
+
+        {suggestions && (
+          <RecommendationCard
+            suggestions={suggestions}
+            drafts={suggestionDrafts}
+            saving={savingSuggestions}
+            message={suggestionMessage}
+            goalsSummary={goalsSummary}
+            onChange={(categoryId, value) => {
+              setSuggestionMessage("");
+              setSuggestionDrafts((current) => ({
+                ...current,
+                [categoryId]: moneyInput(value),
+              }));
+            }}
+            onReset={() => {
+              Haptics.selectionAsync();
+              setSuggestionMessage("");
+              setSuggestionDrafts(suggestionDraftsFrom(suggestions));
+            }}
+            onSave={saveSuggestedBudget}
+          />
+        )}
 
         {/* Budget detail — category fill bars */}
         <Card>
-          <CardHeader title="Budget detail" hint="Per category" />
+          <CardHeader
+            title="Budget detail"
+            hint={editingLimits ? "Set your monthly caps" : "Per category"}
+            right={
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={editingLimits ? "Cancel editing budget limits" : "Edit budget limits"}
+                onPress={editingLimits ? cancelLimitEditing : beginLimitEditing}
+                style={({ pressed }) => [
+                  styles.editLimitsButton,
+                  pressed && styles.recommendationPressed,
+                ]}
+              >
+                <Icon
+                  name={editingLimits ? "x" : "settings"}
+                  size={13}
+                  color={Colors.gold}
+                  strokeWidth={2.4}
+                />
+                <Text style={styles.editLimitsText}>{editingLimits ? "Cancel" : "Edit limits"}</Text>
+              </Pressable>
+            }
+          />
           <View style={{ gap: 12 }}>
             {overview.categories.map((c) => (
-              <CategoryRow key={c.id} category={c} />
+              <CategoryRow
+                key={c.id}
+                category={c}
+                editing={editingLimits}
+                draftValue={limitDrafts[c.id] ?? String(c.budgetLimit)}
+                onChangeDraft={(value) => {
+                  setLimitMessage("");
+                  setLimitDrafts((current) => ({
+                    ...current,
+                    [c.id]: moneyInput(value),
+                  }));
+                }}
+              />
             ))}
           </View>
+          {limitMessage ? (
+            <Text
+              style={[
+                styles.recommendationMessage,
+                limitMessage.startsWith("Your") && styles.recommendationMessageSuccess,
+              ]}
+            >
+              {limitMessage}
+            </Text>
+          ) : null}
+          {editingLimits ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Save budget category limits"
+              disabled={savingLimits}
+              onPress={saveCategoryLimits}
+              style={({ pressed }) => [
+                styles.saveLimitsButton,
+                savingLimits && styles.recommendationDisabled,
+                pressed && !savingLimits && styles.recommendationPressed,
+              ]}
+            >
+              {savingLimits ? (
+                <ActivityIndicator size="small" color={Colors.onAccent} />
+              ) : (
+                <Text style={styles.saveLimitsText}>Save category limits</Text>
+              )}
+            </Pressable>
+          ) : null}
         </Card>
 
         {/* Transactions — Recent | Upcoming */}
         <Card>
-          <CardHeader title="Transactions" />
+          <CardHeader
+            title="Transactions"
+            right={
+              txnTab === "recent" ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="View all transactions"
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    router.push({ pathname: "/transactions", params: { month: selectedMonthId } });
+                  }}
+                  style={({ pressed }) => [
+                    styles.viewAllButton,
+                    pressed && styles.recommendationPressed,
+                  ]}
+                >
+                  <Text style={styles.viewAllText}>View all</Text>
+                  <Icon name="chevron-right" size={14} color={Colors.gold} strokeWidth={2.5} />
+                </Pressable>
+              ) : null
+            }
+          />
           <View style={styles.txnTabs}>
             <TabPill label="Recent" active={txnTab === "recent"} onPress={() => setTxnTab("recent")} />
             <TabPill label="Upcoming" active={txnTab === "upcoming"} onPress={() => setTxnTab("upcoming")} />
@@ -537,34 +802,174 @@ function StatTile({
   );
 }
 
-function SegmentedBar({
-  categories,
-  totalSpent,
+function RecommendationCard({
+  suggestions,
+  drafts,
+  saving,
+  message,
+  goalsSummary,
+  onChange,
+  onReset,
+  onSave,
 }: {
-  categories: BudgetCategory[];
-  totalSpent: number;
+  suggestions: BudgetSuggestionSet;
+  drafts: Record<string, string>;
+  saving: boolean;
+  message: string;
+  goalsSummary: GoalsSummary | null;
+  onChange: (categoryId: string, value: string) => void;
+  onReset: () => void;
+  onSave: () => void;
 }) {
   return (
-    <View style={styles.segmentedBar}>
-      {categories.map((c) => {
-        const w = (c.spent / totalSpent) * 100;
-        if (w <= 0) return null;
-        return (
-          <View
-            key={c.id}
-            style={{
-              width: `${w}%`,
-              height: "100%",
-              backgroundColor: c.color,
-            }}
-          />
-        );
-      })}
+    <Card>
+      <CardHeader
+        title="Bud's starting budget"
+        hint="Personalized from your last 90 days"
+        right={
+          <View style={styles.budBadge}>
+            <Icon name="sparkles" size={12} color={Colors.gold} strokeWidth={2.4} />
+            <Text style={styles.budBadgeText}>BUD RECOMMENDED</Text>
+          </View>
+        }
+      />
+
+      {!suggestions.ready ? (
+        <View style={styles.recommendationEmpty}>
+          <Icon name="activity" size={17} color={Colors.teal} strokeWidth={2.4} />
+          <Text style={styles.recommendationEmptyText}>
+            {suggestions.message ??
+              "Bud needs enough income and transaction history before building your starting limits."}
+          </Text>
+        </View>
+      ) : (
+        <>
+          <Text style={styles.recommendationIntro}>
+            Based on {formatCurrency(suggestions.detectedMonthlyIncome)} detected monthly income.
+            Adjust any number before saving.
+          </Text>
+
+          <View style={styles.ruleGrid}>
+            <RuleCell label="Needs · 50%" value={suggestions.needsTarget} />
+            <RuleCell label="Wants · 30%" value={suggestions.wantsTarget} />
+            <RuleCell label="Save · 20%" value={suggestions.savingsTarget} />
+          </View>
+
+          <View style={styles.goalBudgetLink}>
+            <View style={styles.goalBudgetIcon}>
+              <Icon name="target" size={15} color={Colors.teal} strokeWidth={2.4} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.goalBudgetTitle}>Goals inside the savings plan</Text>
+              <Text style={styles.goalBudgetBody}>
+                {goalsSummary?.activeCount
+                  ? `${formatCurrency(goalsSummary.monthlyCommittedTotal)} per month is committed across ${goalsSummary.activeCount} active ${goalsSummary.activeCount === 1 ? "goal" : "goals"}.`
+                  : "Create a goal to assign part of this monthly savings target."}
+              </Text>
+            </View>
+            <Text style={styles.goalBudgetAmount}>
+              {formatCurrency(goalsSummary?.monthlyCommittedTotal ?? 0, { compact: true })}
+              <Text style={styles.goalBudgetTarget}>
+                {` / ${formatCurrency(suggestions.savingsTarget, { compact: true })}`}
+              </Text>
+            </Text>
+          </View>
+
+          <View style={styles.recommendationList}>
+            {suggestions.categories.map((category) => (
+              <View key={category.categoryId} style={styles.recommendationRow}>
+                <View style={styles.recommendationNameWrap}>
+                  <View
+                    style={[
+                      styles.recommendationDot,
+                      { backgroundColor: category.color },
+                    ]}
+                  />
+                  <View style={styles.recommendationCopy}>
+                    <Text style={styles.recommendationName}>{category.name}</Text>
+                    <Text style={styles.recommendationAverage}>
+                      90-day average {formatCurrency(category.averageSpend)}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.recommendationInputWrap}>
+                  <Text style={styles.recommendationPrefix}>$</Text>
+                  <TextInput
+                    accessibilityLabel={`${category.name} monthly limit`}
+                    value={drafts[category.categoryId] ?? ""}
+                    onChangeText={(value) => onChange(category.categoryId, value)}
+                    keyboardType="decimal-pad"
+                    selectTextOnFocus
+                    style={styles.recommendationInput}
+                  />
+                </View>
+              </View>
+            ))}
+          </View>
+
+          {message ? (
+            <Text
+              style={[
+                styles.recommendationMessage,
+                message.startsWith("Saved") && styles.recommendationMessageSuccess,
+              ]}
+            >
+              {message}
+            </Text>
+          ) : null}
+
+          <View style={styles.recommendationActions}>
+            <Pressable
+              onPress={onReset}
+              style={({ pressed }) => [
+                styles.recommendationSecondary,
+                pressed && styles.recommendationPressed,
+              ]}
+            >
+              <Text style={styles.recommendationSecondaryText}>Use Bud's numbers</Text>
+            </Pressable>
+            <Pressable
+              onPress={onSave}
+              disabled={saving}
+              style={({ pressed }) => [
+                styles.recommendationPrimary,
+                saving && styles.recommendationDisabled,
+                pressed && !saving && styles.recommendationPressed,
+              ]}
+            >
+              {saving ? (
+                <ActivityIndicator size="small" color={Colors.onAccent} />
+              ) : (
+                <Text style={styles.recommendationPrimaryText}>Save my budget</Text>
+              )}
+            </Pressable>
+          </View>
+        </>
+      )}
+    </Card>
+  );
+}
+
+function RuleCell({ label, value }: { label: string; value: number }) {
+  return (
+    <View style={styles.ruleCell}>
+      <Text style={styles.ruleLabel}>{label}</Text>
+      <Text style={styles.ruleValue}>{formatCurrency(value, { compact: true })}</Text>
     </View>
   );
 }
 
-function CategoryRow({ category }: { category: BudgetCategory }) {
+function CategoryRow({
+  category,
+  editing,
+  draftValue,
+  onChangeDraft,
+}: {
+  category: BudgetCategory;
+  editing: boolean;
+  draftValue: string;
+  onChangeDraft: (value: string) => void;
+}) {
   const pct = useMemo(() => {
     if (category.budgetLimit === 0) return 0;
     return Math.min(1.2, category.spent / category.budgetLimit);
@@ -585,14 +990,40 @@ function CategoryRow({ category }: { category: BudgetCategory }) {
           <View style={[styles.catIcon, { borderColor: `${category.color}55`, backgroundColor: `${category.color}15` }]}>
             <Text style={styles.catEmoji}>{emoji}</Text>
           </View>
-          <Text style={styles.catName}>{category.name}</Text>
+          <View style={styles.catNameWrap}>
+            <Text style={styles.catName}>{category.name}</Text>
+            {category.source && category.source !== "default" ? (
+              <Text
+                style={[
+                  styles.catSource,
+                  category.source === "user_adjusted" && styles.catSourceAdjusted,
+                ]}
+              >
+                {category.source === "bud_recommended" ? "Bud plan" : "Adjusted"}
+              </Text>
+            ) : null}
+          </View>
         </View>
-        <Text style={styles.catNumbers}>
-          {formatCurrency(category.spent, { compact: true })}{" "}
-          <Text style={styles.catBudget}>
-            / {formatCurrency(category.budgetLimit, { compact: true })}
+        {editing ? (
+          <View style={styles.categoryLimitInputWrap}>
+            <Text style={styles.categoryLimitPrefix}>$</Text>
+            <TextInput
+              accessibilityLabel={`${category.name} budget limit`}
+              value={draftValue}
+              onChangeText={onChangeDraft}
+              keyboardType="decimal-pad"
+              selectTextOnFocus
+              style={styles.categoryLimitInput}
+            />
+          </View>
+        ) : (
+          <Text style={styles.catNumbers}>
+            {formatCurrency(category.spent, { compact: true })}{" "}
+            <Text style={styles.catBudget}>
+              / {formatCurrency(category.budgetLimit, { compact: true })}
+            </Text>
           </Text>
-        </Text>
+        )}
       </View>
       <View style={styles.catTrack}>
         <View
@@ -941,6 +1372,209 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
   },
   cardHint: { fontSize: 11, color: Colors.muted, marginTop: 2 },
+  editLimitsButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: Colors.accentAlpha08,
+    borderWidth: 1,
+    borderColor: Colors.accentAlpha25,
+  },
+  editLimitsText: { fontSize: 11, fontWeight: "800", color: Colors.gold },
+  saveLimitsButton: {
+    minHeight: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 16,
+    borderRadius: 14,
+    backgroundColor: Colors.gold,
+  },
+  saveLimitsText: { fontSize: 13, fontWeight: "900", color: Colors.onAccent },
+  viewAllButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: Colors.accentAlpha08,
+  },
+  viewAllText: { fontSize: 11, fontWeight: "800", color: Colors.gold },
+
+  // Personalized budget recommendations
+  budBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: Colors.accentAlpha08,
+    borderWidth: 1,
+    borderColor: Colors.accentAlpha25,
+  },
+  budBadgeText: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: Colors.gold,
+    letterSpacing: 0.5,
+  },
+  recommendationIntro: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Colors.navyMuted,
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  ruleGrid: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 16,
+  },
+  ruleCell: {
+    flex: 1,
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: Colors.greenSurface,
+    borderWidth: 1,
+    borderColor: Colors.greenBorder,
+  },
+  ruleLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Colors.navyMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  ruleValue: {
+    marginTop: 4,
+    fontSize: 14,
+    fontWeight: "900",
+    color: Colors.navy,
+  },
+  goalBudgetLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 16,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: Colors.greenSurface,
+    borderWidth: 1,
+    borderColor: Colors.greenBorder,
+  },
+  goalBudgetIcon: {
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 10,
+    backgroundColor: Colors.card,
+  },
+  goalBudgetTitle: { fontSize: 11, fontWeight: "800", color: Colors.navy },
+  goalBudgetBody: {
+    marginTop: 2,
+    fontSize: 10,
+    fontWeight: "600",
+    color: Colors.navyMuted,
+    lineHeight: 15,
+  },
+  goalBudgetAmount: { fontSize: 12, fontWeight: "900", color: Colors.navy },
+  goalBudgetTarget: { color: Colors.muted, fontWeight: "700" },
+  recommendationList: { gap: 9 },
+  recommendationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  recommendationNameWrap: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+  },
+  recommendationDot: { width: 8, height: 8, borderRadius: 4 },
+  recommendationCopy: { flex: 1 },
+  recommendationName: { fontSize: 12, fontWeight: "800", color: Colors.navy },
+  recommendationAverage: {
+    marginTop: 2,
+    fontSize: 10,
+    fontWeight: "600",
+    color: Colors.muted,
+  },
+  recommendationInputWrap: {
+    width: 96,
+    minHeight: 42,
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+    paddingHorizontal: 10,
+  },
+  recommendationPrefix: { fontSize: 13, fontWeight: "800", color: Colors.gold },
+  recommendationInput: {
+    flex: 1,
+    paddingVertical: 9,
+    paddingLeft: 4,
+    textAlign: "right",
+    fontSize: 13,
+    fontWeight: "800",
+    color: Colors.navy,
+  },
+  recommendationMessage: {
+    marginTop: 12,
+    fontSize: 11,
+    fontWeight: "700",
+    color: Colors.coral,
+    textAlign: "center",
+  },
+  recommendationMessageSuccess: { color: Colors.teal },
+  recommendationActions: { flexDirection: "row", gap: 10, marginTop: 14 },
+  recommendationSecondary: {
+    flex: 1,
+    minHeight: 46,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+  },
+  recommendationPrimary: {
+    flex: 1,
+    minHeight: 46,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    backgroundColor: Colors.gold,
+  },
+  recommendationSecondaryText: { fontSize: 12, fontWeight: "800", color: Colors.navy },
+  recommendationPrimaryText: { fontSize: 12, fontWeight: "900", color: Colors.onAccent },
+  recommendationPressed: { opacity: 0.85, transform: [{ scale: 0.99 }] },
+  recommendationDisabled: { opacity: 0.6 },
+  recommendationEmpty: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    padding: 13,
+    borderRadius: 14,
+    backgroundColor: Colors.greenSurface,
+    borderWidth: 1,
+    borderColor: Colors.greenBorder,
+  },
+  recommendationEmptyText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "700",
+    color: Colors.navyMuted,
+    lineHeight: 18,
+  },
 
   // Segmented bar
   segmentedBar: {
@@ -973,9 +1607,40 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   catEmoji: { fontSize: 15, lineHeight: 18 },
+  catNameWrap: { gap: 2 },
   catName: { fontSize: 13, fontWeight: "700", color: Colors.navy },
+  catSource: {
+    alignSelf: "flex-start",
+    fontSize: 9,
+    fontWeight: "800",
+    color: Colors.teal,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  catSourceAdjusted: { color: Colors.gold },
   catNumbers: { fontSize: 13, fontWeight: "700", color: Colors.navy },
   catBudget: { color: Colors.muted, fontWeight: "600" },
+  categoryLimitInputWrap: {
+    width: 104,
+    minHeight: 42,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.accentAlpha30,
+    backgroundColor: Colors.surface,
+  },
+  categoryLimitPrefix: { fontSize: 13, fontWeight: "900", color: Colors.gold },
+  categoryLimitInput: {
+    flex: 1,
+    paddingVertical: 9,
+    paddingLeft: 4,
+    textAlign: "right",
+    fontSize: 13,
+    fontWeight: "800",
+    color: Colors.navy,
+  },
   catTrack: {
     height: 5,
     borderRadius: 3,

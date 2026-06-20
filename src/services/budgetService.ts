@@ -20,6 +20,31 @@ import {
   type AccountSummary,
 } from "@/mock/budget";
 
+export type BudgetSuggestion = {
+  categoryId: string;
+  name: string;
+  bucket: "needs" | "wants";
+  averageSpend: number;
+  suggestedLimit: number;
+  source: "bud_recommended";
+  icon: string;
+  color: string;
+};
+
+export type BudgetSuggestionSet = {
+  ready: boolean;
+  source: "bud_recommended";
+  lookbackStart?: string;
+  lookbackEnd?: string;
+  detectedMonthlyIncome: number;
+  needsTarget: number;
+  wantsTarget: number;
+  savingsTarget: number;
+  generatedAt?: string;
+  categories: BudgetSuggestion[];
+  message?: string;
+};
+
 export const BUDGET_KEYS = {
   all: ["budget"] as const,
   months: () => [...BUDGET_KEYS.all, "months"] as const,
@@ -94,6 +119,31 @@ function sortTransactionsNewestFirst(transactions: Transaction[]) {
   );
 }
 
+const mockCategoryLimits = new Map<
+  string,
+  { amount: number; source: "bud_recommended" | "user_adjusted"; recommendedLimit?: number }
+>();
+
+function withMockCategoryLimits(overview: BudgetOverview): BudgetOverview {
+  const categories = overview.categories.map((category) => {
+    const saved = mockCategoryLimits.get(category.id);
+    return saved
+      ? {
+          ...category,
+          budgetLimit: saved.amount,
+          source: saved.source,
+          recommendedLimit: saved.recommendedLimit,
+        }
+      : { ...category };
+  });
+
+  return {
+    ...overview,
+    categories,
+    totalBudget: categories.reduce((sum, category) => sum + category.budgetLimit, 0),
+  };
+}
+
 export function linkedAccountNetWorth(accounts: AccountSummary[]) {
   return accounts.reduce((sum, account) => {
     if (account.kind === "investment") return sum;
@@ -109,7 +159,7 @@ export const budgetService = {
 
   getOverview: async (month: string): Promise<BudgetOverview> => {
     if (IS_MOCK) {
-      return (
+      return withMockCategoryLimits(
         MOCK_BUDGET_MONTHS.find((overview) => overview.monthId === month) ??
         MOCK_BUDGET_MONTHS.find((overview) => overview.month === month) ??
         MOCK_BUDGET_OVERVIEW
@@ -121,6 +171,73 @@ export const budgetService = {
   getCategories: async (month = currentMonthId()): Promise<BudgetCategory[]> => {
     if (IS_MOCK) return (await budgetService.getOverview(month)).categories;
     return api.get<BudgetCategory[]>(ENDPOINTS.BUDGET.CATEGORIES, { month });
+  },
+
+  getSuggestions: async (): Promise<BudgetSuggestionSet> => {
+    if (IS_MOCK) {
+      const categories = CATEGORY_DEFAULTS.map((category) => ({
+        categoryId: category.id,
+        name: category.name,
+        bucket: (["housing", "food", "transport", "health", "education"].includes(category.id)
+          ? "needs"
+          : "wants") as "needs" | "wants",
+        averageSpend: category.budgetLimit,
+        suggestedLimit: category.budgetLimit,
+        source: "bud_recommended" as const,
+        icon: category.icon,
+        color: category.color,
+      }));
+      return {
+        ready: true,
+        source: "bud_recommended",
+        detectedMonthlyIncome: 3800,
+        needsTarget: 1900,
+        wantsTarget: 1140,
+        savingsTarget: 760,
+        categories,
+      };
+    }
+    return api.get<BudgetSuggestionSet>(ENDPOINTS.BUDGET.SUGGESTIONS);
+  },
+
+  saveCategoryLimit: async (categoryId: string, amount: number) => {
+    if (IS_MOCK) {
+      const recommendedLimit = CATEGORY_DEFAULTS.find(
+        (category) => category.id === categoryId
+      )?.budgetLimit;
+      mockCategoryLimits.set(categoryId, {
+        amount,
+        source: "user_adjusted",
+        recommendedLimit,
+      });
+      return { categoryId, budgetLimit: amount, source: "user_adjusted" as const };
+    }
+    return api.put<{
+      categoryId: string;
+      budgetLimit: number;
+      recommendedLimit?: number;
+      source: "bud_recommended" | "user_adjusted";
+    }>(ENDPOINTS.BUDGET.UPDATE_CATEGORY_LIMIT(categoryId), { amount });
+  },
+
+  applySuggestions: async (categories: Array<{ categoryId: string; amount: number }>) => {
+    if (IS_MOCK) {
+      categories.forEach(({ categoryId, amount }) => {
+        const recommendedLimit = CATEGORY_DEFAULTS.find(
+          (category) => category.id === categoryId
+        )?.budgetLimit;
+        mockCategoryLimits.set(categoryId, {
+          amount,
+          source:
+            recommendedLimit !== undefined && Math.abs(amount - recommendedLimit) < 0.01
+              ? "bud_recommended"
+              : "user_adjusted",
+          recommendedLimit,
+        });
+      });
+      return withMockCategoryLimits(emptyOverview());
+    }
+    return api.post<BudgetOverview>(ENDPOINTS.BUDGET.APPLY_SUGGESTIONS, { categories });
   },
 
   getAccounts: async (): Promise<AccountSummary[]> => {

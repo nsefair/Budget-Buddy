@@ -43,13 +43,14 @@ import {
   type Transaction,
 } from "@/mock/budget";
 import { MOCK_BUD_GREETING } from "@/mock/bud";
-import { MOCK_LEAGUE } from "@/mock/quests";
 import { budgetService, linkedAccountNetWorth } from "@/services/budgetService";
 import { goalsService } from "@/services/goalsService";
 import { todayService, type TodaySummary } from "@/services/todayService";
 import type { Goal } from "@/mock/goals";
 import { formatCurrency, secureLog } from "@/utils/security";
 import { CountUp, FadeInUp } from "@/animations";
+import { ActiveQuestStrip } from "@/features/quests/QuestHub";
+import { useQuestDashboard } from "@/features/quests/useQuestDashboard";
 
 const TAB_BAR_HEIGHT = 80;
 
@@ -80,6 +81,7 @@ function currentMonthId() {
 export default function TodayScreen() {
   const insets = useSafeAreaInsets();
   const user = useUser();
+  const { data: questDashboard } = useQuestDashboard();
 
   const fade = useRef(new Animated.Value(0)).current;
   const lift = useRef(new Animated.Value(16)).current;
@@ -229,7 +231,7 @@ export default function TodayScreen() {
             <StatsCard
               netWorth={linkedNetWorth}
               accountCount={linkedAccounts.length}
-              healthScore={user.financialHealthScore || 620}
+              healthScore={questDashboard?.score.value ?? (user.financialHealthScore || 500)}
               level={user.level}
               streak={user.streak}
               xp={user.xp}
@@ -238,7 +240,7 @@ export default function TodayScreen() {
           </FadeInUp>
 
           <FadeInUp delay={140}>
-            <LeagueSnapshotCard />
+            <ActiveQuestStrip />
           </FadeInUp>
 
           {/* Daily Spend Snapshot */}
@@ -261,7 +263,7 @@ export default function TodayScreen() {
           <SectionHeader
             title="Recent transactions"
             action="See all"
-            onAction={() => router.push("/(tabs)/budget")}
+            onAction={() => router.push("/transactions")}
           />
           <View style={styles.txnCard}>
             {recentTxns.length === 0 && (
@@ -434,45 +436,6 @@ function StatsCard({
         </View>
       </View>
     </View>
-  );
-}
-
-// ─── Wealth League snapshot ─────────────────────────────────────────────────
-
-function LeagueSnapshotCard() {
-  const currentUser = MOCK_LEAGUE.users.find((u) => u.isCurrentUser);
-  const nextRank = MOCK_LEAGUE.users[MOCK_LEAGUE.currentUserRank - 2];
-  const gap = currentUser && nextRank ? Math.max(0, nextRank.xp - currentUser.xp) : 0;
-
-  return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.leagueSnapshot,
-        pressed && { opacity: 0.94 },
-      ]}
-      onPress={() => {
-        Haptics.selectionAsync();
-        router.push("/(tabs)/buds");
-      }}
-    >
-      <View style={styles.leagueSnapshotTop}>
-        <View style={styles.leagueSnapshotTitleRow}>
-          <Icon name="trophy" size={16} color={Colors.gold} strokeWidth={2.4} />
-          <Text style={styles.leagueSnapshotTitle}>Wealth League</Text>
-        </View>
-        <Text style={styles.leagueSnapshotRank}>
-          #{MOCK_LEAGUE.currentUserRank}
-        </Text>
-      </View>
-      <Text style={styles.leagueSnapshotBody}>
-        {gap > 0
-          ? `${gap.toLocaleString()} XP from the advance zone.`
-          : "You're inside the advance zone."}
-      </Text>
-      <View style={styles.leagueMiniTrack}>
-        <View style={[styles.leagueMiniFill, { width: "72%" }]} />
-      </View>
-    </Pressable>
   );
 }
 

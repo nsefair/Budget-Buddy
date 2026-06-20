@@ -24,9 +24,12 @@ export interface Goal {
   reason: string;
   targetAmount: number;
   alreadySaved: number;
+  currentAmount?: number;
   monthlyCommit: number;
   deadline: string; // ISO
   linkedAccountId?: string;
+  trailing30DayContribution?: number;
+  projectedCompletionDate?: string | null;
   createdAt: string;
 }
 

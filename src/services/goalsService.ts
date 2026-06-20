@@ -73,14 +73,26 @@ export const goalsService = {
     );
   },
 
-  contribute: async (id: string, amount: number): Promise<Goal> => {
+  update: async (
+    id: string,
+    payload: Partial<Pick<Goal, "name" | "kind" | "duration" | "reason" | "targetAmount" | "monthlyCommit" | "deadline" | "linkedAccountId">>
+  ): Promise<Goal> => {
+    if (IS_MOCK) {
+      await fakeDelay();
+      const found = MOCK_GOALS.find((g) => g.id === id)!;
+      return { ...found, ...payload };
+    }
+    return toGoal(await api.patch<RawGoal>(ENDPOINTS.GOALS.UPDATE(id), payload));
+  },
+
+  contribute: async (id: string, amount: number, date = new Date().toISOString()): Promise<Goal> => {
     if (IS_MOCK) {
       await fakeDelay();
       const found = MOCK_GOALS.find((g) => g.id === id)!;
       return { ...found, alreadySaved: found.alreadySaved + amount };
     }
     return toGoal(
-      await api.post<RawGoal>(ENDPOINTS.GOALS.CONTRIBUTE(id), { amount })
+      await api.post<RawGoal>(ENDPOINTS.GOALS.CONTRIBUTE(id), { amount, date })
     );
   },
 };

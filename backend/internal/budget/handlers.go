@@ -1,6 +1,8 @@
 package budget
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"net/http"
@@ -8,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"budget-buddy/backend/internal/auth"
@@ -21,12 +24,14 @@ type Handler struct {
 }
 
 type Category struct {
-	ID          string  `json:"id"`
-	Name        string  `json:"name"`
-	Icon        string  `json:"icon"`
-	BudgetLimit float64 `json:"budgetLimit"`
-	Spent       float64 `json:"spent"`
-	Color       string  `json:"color"`
+	ID               string   `json:"id"`
+	Name             string   `json:"name"`
+	Icon             string   `json:"icon"`
+	BudgetLimit      float64  `json:"budgetLimit"`
+	Spent            float64  `json:"spent"`
+	Color            string   `json:"color"`
+	Source           string   `json:"source"`
+	RecommendedLimit *float64 `json:"recommendedLimit,omitempty"`
 }
 
 type Overview struct {
@@ -69,11 +74,43 @@ type Account struct {
 	Institution string  `json:"institution,omitempty"`
 }
 
+type categoryLimitRequest struct {
+	Amount      *float64 `json:"amount"`
+	BudgetLimit *float64 `json:"budgetLimit"`
+}
+
+type applySuggestionsRequest struct {
+	Categories []struct {
+		CategoryID string  `json:"categoryId"`
+		Amount     float64 `json:"amount"`
+	} `json:"categories"`
+}
+
+type savedCategoryLimit struct {
+	LimitCents int64
+	Source     string
+}
+
+type categoryLimitResponse struct {
+	CategoryID       string   `json:"categoryId"`
+	BudgetLimit      float64  `json:"budgetLimit"`
+	RecommendedLimit *float64 `json:"recommendedLimit,omitempty"`
+	Source           string   `json:"source"`
+}
+
+type categoryLimitDB interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
 func RegisterRoutes(mux *http.ServeMux, basePath string, db *pgxpool.Pool, requireAuth authMiddleware) {
 	handler := &Handler{db: db}
 	mux.Handle("GET "+basePath+"/budget/months", requireAuth(http.HandlerFunc(handler.months)))
 	mux.Handle("GET "+basePath+"/budget/overview", requireAuth(http.HandlerFunc(handler.overview)))
 	mux.Handle("GET "+basePath+"/budget/categories", requireAuth(http.HandlerFunc(handler.categories)))
+	mux.Handle("PUT "+basePath+"/budget/categories/{id}/limit", requireAuth(http.HandlerFunc(handler.updateCategoryLimit)))
+	mux.Handle("PATCH "+basePath+"/budget/categories/{id}/limit", requireAuth(http.HandlerFunc(handler.updateCategoryLimit)))
+	mux.Handle("GET "+basePath+"/budget/suggestions", requireAuth(http.HandlerFunc(handler.suggestions)))
+	mux.Handle("POST "+basePath+"/budget/suggestions/apply", requireAuth(http.HandlerFunc(handler.applySuggestions)))
 	mux.Handle("GET "+basePath+"/budget/transactions", requireAuth(http.HandlerFunc(handler.transactions)))
 	mux.Handle("GET "+basePath+"/budget/accounts", requireAuth(http.HandlerFunc(handler.accounts)))
 	mux.Handle("GET "+basePath+"/today/summary", requireAuth(http.HandlerFunc(handler.todaySummary)))
@@ -113,6 +150,210 @@ func (h *Handler) categories(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respond.JSON(w, http.StatusOK, overview.Categories)
+}
+
+func (h *Handler) suggestions(w http.ResponseWriter, r *http.Request) {
+	userID, _ := auth.UserIDFromContext(r.Context())
+	set, err := LoadRecommendations(r.Context(), h.db, userID)
+	if err != nil {
+		respond.Error(w, http.StatusInternalServerError, "budget_suggestions_failed", "Could not load budget suggestions.")
+		return
+	}
+	if !set.Ready {
+		if err := RefreshRecommendations(r.Context(), h.db, userID); err != nil {
+			respond.Error(w, http.StatusInternalServerError, "budget_suggestions_failed", "Could not calculate budget suggestions.")
+			return
+		}
+		set, err = LoadRecommendations(r.Context(), h.db, userID)
+		if err != nil {
+			respond.Error(w, http.StatusInternalServerError, "budget_suggestions_failed", "Could not load budget suggestions.")
+			return
+		}
+	}
+	respond.JSON(w, http.StatusOK, set)
+}
+
+func (h *Handler) updateCategoryLimit(w http.ResponseWriter, r *http.Request) {
+	userID, _ := auth.UserIDFromContext(r.Context())
+	categoryID := strings.TrimSpace(r.PathValue("id"))
+	if !validCategoryID(categoryID) {
+		respond.Error(w, http.StatusNotFound, "budget_category_not_found", "Budget category not found.")
+		return
+	}
+
+	var req categoryLimitRequest
+	if err := decodeBudgetJSON(r, &req); err != nil {
+		respond.Error(w, http.StatusBadRequest, "invalid_json", "Request body must be valid JSON.")
+		return
+	}
+	amount := req.Amount
+	if amount == nil {
+		amount = req.BudgetLimit
+	}
+	if amount == nil || *amount < 0 || *amount > 1000000 {
+		respond.Error(w, http.StatusBadRequest, "validation_error", "Budget limit must be between 0 and 1,000,000.")
+		return
+	}
+
+	saved, err := h.saveCategoryLimit(r, userID, categoryID, dollarsToCents(*amount))
+	if err != nil {
+		respond.Error(w, http.StatusInternalServerError, "budget_limit_failed", "Could not save the budget limit.")
+		return
+	}
+	respond.JSON(w, http.StatusOK, saved)
+}
+
+func (h *Handler) applySuggestions(w http.ResponseWriter, r *http.Request) {
+	userID, _ := auth.UserIDFromContext(r.Context())
+	var req applySuggestionsRequest
+	if err := decodeBudgetJSON(r, &req); err != nil {
+		respond.Error(w, http.StatusBadRequest, "invalid_json", "Request body must be valid JSON.")
+		return
+	}
+	if len(req.Categories) == 0 {
+		respond.Error(w, http.StatusBadRequest, "validation_error", "At least one category limit is required.")
+		return
+	}
+
+	tx, err := h.db.BeginTx(r.Context(), pgx.TxOptions{})
+	if err != nil {
+		respond.Error(w, http.StatusInternalServerError, "budget_limit_failed", "Could not save budget limits.")
+		return
+	}
+	defer func() { _ = tx.Rollback(r.Context()) }()
+
+	for _, category := range req.Categories {
+		categoryID := strings.TrimSpace(category.CategoryID)
+		if !validCategoryID(categoryID) || category.Amount < 0 || category.Amount > 1000000 {
+			respond.Error(w, http.StatusBadRequest, "validation_error", "Each category and amount must be valid.")
+			return
+		}
+		if _, err := saveCategoryLimit(r.Context(), tx, userID, categoryID, dollarsToCents(category.Amount)); err != nil {
+			respond.Error(w, http.StatusInternalServerError, "budget_limit_failed", "Could not save budget limits.")
+			return
+		}
+	}
+	if err := tx.Commit(r.Context()); err != nil {
+		respond.Error(w, http.StatusInternalServerError, "budget_limit_failed", "Could not save budget limits.")
+		return
+	}
+
+	overview, err := h.buildOverview(r, userID, monthParam(r))
+	if err != nil {
+		respond.Error(w, http.StatusInternalServerError, "budget_overview_failed", "Budget limits were saved, but the overview could not be refreshed.")
+		return
+	}
+	respond.JSON(w, http.StatusOK, overview)
+}
+
+func (h *Handler) saveCategoryLimit(r *http.Request, userID, categoryID string, limitCents int64) (categoryLimitResponse, error) {
+	return saveCategoryLimit(r.Context(), h.db, userID, categoryID, limitCents)
+}
+
+func saveCategoryLimit(ctx context.Context, db categoryLimitDB, userID, categoryID string, limitCents int64) (categoryLimitResponse, error) {
+	var response categoryLimitResponse
+	var savedCents int64
+	var recommendedCents *int64
+	err := db.QueryRow(
+		ctx,
+		`insert into budget_category_limits (
+		   user_id, category_id, limit_cents, recommended_limit_cents, source
+		 )
+		 values (
+		   $1,
+		   $2,
+		   $3,
+		   (select suggested_limit_cents from budget_recommendations where user_id = $1 and category_id = $2),
+		   case
+		     when $3 = (select suggested_limit_cents from budget_recommendations where user_id = $1 and category_id = $2)
+		       then 'bud_recommended'
+		     else 'user_adjusted'
+		   end
+		 )
+		 on conflict (user_id, category_id) do update set
+		   limit_cents = excluded.limit_cents,
+		   recommended_limit_cents = excluded.recommended_limit_cents,
+		   source = excluded.source,
+		   updated_at = now()
+		 returning category_id, limit_cents, recommended_limit_cents, source`,
+		userID,
+		categoryID,
+		limitCents,
+	).Scan(&response.CategoryID, &savedCents, &recommendedCents, &response.Source)
+	if err != nil {
+		return categoryLimitResponse{}, err
+	}
+	response.BudgetLimit = centsToDollars(savedCents)
+	if recommendedCents != nil {
+		value := centsToDollars(*recommendedCents)
+		response.RecommendedLimit = &value
+	}
+	return response, nil
+}
+
+func (h *Handler) loadCategoryLimits(r *http.Request, userID string) (map[string]savedCategoryLimit, error) {
+	rows, err := h.db.Query(
+		r.Context(),
+		`select category_id, limit_cents, source
+		   from budget_category_limits
+		  where user_id = $1`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	limits := map[string]savedCategoryLimit{}
+	for rows.Next() {
+		var categoryID string
+		var saved savedCategoryLimit
+		if err := rows.Scan(&categoryID, &saved.LimitCents, &saved.Source); err != nil {
+			return nil, err
+		}
+		limits[categoryID] = saved
+	}
+	return limits, rows.Err()
+}
+
+func (h *Handler) loadRecommendedLimits(r *http.Request, userID string) (map[string]int64, error) {
+	rows, err := h.db.Query(
+		r.Context(),
+		`select category_id, suggested_limit_cents
+		   from budget_recommendations
+		  where user_id = $1`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	limits := map[string]int64{}
+	for rows.Next() {
+		var categoryID string
+		var limitCents int64
+		if err := rows.Scan(&categoryID, &limitCents); err != nil {
+			return nil, err
+		}
+		limits[categoryID] = limitCents
+	}
+	return limits, rows.Err()
+}
+
+func decodeBudgetJSON(r *http.Request, target any) error {
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	return decoder.Decode(target)
+}
+
+func validCategoryID(categoryID string) bool {
+	for _, category := range defaultCategories {
+		if category.ID == categoryID {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *Handler) transactions(w http.ResponseWriter, r *http.Request) {
@@ -189,6 +430,12 @@ func (h *Handler) recentTransactions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) availableMonths(r *http.Request, userID string) ([]MonthOption, error) {
+	limits, err := h.loadCategoryLimits(r, userID)
+	if err != nil {
+		return nil, err
+	}
+	totalBudget := totalBudgetLimit(limits)
+
 	rows, err := h.db.Query(
 		r.Context(),
 		`select to_char(date_trunc('month', date), 'YYYY-MM') as month_id,
@@ -214,7 +461,6 @@ func (h *Handler) availableMonths(r *http.Request, userID string) ([]MonthOption
 		if err := rows.Scan(&monthID, &spentCents); err != nil {
 			return nil, err
 		}
-		totalBudget := totalBudgetLimit()
 		months = append(months, MonthOption{
 			ID:          monthID,
 			Label:       monthLabel(monthID),
@@ -231,7 +477,7 @@ func (h *Handler) availableMonths(r *http.Request, userID string) ([]MonthOption
 		return nil, err
 	}
 	if !seenCurrent {
-		months = append(months, currentMonthOption(0, totalBudgetLimit()))
+		months = append(months, currentMonthOption(0, totalBudget))
 	}
 	return months, nil
 }
@@ -241,28 +487,46 @@ func (h *Handler) buildOverview(r *http.Request, userID, month string) (Overview
 	if err != nil {
 		return Overview{}, err
 	}
+	limits, err := h.loadCategoryLimits(r, userID)
+	if err != nil {
+		return Overview{}, err
+	}
+	recommended, err := h.loadRecommendedLimits(r, userID)
+	if err != nil {
+		return Overview{}, err
+	}
 
 	categories := make([]Category, 0, len(defaultCategories))
 	totalSpent := 0.0
 	totalBudget := 0.0
 	for _, def := range defaultCategories {
 		spent := centsToDollars(spendByCategory[def.ID])
+		budgetLimit := def.BudgetLimit
+		source := "default"
+		if saved, ok := limits[def.ID]; ok {
+			budgetLimit = centsToDollars(saved.LimitCents)
+			source = saved.Source
+		}
+		var recommendedLimit *float64
+		if recommendationCents, ok := recommended[def.ID]; ok {
+			value := centsToDollars(recommendationCents)
+			recommendedLimit = &value
+		}
 		categories = append(categories, Category{
-			ID:          def.ID,
-			Name:        def.Name,
-			Icon:        def.Icon,
-			BudgetLimit: def.BudgetLimit,
-			Spent:       spent,
-			Color:       def.Color,
+			ID:               def.ID,
+			Name:             def.Name,
+			Icon:             def.Icon,
+			BudgetLimit:      budgetLimit,
+			Spent:            spent,
+			Color:            def.Color,
+			Source:           source,
+			RecommendedLimit: recommendedLimit,
 		})
 		totalSpent += spent
-		totalBudget += def.BudgetLimit
+		totalBudget += budgetLimit
 	}
 
 	income := centsToDollars(incomeCents)
-	if income <= 0 {
-		income = 3800
-	}
 	savingsRate := 0.0
 	if income > 0 {
 		savingsRate = math.Max(0, ((income-totalSpent)/income)*100)
@@ -291,6 +555,7 @@ func (h *Handler) categorySpend(r *http.Request, userID, month string) (map[stri
 		r.Context(),
 		`select amount_cents,
 		        coalesce(personal_finance_category_primary, ''),
+		        coalesce(personal_finance_category_detailed, ''),
 		        category
 		   from plaid_transactions
 		  where user_id = $1
@@ -308,13 +573,16 @@ func (h *Handler) categorySpend(r *http.Request, userID, month string) (map[stri
 	var incomeCents int64
 	for rows.Next() {
 		var amountCents int64
-		var pfcPrimary string
+		var pfcPrimary, pfcDetailed string
 		var legacyCategory []string
-		if err := rows.Scan(&amountCents, &pfcPrimary, &legacyCategory); err != nil {
+		if err := rows.Scan(&amountCents, &pfcPrimary, &pfcDetailed, &legacyCategory); err != nil {
 			return nil, 0, err
 		}
-		if amountCents < 0 {
+		if isDetectedIncome(amountCents, pfcPrimary, pfcDetailed, legacyCategory) {
 			incomeCents += -amountCents
+			continue
+		}
+		if amountCents <= 0 || isTransferCategory(pfcPrimary, pfcDetailed, legacyCategory) {
 			continue
 		}
 		categoryID := categoryForTransaction(pfcPrimary, legacyCategory)
@@ -466,7 +734,7 @@ func queryInt(r *http.Request, key string, fallback int) int {
 func currentMonthOption(spent, budget float64) MonthOption {
 	monthID := time.Now().UTC().Format("2006-01")
 	if budget <= 0 {
-		budget = totalBudgetLimit()
+		budget = totalBudgetLimit(nil)
 	}
 	return MonthOption{
 		ID:          monthID,
@@ -478,10 +746,14 @@ func currentMonthOption(spent, budget float64) MonthOption {
 	}
 }
 
-func totalBudgetLimit() float64 {
+func totalBudgetLimit(limits map[string]savedCategoryLimit) float64 {
 	total := 0.0
 	for _, category := range defaultCategories {
-		total += category.BudgetLimit
+		if saved, ok := limits[category.ID]; ok {
+			total += centsToDollars(saved.LimitCents)
+		} else {
+			total += category.BudgetLimit
+		}
 	}
 	return total
 }
@@ -512,6 +784,10 @@ func daysInMonthCount(monthID string) int {
 
 func centsToDollars(cents int64) float64 {
 	return float64(cents) / 100
+}
+
+func dollarsToCents(value float64) int64 {
+	return int64(math.Round(value * 100))
 }
 
 func accountKind(subtype, accountType string) string {

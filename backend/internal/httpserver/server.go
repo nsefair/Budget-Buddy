@@ -35,7 +35,7 @@ func New(cfg config.Config, logger *slog.Logger, db *pgxpool.Pool) *http.Server 
 	notifications.RegisterRoutes(mux, cfg.APIBasePath, db, cfg, authHandler.RequireAuth)
 	budget.RegisterRoutes(mux, cfg.APIBasePath, db, authHandler.RequireAuth)
 	plaid.RegisterRoutes(mux, cfg.APIBasePath, db, cfg, authHandler.RequireAuth)
-	quests.RegisterRoutes(mux, cfg.APIBasePath)
+	quests.RegisterRoutes(mux, cfg.APIBasePath, db, authHandler.RequireAuth)
 
 	handler := recoverer(logger)(requestLogger(logger)(securityHeaders(cfg)(rateLimiter(cfg)(cors(cfg)(mux)))))
 

@@ -66,14 +66,11 @@ export default function GoalDetailScreen() {
 
   const pct = Math.round(progress * 100);
   const remaining = goal ? Math.max(0, goal.targetAmount - goal.alreadySaved) : 0;
-  const monthsLeft = goal && goal.monthlyCommit > 0 ? Math.ceil(remaining / goal.monthlyCommit) : null;
-
   const projected = useMemo(() => {
-    if (monthsLeft == null) return null;
-    const d = new Date();
-    d.setMonth(d.getMonth() + monthsLeft);
+    if (!goal?.projectedCompletionDate) return null;
+    const d = new Date(goal.projectedCompletionDate);
     return d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-  }, [monthsLeft]);
+  }, [goal?.projectedCompletionDate]);
 
   const back = () => {
     Haptics.selectionAsync();
@@ -186,11 +183,11 @@ export default function GoalDetailScreen() {
           <View style={styles.budNote}>
             <Icon name="sparkles" size={15} color={Colors.teal} strokeWidth={2.4} />
             <Text style={styles.budNoteText}>
-              {monthsLeft != null
-                ? `At ${formatCurrency(goal.monthlyCommit)}/mo, you're about ${monthsLeft} ${
-                    monthsLeft === 1 ? "month" : "months"
-                  } from the finish line. Every contribution moves the date up.`
-                : "Add a monthly amount and Bud can project your finish date."}
+              {goal.trailing30DayContribution && projected
+                ? `Your last 30 days added ${formatCurrency(goal.trailing30DayContribution)}. At that pace, you're tracking toward ${projected}.`
+                : goal.linkedAccountId
+                  ? "Automatic tracking is on. New transfers into the linked savings account will build your 30-day pace."
+                  : "Log a contribution to start building your 30-day pace, or link a savings account from Edit goal."}
             </Text>
           </View>
         </FadeInUp>

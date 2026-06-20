@@ -16,6 +16,7 @@ import { BrandHeader } from "@/components/BrandLogo";
 import { Icon } from "@/components/Icon";
 import type { League, LeagueUser } from "@/mock/quests";
 import { budsService } from "@/services/budsService";
+import { WealthLeagueVisual } from "@/features/quests/WealthLeagueVisual";
 
 export default function WealthLeagueScreen() {
   const insets = useSafeAreaInsets();
@@ -37,9 +38,9 @@ export default function WealthLeagueScreen() {
     };
   }, []);
 
-  const maxXp = useMemo(() => {
+  const maxScore = useMemo(() => {
     if (!league) return 1;
-    return Math.max(1, ...league.users.map((user) => user.xp));
+    return Math.max(1, ...league.users.map((user) => user.financialScore));
   }, [league]);
 
   const currentUser = league?.users.find((user) => user.isCurrentUser);
@@ -70,21 +71,16 @@ export default function WealthLeagueScreen() {
           ]}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.hero}>
-            <View style={styles.heroIcon}>
-              <Icon name="trophy" size={22} color={Colors.accent} strokeWidth={2.5} />
-            </View>
-            <Text style={styles.eyebrow}>WEALTH LEAGUE</Text>
-            <Text style={styles.title}>{league.tier} League</Text>
-            <Text style={styles.subtitle}>
-              Ranked by XP, level, and streak. No financial data appears here.
-            </Text>
-          </View>
+          <WealthLeagueVisual
+            league={league}
+            scoreValue={currentUser?.financialScore}
+          />
 
-          <View style={styles.summaryGrid}>
-            <SummaryCard label="Your rank" value={league.currentUserRank > 0 ? `#${league.currentUserRank}` : "--"} />
-            <SummaryCard label="Reset" value={resetCopy} />
-            <SummaryCard label="Your XP" value={currentUser ? currentUser.xp.toLocaleString() : "--"} />
+          <View style={styles.privacyCard}>
+            <Icon name="lock" size={15} color={Colors.emerald} />
+            <Text style={styles.privacyText}>
+              Rankings use Financial Score. Balances, budgets, and purchase details stay private.
+            </Text>
           </View>
 
           <View style={styles.zoneCard}>
@@ -105,7 +101,7 @@ export default function WealthLeagueScreen() {
                 key={user.id}
                 user={user}
                 rank={index + 1}
-                maxXp={maxXp}
+                maxScore={maxScore}
                 total={league.users.length}
               />
             ))}
@@ -119,15 +115,15 @@ export default function WealthLeagueScreen() {
 function LeagueRow({
   user,
   rank,
-  maxXp,
+  maxScore,
   total,
 }: {
   user: LeagueUser;
   rank: number;
-  maxXp: number;
+  maxScore: number;
   total: number;
 }) {
-  const ratio = Math.max(6, Math.min(100, (user.xp / maxXp) * 100));
+  const ratio = Math.max(6, Math.min(100, (user.financialScore / maxScore) * 100));
   const advance = rank <= 3;
   const demotion = rank > Math.max(3, total - 2);
 
@@ -168,8 +164,8 @@ function LeagueRow({
         </View>
       </View>
       <View style={styles.xpWrap}>
-        <Text style={styles.xp}>{user.xp.toLocaleString()}</Text>
-        <Text style={styles.xpLabel}>XP</Text>
+        <Text style={styles.xp}>{user.financialScore.toLocaleString()}</Text>
+        <Text style={styles.xpLabel}>SCORE</Text>
       </View>
     </Pressable>
   );
@@ -231,6 +227,20 @@ const styles = StyleSheet.create({
   },
   iconBtnGhost: { width: 38, height: 38 },
   scroll: { paddingHorizontal: 20, paddingTop: 8 },
+  privacyCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 12,
+    marginBottom: 14,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+    borderRadius: 14,
+    backgroundColor: Colors.greenSurface,
+    borderWidth: 1,
+    borderColor: Colors.greenBorder,
+  },
+  privacyText: { flex: 1, fontSize: 11, lineHeight: 16, fontWeight: "700", color: Colors.navyMuted },
   hero: { alignItems: "center", paddingVertical: 16 },
   heroIcon: {
     width: 54,

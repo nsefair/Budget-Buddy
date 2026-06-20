@@ -11,6 +11,11 @@ Go API service for Budget Buddy. The backend now includes production-shaped foun
 - SMTP or local log-mode email delivery
 - notification preferences, inbox state, and device-token registration
 - signed, idempotent billing entitlement webhooks
+- trailing-three-month budget suggestions with persisted user limits
+- dated manual goal contributions and trailing-30-day completion projections
+- durable Plaid webhook processing with idempotent linked-goal contributions
+- database-randomized weekly quests with once-per-day, idempotent check-ins
+- persisted 300–850 Financial Score breakdowns and score-based Wealth Leagues
 
 The mobile app already centralizes all endpoint paths in `src/api/endpoints.ts`.
 Keep this backend aligned with those paths and only change the frontend endpoint
@@ -90,6 +95,7 @@ export PLAID_ANDROID_PACKAGE_NAME=
 export PLAID_CLIENT_ID=...
 export PLAID_SECRET=...
 export PLAID_TOKEN_ENCRYPTION_KEY=...
+export PLAID_TRANSACTION_DAYS=90
 docker compose up -d --build api
 ```
 
@@ -102,6 +108,9 @@ without sending the Android package name.
 
 See `docs/plaid-integration-plan.md` for the full order of work, AWS path, and
 production/legal checklist.
+
+See `docs/backend-contract-and-production-roadmap.md` for the budget/goal JSON
+contracts and the remaining launch blockers.
 
 ## Email Local Setup
 
@@ -118,6 +127,20 @@ tokens can be registered through `POST /v1/notifications/devices` once the Expo
 project ID and Apple/Google push credentials exist. In development,
 `POST /v1/notifications/test` creates an inbox notification for the signed-in
 user; that route returns 404 in production.
+
+## Weekly Quests + Financial Score
+
+`GET /v1/quests/dashboard` lazily creates three database-selected quests for the
+signed-in user's local Monday–Sunday week. Templates completed or assigned in
+the previous four weeks are excluded from the random pool. Check-ins use
+`POST /v1/quests/{id}/check-in` and are unique per quest/day, so retries cannot
+farm progress or XP.
+
+The Financial Score is persisted on the user plus a detailed
+`financial_health_profiles` row. It spans 300–850 and combines quest history,
+budget consistency, savings pace, goal progress, and streak consistency. Weekly
+League tiers and rankings use this score; public responses expose the score and
+gamification signals only, never balances, budgets, or transactions.
 
 ## Billing Foundation
 
