@@ -41,7 +41,13 @@
         }
       ],
       "expo-secure-store",
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Budget Buddy uses only the photos you choose when you share a win with your Buds."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

@@ -1,138 +1,143 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  View,
-  Text,
-  ScrollView,
-  Pressable,
-  StyleSheet,
-  TextInput,
-  Animated,
   ActivityIndicator,
-  RefreshControl,
   Alert,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import { Colors } from "@/constants/colors";
-import { useUser } from "@/hooks/useAuth";
-import { BrandHeader } from "@/components/BrandLogo";
-import { FeedPost, BudProfile } from "@/mock/buds";
-import { MOCK_LEAGUE, type League } from "@/mock/quests";
-import { budsService } from "@/services/budsService";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { InfiniteData, useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
-import { Icon } from "@/components/Icon";
+
+import { BrandHeader } from "@/components/BrandLogo";
+import { Icon, type IconName } from "@/components/Icon";
+import { Colors } from "@/constants/colors";
+import { Radius, Shadow, Spacing, Type } from "@/constants/tokens";
+import { BudAvatar } from "@/features/buds/BudAvatar";
+import { CommentsSheet } from "@/features/buds/CommentsSheet";
+import { FeedPostCard } from "@/features/buds/FeedPostCard";
+import { PostComposer } from "@/features/buds/PostComposer";
 import { WealthLeagueVisual } from "@/features/quests/WealthLeagueVisual";
+import { useUser } from "@/hooks/useAuth";
+import type { BudProfile, FeedPage, FeedPost } from "@/mock/buds";
+import { BUDS_KEYS, budsService } from "@/services/budsService";
 
-const TAB_BAR_HEIGHT = 80;
-
+const TAB_BAR_HEIGHT = 82;
 type BudsView = "feed" | "my-buds" | "discover";
 
 export default function BudsScreen() {
   const insets = useSafeAreaInsets();
   const user = useUser();
+  const queryClient = useQueryClient();
   const [activeView, setActiveView] = useState<BudsView>("feed");
-  const [feed, setFeed] = useState<FeedPost[]>([]);
-  const [league, setLeague] = useState<League>(MOCK_LEAGUE);
-  const [following, setFollowing] = useState<BudProfile[]>([]);
-  const [discover, setDiscover] = useState<BudProfile[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [commentPost, setCommentPost] = useState<FeedPost>();
+  const [mediaHeaders, setMediaHeaders] = useState<Record<string, string>>();
 
-  const followingCount = following.length;
-
-  const loadSocial = async ({ quiet = false }: { quiet?: boolean } = {}) => {
-    if (!quiet) setIsLoading(true);
-    try {
-      const [nextFeed, nextLeague, nextFollowing, nextDiscover] = await Promise.all([
-        budsService.getFeed(),
-        budsService.getLeague(),
-        budsService.getFollowing(),
-        budsService.getDiscover(),
-      ]);
-      setFeed(nextFeed);
-      setLeague(nextLeague);
-      setFollowing(nextFollowing);
-      setDiscover(nextDiscover);
-    } finally {
-      if (!quiet) setIsLoading(false);
-    }
-  };
+  const feedQuery = useInfiniteQuery({
+    queryKey: BUDS_KEYS.feed(),
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => budsService.getFeedPage({ cursor: pageParam, limit: 10 }),
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+  const leagueQuery = useQuery(budsService.queries.league());
+  const followingQuery = useQuery(budsService.queries.following());
+  const discoverQuery = useQuery(budsService.queries.discover());
 
   useEffect(() => {
-    loadSocial();
-    const id = setInterval(() => {
-      loadSocial({ quiet: true });
-    }, 30_000);
-    return () => clearInterval(id);
+    budsService.mediaHeaders().then(setMediaHeaders).catch(() => setMediaHeaders(undefined));
   }, []);
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await loadSocial({ quiet: true });
-    setRefreshing(false);
-  };
+  const feed = useMemo(
+    () => feedQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [feedQuery.data?.pages],
+  );
+  const following = followingQuery.data ?? [];
+  const discover = useMemo(() => {
+    const normalized = searchQuery.trim().toLowerCase();
+    if (!normalized) return discoverQuery.data ?? [];
+    return (discoverQuery.data ?? []).filter((bud) => bud.displayName.toLowerCase().includes(normalized));
+  }, [discoverQuery.data, searchQuery]);
 
-  const handleFistBump = async (postId: string) => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    const original = feed;
-    setFeed((prev) =>
-      prev.map((post) =>
-        post.id === postId
-          ? {
-              ...post,
-              hasFistBumped: !post.hasFistBumped,
-              fistBumps: post.hasFistBumped ? post.fistBumps - 1 : post.fistBumps + 1,
-            }
-          : post
-      )
-    );
-    try {
-      const result = await budsService.fistBump(postId);
-      setFeed((prev) =>
-        prev.map((post) =>
-          post.id === postId
-            ? {
-                ...post,
-                fistBumps: result.newCount,
-                hasFistBumped: result.hasFistBumped ?? post.hasFistBumped,
-              }
-            : post
-        )
-      );
-    } catch {
-      setFeed(original);
-    }
-  };
+  const updateFeedPost = useCallback(
+    (postId: string, update: (post: FeedPost) => FeedPost) => {
+      queryClient.setQueryData<InfiniteData<FeedPage>>(BUDS_KEYS.feed(), (current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          pages: current.pages.map((page) => ({
+            ...page,
+            items: page.items.map((post) => (post.id === postId ? update(post) : post)),
+          })),
+        };
+      });
+    },
+    [queryClient],
+  );
 
-  const handleFollowToggle = async (bud: BudProfile) => {
-    const nextIsFollowing = !bud.isFollowing;
-    const update = (profile: BudProfile) =>
-      profile.id === bud.id ? { ...profile, isFollowing: nextIsFollowing } : profile;
-    setDiscover((current) => current.map(update));
-    setFollowing((current) =>
-      nextIsFollowing
-        ? [{ ...bud, isFollowing: true }, ...current.filter((b) => b.id !== bud.id)]
-        : current.filter((b) => b.id !== bud.id)
-    );
-
-    try {
-      if (nextIsFollowing) {
-        await budsService.follow(bud.id);
-      } else {
-        await budsService.unfollow(bud.id);
+  const handleFistBump = useCallback(
+    async (post: FeedPost) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      updateFeedPost(post.id, (current) => ({
+        ...current,
+        hasFistBumped: !current.hasFistBumped,
+        fistBumps: Math.max(0, current.fistBumps + (current.hasFistBumped ? -1 : 1)),
+      }));
+      try {
+        const result = await budsService.fistBump(post.id);
+        updateFeedPost(post.id, (current) => ({
+          ...current,
+          fistBumps: result.newCount,
+          hasFistBumped: result.hasFistBumped ?? current.hasFistBumped,
+        }));
+      } catch {
+        updateFeedPost(post.id, () => post);
+        Alert.alert("Fist Bump did not land", "Check your connection and try again.");
       }
-      await loadSocial({ quiet: true });
-    } catch {
-      await loadSocial({ quiet: true });
-    }
-  };
+    },
+    [updateFeedPost],
+  );
 
-  const handleReportPost = (post: FeedPost) => {
+  const handleCommentAdded = useCallback(
+    (postId: string) => updateFeedPost(postId, (post) => ({ ...post, commentCount: post.commentCount + 1 })),
+    [updateFeedPost],
+  );
+
+  const handleShared = useCallback(
+    (post: FeedPost) => {
+      queryClient.setQueryData<InfiniteData<FeedPage>>(BUDS_KEYS.feed(), (current) => {
+        if (!current || current.pages.length === 0) {
+          return { pages: [{ items: [post] }], pageParams: [undefined] };
+        }
+        return {
+          ...current,
+          pages: [
+            { ...current.pages[0], items: [post, ...current.pages[0].items] },
+            ...current.pages.slice(1),
+          ],
+        };
+      });
+      queryClient.invalidateQueries({ queryKey: BUDS_KEYS.achievements() });
+      setActiveView("feed");
+    },
+    [queryClient],
+  );
+
+  const handleReportPost = useCallback((post: FeedPost) => {
     Alert.alert(
-      "Post safety",
-      "Budget Buddy will review reports. Blocking removes this Bud from your feed and suggestions.",
+      "Post options",
+      "Budget Buddy reviews reports. Blocking removes this Bud and their posts from your experience.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -141,546 +146,400 @@ export default function BudsScreen() {
           onPress: async () => {
             try {
               await budsService.block(post.user.id);
-              setFeed((current) => current.filter((item) => item.user.id !== post.user.id));
-              setFollowing((current) => current.filter((bud) => bud.id !== post.user.id));
-              setDiscover((current) => current.filter((bud) => bud.id !== post.user.id));
+              await Promise.all([
+                queryClient.invalidateQueries({ queryKey: BUDS_KEYS.feed() }),
+                queryClient.invalidateQueries({ queryKey: BUDS_KEYS.following() }),
+                queryClient.invalidateQueries({ queryKey: BUDS_KEYS.discover() }),
+              ]);
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             } catch {
-              Alert.alert("Could not block Bud", "Try again in a moment.");
+              Alert.alert("Could not block this Bud", "Try again in a moment.");
             }
           },
         },
         {
-          text: "Report",
+          text: "Report post",
           style: "destructive",
           onPress: async () => {
             try {
-              await budsService.report(post.user.id, {
-                postId: post.id,
-                reason: "unsafe_social_content",
-              });
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              await budsService.report(post.user.id, { postId: post.id, reason: "unsafe_social_content" });
+              Alert.alert("Report received", "Thanks. Budget Buddy will review it.");
             } catch {
-              Alert.alert("Could not report post", "Try again in a moment.");
+              Alert.alert("Could not send that report", "Try again in a moment.");
             }
           },
         },
-      ]
+      ],
     );
-  };
+  }, [queryClient]);
+
+  const handleFollowToggle = useCallback(async (bud: BudProfile) => {
+    Haptics.selectionAsync();
+    try {
+      if (bud.isFollowing) await budsService.unfollow(bud.id);
+      else await budsService.follow(bud.id);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: BUDS_KEYS.following() }),
+        queryClient.invalidateQueries({ queryKey: BUDS_KEYS.discover() }),
+        queryClient.invalidateQueries({ queryKey: BUDS_KEYS.feed() }),
+      ]);
+    } catch {
+      Alert.alert("That connection did not update", "Check your connection and try again.");
+    }
+  }, [queryClient]);
+
+  const refresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        feedQuery.refetch(),
+        leagueQuery.refetch(),
+        followingQuery.refetch(),
+        discoverQuery.refetch(),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [discoverQuery, feedQuery, followingQuery, leagueQuery]);
+
+  const topHeader = (
+    <LinearGradient
+      colors={[Colors.brandGradientStart, Colors.brandGradientMid]}
+      style={[styles.header, { paddingTop: insets.top + 10 }]}
+    >
+      <BrandHeader dark style={styles.brandHeader} />
+      <View style={styles.titleRow}>
+        <View style={styles.profileStrip}>
+          <BudAvatar
+            name={`${user?.firstName ?? "Budget"} ${user?.lastName ?? "Buddy"}`}
+            initials={`${user?.firstName?.[0] ?? "B"}${user?.lastName?.[0] ?? ""}`}
+            avatar={user?.avatar}
+            size={46}
+            activeRing
+          />
+          <View style={styles.profileCopy}>
+            <Text style={styles.screenTitle}>Buds</Text>
+            <Text style={styles.profileMeta}>
+              {following.length} Buds · {user?.streak ?? 0}d streak · Level {user?.level ?? 1}
+            </Text>
+          </View>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Invite Buds"
+          style={styles.inviteButton}
+          onPress={() => router.push("/buds/invite")}
+        >
+          <Icon name="user-plus" size={18} color={Colors.gold} />
+        </Pressable>
+      </View>
+      <View style={styles.tabs}>
+        {(["feed", "my-buds", "discover"] as const).map((view) => (
+          <Pressable
+            key={view}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: activeView === view }}
+            style={[styles.tab, activeView === view && styles.tabActive]}
+            onPress={() => {
+              setActiveView(view);
+              Haptics.selectionAsync();
+            }}
+          >
+            <Text style={[styles.tabText, activeView === view && styles.tabTextActive]}>
+              {view === "feed" ? "Feed" : view === "my-buds" ? "My Buds" : "Discover"}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    </LinearGradient>
+  );
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <LinearGradient
-        colors={[Colors.brandGradientStart, Colors.brandGradientMid]}
-        style={[styles.header, { paddingTop: insets.top + 12 }]}
-      >
-        <BrandHeader dark style={styles.brandHeader} />
+      {topHeader}
 
-        {/* My profile strip */}
-        <View style={styles.profileStrip}>
-          <View style={styles.myAvatar}>
-            <LinearGradient colors={[Colors.gold, Colors.gold600]} style={styles.myAvatarGrad}>
-              <Text style={styles.myAvatarInitial}>
-                {user?.firstName[0] ?? "M"}
-              </Text>
-            </LinearGradient>
-          </View>
-          <View style={styles.profileInfo}>
-            <Text style={styles.profileName}>{user?.firstName} {user?.lastName}</Text>
-            <View style={styles.profileStats}>
-              <View style={styles.profileStat}>
-                <Text style={styles.profileStatValue}>{followingCount}</Text>
-                <Text style={styles.profileStatLabel}>Buds</Text>
+      {activeView === "feed" ? (
+        <FlatList
+          data={feed}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={[styles.feedContent, { paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 30 }]}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={Colors.gold} />}
+          onEndReached={() => {
+            if (feedQuery.hasNextPage && !feedQuery.isFetchingNextPage) feedQuery.fetchNextPage();
+          }}
+          onEndReachedThreshold={0.45}
+          ListHeaderComponent={
+            <View style={styles.feedHeader}>
+              <View style={styles.privacyNote}>
+                <Icon name="lock" size={14} color={Colors.gold} strokeWidth={2.4} />
+                <Text style={styles.privacyNoteText}>Only wins you choose to share</Text>
               </View>
-              <View style={styles.profileStatDivider} />
-              <View style={styles.profileStat}>
-                <View style={styles.streakInline}>
-                  <Icon name="flame" size={12} color={Colors.gold} strokeWidth={2.4} />
-                  <Text style={styles.profileStatValue}>{user?.streak}</Text>
-                </View>
-                <Text style={styles.profileStatLabel}>Streak</Text>
-              </View>
-              <View style={styles.profileStatDivider} />
-              <View style={styles.profileStat}>
-                <Text style={styles.profileStatValue}>Lv {user?.level}</Text>
-                <Text style={styles.profileStatLabel}>Level</Text>
-              </View>
-            </View>
-          </View>
-          <Pressable
-            style={styles.inviteButton}
-            onPress={() => {
-              Haptics.selectionAsync();
-              router.push("/buds/invite");
-            }}
-          >
-            <Text style={styles.inviteText}>Invite</Text>
-          </Pressable>
-        </View>
-
-        {/* View switcher */}
-        <View style={styles.viewSwitcher}>
-          {(["feed", "my-buds", "discover"] as BudsView[]).map((v) => (
-            <Pressable
-              key={v}
-              style={[styles.switchTab, activeView === v && styles.switchTabActive]}
-              onPress={() => {
-                Haptics.selectionAsync();
-                setActiveView(v);
-              }}
-            >
-              <Text style={[styles.switchText, activeView === v && styles.switchTextActive]}>
-                {v === "feed" ? "Feed" : v === "my-buds" ? "My Buds" : "Discover"}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      </LinearGradient>
-
-      {/* Content */}
-      <ScrollView
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 24 },
-        ]}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={Colors.gold}
-          />
-        }
-      >
-        {isLoading && (
-          <View style={styles.loadingCard}>
-            <ActivityIndicator color={Colors.gold} />
-            <Text style={styles.loadingText}>Loading Buds activity...</Text>
-          </View>
-        )}
-
-        {activeView === "feed" && (
-          <>
-            {/* Privacy note */}
-            <View style={styles.privacyNote}>
-              <Icon name="lock" size={13} color={Colors.emerald} strokeWidth={2.4} />
-              <Text style={styles.privacyText}>
-                No financial data is ever shared. Only progress, milestones, and wins.
-              </Text>
-            </View>
-
-            <WealthLeagueVisual
-              league={league}
-              onPress={() => {
-                Haptics.selectionAsync();
-                router.push("/buds/league");
-              }}
-            />
-
-            {!isLoading && feed.length === 0 && (
-              <EmptySocialState
-                icon="sparkles"
-                title="No Buds wins yet"
-                body="Follow a few Buds or share your first win to make this feed come alive."
-              />
-            )}
-
-            {feed.map((post) => (
-              <FeedCard
-                key={post.id}
-                post={post}
-                onFistBump={handleFistBump}
-                onReport={handleReportPost}
-              />
-            ))}
-          </>
-        )}
-
-        {activeView === "my-buds" && (
-          <>
-            <View style={styles.listHeader}>
-              <Text style={styles.budsCount}>{followingCount} people you follow</Text>
-              <Pressable
-                onPress={() => {
-                  Haptics.selectionAsync();
-                  router.push("/buds/list?type=followers");
-                }}
-              >
-                <Text style={styles.listHeaderLink}>Followers</Text>
-              </Pressable>
-            </View>
-            {!isLoading && following.length === 0 && (
-              <EmptySocialState
-                icon="users"
-                title="No Buds yet"
-                body="Find people building similar money habits and follow their wins here."
-              />
-            )}
-            {following.map((bud) => (
-              <BudCard key={bud.id} bud={bud} />
-            ))}
-          </>
-        )}
-
-        {activeView === "discover" && (
-          <>
-            {/* Search */}
-            <View style={styles.searchContainer}>
-              <TextInput
-                style={styles.searchInput}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholder="Search by username..."
-                placeholderTextColor={Colors.muted}
-              />
-            </View>
-
-            <Text style={styles.discoverSectionTitle}>Suggested for you</Text>
-            <Text style={styles.discoverSectionSub}>
-              Based on similar goals and activity patterns
-            </Text>
-
-            {!isLoading && discover.length === 0 && (
-              <EmptySocialState
-                icon="search"
-                title="No suggestions yet"
-                body="As more people join Budget Buddy, Bud will suggest peers with similar goals."
-              />
-            )}
-
-            {discover
-              .filter((bud) =>
-                bud.displayName.toLowerCase().includes(searchQuery.trim().toLowerCase())
-              )
-              .map((bud) => (
-                <BudCard
-                  key={bud.id}
-                  bud={bud}
-                  showFollow
-                  onFollowToggle={handleFollowToggle}
+              {leagueQuery.data ? (
+                <WealthLeagueVisual
+                  compact
+                  league={leagueQuery.data}
+                  scoreValue={user?.financialHealthScore}
+                  onPress={() => router.push("/buds/league")}
                 />
-              ))}
-
-            {/* Phase 2 teaser */}
-            <View style={styles.phase2Card}>
-              <View style={styles.phase2TitleRow}>
-                <Icon name="users" size={16} color={Colors.gold} strokeWidth={2.2} />
-                <Text style={styles.phase2Title}>Community Feed</Text>
+              ) : null}
+              {feedQuery.isError && feed.length > 0 ? (
+                <InlineNotice icon="alert-circle" text="You are seeing saved posts. Pull to reconnect." />
+              ) : null}
+            </View>
+          }
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ListEmptyComponent={
+            feedQuery.isLoading ? (
+              <FeedLoadingState />
+            ) : feedQuery.isError ? (
+              <EmptyState
+                icon="alert-circle"
+                title="Buds is offline for a minute"
+                body="Your wins are safe. Check your connection and try again."
+                action="Try again"
+                onAction={() => feedQuery.refetch()}
+              />
+            ) : (
+              <EmptyState
+                icon="sparkles"
+                title="Your feed is ready for a first win"
+                body="Share a verified achievement or follow a few Buds. No balances. No pressure."
+                action="Share a win"
+                onAction={() => setComposerOpen(true)}
+              />
+            )
+          }
+          ListFooterComponent={
+            feedQuery.isFetchingNextPage ? (
+              <View style={styles.pageLoader}><ActivityIndicator color={Colors.gold} /></View>
+            ) : feed.length > 0 ? (
+              <Text style={styles.feedEnd}>You are caught up. Go make the next win real.</Text>
+            ) : null
+          }
+          renderItem={({ item }) => (
+            <FeedPostCard
+              post={item}
+              currentUserId={user?.id}
+              mediaHeaders={mediaHeaders}
+              onFistBump={handleFistBump}
+              onComment={setCommentPost}
+              onReport={handleReportPost}
+              onOpenProfile={(id) => router.push(`/buds/profile/${id}`)}
+            />
+          )}
+        />
+      ) : activeView === "my-buds" ? (
+        <FlatList
+          data={following}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={[styles.listContent, { paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 30 }]}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={Colors.gold} />}
+          ListHeaderComponent={<SectionIntro title={`${following.length} people you follow`} body="The people whose progress keeps yours moving." />}
+          ItemSeparatorComponent={() => <View style={styles.smallSeparator} />}
+          ListEmptyComponent={
+            followingQuery.isLoading ? <ActivityIndicator color={Colors.gold} /> : (
+              <EmptyState icon="users" title="No Buds yet" body="Follow people building similar habits and their wins will show up here." action="Discover Buds" onAction={() => setActiveView("discover")} />
+            )
+          }
+          renderItem={({ item }) => <BudCard bud={item} onFollowToggle={handleFollowToggle} />}
+        />
+      ) : (
+        <FlatList
+          data={discover}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={[styles.listContent, { paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 30 }]}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={Colors.gold} />}
+          ListHeaderComponent={
+            <View style={styles.discoverHeader}>
+              <View style={styles.searchBox}>
+                <Icon name="search" size={18} color={Colors.muted} />
+                <TextInput
+                  accessibilityLabel="Search Buds"
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholder="Search by name"
+                  placeholderTextColor={Colors.muted}
+                  style={styles.searchInput}
+                  autoCorrect={false}
+                />
               </View>
-              <Text style={styles.phase2Sub}>
-                A curated feed of financial wins and community highlights activates at 5,000 users. 
-                Help us get there — invite your people.
-              </Text>
-              <Pressable
-                style={styles.phase2Cta}
-                onPress={() => {
-                  Haptics.selectionAsync();
-                  router.push("/buds/invite");
-                }}
-              >
-                <LinearGradient
-                  colors={[Colors.gold, Colors.gold600]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.phase2CtaGrad}
-                >
-                  <Text style={styles.phase2CtaText}>Invite a Bud</Text>
-                </LinearGradient>
-              </Pressable>
+              <SectionIntro title="People with similar momentum" body="Suggestions use public goals and activity patterns—not private financial data." />
             </View>
-          </>
-        )}
-      </ScrollView>
-    </View>
-  );
-}
+          }
+          ItemSeparatorComponent={() => <View style={styles.smallSeparator} />}
+          ListEmptyComponent={
+            discoverQuery.isLoading ? <ActivityIndicator color={Colors.gold} /> : (
+              <EmptyState icon="search" title={searchQuery ? "No Buds match that search" : "Suggestions are still forming"} body="Try another name or invite someone you already trust." action="Invite a Bud" onAction={() => router.push("/buds/invite")} />
+            )
+          }
+          renderItem={({ item }) => <BudCard bud={item} showFollow onFollowToggle={handleFollowToggle} />}
+        />
+      )}
 
-function EmptySocialState({
-  icon,
-  title,
-  body,
-}: {
-  icon: Parameters<typeof Icon>[0]["name"];
-  title: string;
-  body: string;
-}) {
-  return (
-    <View style={styles.emptyCard}>
-      <View style={styles.emptyIcon}>
-        <Icon name={icon} size={18} color={Colors.gold} strokeWidth={2.4} />
-      </View>
-      <Text style={styles.emptyTitle}>{title}</Text>
-      <Text style={styles.emptyBody}>{body}</Text>
-    </View>
-  );
-}
-
-function FeedCard({
-  post,
-  onFistBump,
-  onReport,
-}: {
-  post: FeedPost;
-  onFistBump: (id: string) => void;
-  onReport: (post: FeedPost) => void;
-}) {
-  const scale = useRef(new Animated.Value(1)).current;
-
-  const handleBump = () => {
-    Animated.sequence([
-      Animated.spring(scale, { toValue: 1.2, damping: 10, stiffness: 400, useNativeDriver: true }),
-      Animated.spring(scale, { toValue: 1, damping: 12, stiffness: 200, useNativeDriver: true }),
-    ]).start();
-    onFistBump(post.id);
-  };
-
-  const timeAgo = (date: string) => {
-    const diff = (Date.now() - new Date(date).getTime()) / 1000 / 60;
-    if (diff < 60) return `${Math.round(diff)}m ago`;
-    if (diff < 1440) return `${Math.round(diff / 60)}h ago`;
-    return `${Math.round(diff / 1440)}d ago`;
-  };
-
-  return (
-    <View style={styles.feedCard}>
-      <View style={styles.feedCardHeader}>
+      {activeView === "feed" ? (
         <Pressable
-          style={styles.feedAvatar}
+          accessibilityRole="button"
+          accessibilityLabel="Share a new win"
+          style={[styles.floatingCreate, { bottom: TAB_BAR_HEIGHT + Math.max(insets.bottom, 8) }]}
           onPress={() => {
-            Haptics.selectionAsync();
-            router.push(`/buds/profile/${post.user.id}`);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            setComposerOpen(true);
           }}
         >
-          <Text style={styles.feedAvatarText}>{post.user.initials}</Text>
+          <Icon name="plus" size={26} color={Colors.onAccent} strokeWidth={2.8} />
         </Pressable>
-        <Pressable
-          style={styles.feedUserInfo}
-          onPress={() => {
-            Haptics.selectionAsync();
-            router.push(`/buds/profile/${post.user.id}`);
-          }}
-        >
-          <View style={styles.feedNameRow}>
-            <Text style={styles.feedName}>{post.user.displayName}</Text>
-            <View style={styles.feedLevelBadge}>
-              <Text style={styles.feedLevelText}>Lv {post.user.level}</Text>
-            </View>
-          </View>
-          <View style={styles.feedStreakRow}>
-            <Icon name="flame" size={11} color={Colors.gold} strokeWidth={2.4} />
-            <Text style={styles.feedStreak}>{post.user.streak}-day streak · {post.user.leagueTier}</Text>
-          </View>
-        </Pressable>
-        <Text style={styles.feedTime}>{timeAgo(post.timestamp)}</Text>
-      </View>
+      ) : null}
 
-      <View style={styles.feedContent}>
-        <Text style={styles.feedTitle}>{post.title}</Text>
-        <Text style={styles.feedMessage}>{post.message}</Text>
-      </View>
-
-      <View style={styles.feedFooter}>
-        <Pressable
-          style={[
-            styles.fistBumpButton,
-            post.hasFistBumped && styles.fistBumpButtonActive,
-          ]}
-          onPress={handleBump}
-        >
-          <Animated.View style={{ transform: [{ scale }] }}>
-            <Text style={styles.fistBumpEmoji}>👊</Text>
-          </Animated.View>
-          <Text style={[styles.fistBumpCount, post.hasFistBumped && styles.fistBumpCountActive]}>
-            {post.fistBumps}
-          </Text>
-        </Pressable>
-        <Pressable style={styles.reportButton} onPress={() => onReport(post)}>
-          <Icon name="shield" size={14} color={Colors.muted} strokeWidth={2.2} />
-          <Text style={styles.reportText}>Report</Text>
-        </Pressable>
-      </View>
+      <PostComposer visible={composerOpen} onClose={() => setComposerOpen(false)} onShared={handleShared} />
+      <CommentsSheet post={commentPost} onClose={() => setCommentPost(undefined)} onCommentAdded={handleCommentAdded} />
     </View>
   );
 }
 
 function BudCard({
   bud,
-  showFollow,
+  showFollow = false,
   onFollowToggle,
 }: {
   bud: BudProfile;
   showFollow?: boolean;
-  onFollowToggle?: (bud: BudProfile) => void;
+  onFollowToggle: (bud: BudProfile) => void;
 }) {
   return (
-    <Pressable
-      style={({ pressed }) => [styles.budCard, pressed && styles.budCardPressed]}
-      onPress={() => {
-        Haptics.selectionAsync();
-        router.push(`/buds/profile/${bud.id}`);
-      }}
-    >
-      <View style={styles.budCardRow}>
-        <View style={styles.budCardAvatar}>
-          <Text style={styles.budCardInitials}>{bud.initials}</Text>
-        </View>
-        <View style={styles.budCardInfo}>
-          <Text style={styles.budCardName} numberOfLines={1}>{bud.displayName}</Text>
-          <View style={styles.budCardStatsRow}>
-            <Text style={styles.budCardStats}>Lv {bud.level} · </Text>
-            <Icon name="flame" size={11} color={Colors.gold} strokeWidth={2.4} />
-            <Text style={styles.budCardStats} numberOfLines={1}> {bud.streak}d · {bud.leagueTier} · {bud.badgeCount} badges</Text>
-          </View>
-        </View>
-        {showFollow && (
-          <Pressable
-            accessibilityLabel={bud.isFollowing ? "Following this Bud" : "Follow this Bud"}
-            style={[styles.followButton, bud.isFollowing && styles.followButtonActive]}
-            onPress={(event) => {
-              event.stopPropagation();
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              onFollowToggle?.(bud);
-            }}
-          >
-            <Text style={[styles.followText, bud.isFollowing && styles.followTextActive]}>
-              {bud.isFollowing ? "Following" : "Follow"}
-            </Text>
-          </Pressable>
-        )}
+    <Pressable style={({ pressed }) => [styles.budCard, pressed && styles.budCardPressed]} onPress={() => router.push(`/buds/profile/${bud.id}`)}>
+      <BudAvatar name={bud.displayName} initials={bud.initials} avatar={bud.avatar} avatarAsset={bud.avatarAsset} size={46} />
+      <View style={styles.budInfo}>
+        <Text style={styles.budName}>{bud.displayName}</Text>
+        <Text style={styles.budMeta}>Level {bud.level} · {bud.streak}d streak · {bud.leagueTier}</Text>
       </View>
+      {showFollow ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={bud.isFollowing ? `Unfollow ${bud.displayName}` : `Follow ${bud.displayName}`}
+          style={[styles.followButton, bud.isFollowing && styles.followButtonActive]}
+          onPress={(event) => {
+            event.stopPropagation();
+            onFollowToggle(bud);
+          }}
+        >
+          <Text style={[styles.followText, bud.isFollowing && styles.followTextActive]}>{bud.isFollowing ? "Following" : "Follow"}</Text>
+        </Pressable>
+      ) : <Icon name="chevron-right" size={18} color={Colors.muted} />}
     </Pressable>
   );
 }
 
-function leagueResetCopy(resetDate?: string) {
-  const resetAt = resetDate ? new Date(resetDate).getTime() : NaN;
-  if (Number.isFinite(resetAt)) {
-    const days = Math.max(1, Math.ceil((resetAt - Date.now()) / 86_400_000));
-    if (days === 1) return "Resets tomorrow";
-    return `Resets in ${days} days`;
-  }
+function SectionIntro({ title, body }: { title: string; body: string }) {
+  return (
+    <View style={styles.sectionIntro}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      <Text style={styles.sectionBody}>{body}</Text>
+    </View>
+  );
+}
 
-  const today = new Date();
-  const daysUntilMonday = (8 - today.getDay()) % 7 || 7;
+function EmptyState({
+  icon,
+  title,
+  body,
+  action,
+  onAction,
+}: {
+  icon: IconName;
+  title: string;
+  body: string;
+  action: string;
+  onAction: () => void;
+}) {
+  return (
+    <View style={styles.emptyState}>
+      <View style={styles.emptyIcon}><Icon name={icon} size={25} color={Colors.gold} /></View>
+      <Text style={styles.emptyTitle}>{title}</Text>
+      <Text style={styles.emptyBody}>{body}</Text>
+      <Pressable style={styles.emptyAction} onPress={onAction}>
+        <Text style={styles.emptyActionText}>{action}</Text>
+      </Pressable>
+    </View>
+  );
+}
 
-  if (daysUntilMonday === 1) return "Resets tomorrow";
-  return `Resets in ${daysUntilMonday} days`;
+function FeedLoadingState() {
+  return (
+    <View style={styles.loadingCard}>
+      <View style={styles.loadingHeader}><View style={styles.loadingAvatar} /><View style={styles.loadingLines}><View style={styles.loadingLineWide} /><View style={styles.loadingLineShort} /></View></View>
+      <View style={styles.loadingMedia}>
+        <Icon name="sparkles" size={24} color={Colors.gold} />
+        <Text style={styles.loadingText}>Loading real progress…</Text>
+      </View>
+    </View>
+  );
+}
+
+function InlineNotice({ icon, text }: { icon: IconName; text: string }) {
+  return (
+    <View style={styles.inlineNotice}>
+      <Icon name={icon} size={15} color={Colors.gold} />
+      <Text style={styles.inlineNoticeText}>{text}</Text>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.surface },
-  header: { paddingHorizontal: 20, paddingBottom: 0 },
-  brandHeader: { marginBottom: 12 },
-  profileStrip: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 },
-  myAvatar: { width: 44, height: 44, borderRadius: 22, overflow: "hidden" },
-  myAvatarGrad: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
-  myAvatarInitial: { fontSize: 20, fontWeight: "800", color: Colors.onAccent },
-  profileInfo: { flex: 1 },
-  profileName: { fontSize: 15, fontWeight: "700", color: Colors.brandOnDark, marginBottom: 6 },
-  profileStats: { flexDirection: "row", alignItems: "center", gap: 10 },
-  profileStat: { alignItems: "center" },
-  profileStatValue: { fontSize: 13, fontWeight: "700", color: Colors.brandOnDark },
-  profileStatLabel: { fontSize: 10, color: Colors.muted },
-  profileStatDivider: { width: 1, height: 20, backgroundColor: "rgba(255,255,255,0.1)" },
-  inviteButton: { backgroundColor: Colors.accentAlpha15, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6, borderWidth: 1, borderColor: Colors.accentAlpha30 },
-  inviteText: { fontSize: 13, color: Colors.gold, fontWeight: "600" },
-  viewSwitcher: { flexDirection: "row", borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.08)" },
-  switchTab: { flex: 1, paddingVertical: 12, alignItems: "center" },
-  switchTabActive: { borderBottomWidth: 2, borderBottomColor: Colors.gold },
-  switchText: { fontSize: 12, color: Colors.muted, fontWeight: "500" },
-  switchTextActive: { color: Colors.gold, fontWeight: "700" },
-  scrollContent: { paddingHorizontal: 20, paddingTop: 16, gap: 12 },
-  loadingCard: { flexDirection: "row", alignItems: "center", gap: 10, padding: 14, borderRadius: 14, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border },
-  loadingText: { fontSize: 13, color: Colors.navyMuted, fontWeight: "700" },
-  emptyCard: { alignItems: "center", padding: 18, gap: 8, borderRadius: 16, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border },
-  emptyIcon: { width: 42, height: 42, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: Colors.greenSurface, borderWidth: 1, borderColor: Colors.greenBorder },
-  emptyTitle: { fontSize: 15, color: Colors.navy, fontWeight: "800", letterSpacing: 0 },
-  emptyBody: { fontSize: 13, color: Colors.navyMuted, lineHeight: 19, textAlign: "center" },
-  privacyNote: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(16,185,129,0.08)", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: "rgba(16,185,129,0.15)" },
-  privacyText: { flex: 1, fontSize: 12, color: Colors.emerald, fontWeight: "500", lineHeight: 17 },
-  streakInline: { flexDirection: "row", alignItems: "center", gap: 4 },
-  leagueCard: { backgroundColor: Colors.card, borderRadius: 18, padding: 20, borderWidth: 1, borderColor: Colors.border, shadowColor: Colors.navy, shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 3 },
-  leagueCardPressed: { opacity: 0.94, transform: [{ scale: 0.99 }] },
-  leagueHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 18 },
-  leagueTitleRow: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1, minWidth: 0 },
-  leagueTitleTextBlock: { flex: 1, minWidth: 0, gap: 4 },
-  leagueIcon: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: Colors.greenSurface, borderWidth: 1, borderColor: Colors.greenBorder },
-  leagueEyebrow: { fontSize: 10, color: Colors.gold, fontWeight: "800", letterSpacing: 1.4, lineHeight: 13 },
-  leagueTitle: { fontSize: 17, color: Colors.navy, fontWeight: "800", letterSpacing: 0, lineHeight: 22 },
-  rankPill: { minWidth: 46, alignItems: "center", justifyContent: "center", paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999, backgroundColor: Colors.accentAlpha12, borderWidth: 1, borderColor: Colors.accentAlpha30 },
-  rankPillText: { fontSize: 13, color: Colors.gold, fontWeight: "900", letterSpacing: 0 },
-  leagueSub: { fontSize: 12, color: Colors.navyMuted, lineHeight: 21, marginBottom: 18 },
-  leagueResetRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 12, paddingHorizontal: 12, borderRadius: 13, backgroundColor: Colors.navy50, marginBottom: 18 },
-  leagueResetText: { fontSize: 12, color: Colors.muted, fontWeight: "700" },
-  leagueZoneText: { fontSize: 12, color: Colors.gold, fontWeight: "800" },
-  leagueRows: { gap: 12 },
-  leagueRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 13, paddingHorizontal: 12, borderRadius: 14, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
-  leagueRowCurrent: { backgroundColor: Colors.greenSurface, borderColor: Colors.accentAlpha45 },
-  leagueRankBox: { width: 28, height: 28, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: Colors.card },
-  leagueRankText: { fontSize: 12, color: Colors.navy, fontWeight: "900" },
-  leagueRankTextCurrent: { color: Colors.gold },
-  leaguePerson: { flex: 1, gap: 6 },
-  leagueNameRow: { flexDirection: "row", alignItems: "center", gap: 7 },
-  leagueName: { fontSize: 13, color: Colors.navy, fontWeight: "800", letterSpacing: 0 },
-  levelPill: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 999, backgroundColor: Colors.navy50, borderWidth: 1, borderColor: Colors.border },
-  levelPillText: { fontSize: 9, color: Colors.navyMuted, fontWeight: "900", letterSpacing: 0.2 },
-  promotionPill: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 999, backgroundColor: Colors.accentAlpha12 },
-  promotionPillText: { fontSize: 9, color: Colors.gold, fontWeight: "900", letterSpacing: 0.4 },
-  leagueTrack: { height: 5, borderRadius: 3, backgroundColor: Colors.border, overflow: "hidden" },
-  leagueFill: { height: 5, borderRadius: 3, backgroundColor: Colors.gold },
-  leagueXpBox: { alignItems: "flex-end", minWidth: 54 },
-  leagueXp: { fontSize: 12, color: Colors.navy, fontWeight: "900", letterSpacing: 0 },
-  leagueXpLabel: { fontSize: 9, color: Colors.muted, fontWeight: "800", letterSpacing: 0.7 },
-  feedCard: { backgroundColor: Colors.card, borderRadius: 16, padding: 16, gap: 12, shadowColor: Colors.navy, shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
-  feedCardHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
-  feedAvatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: Colors.navy50, alignItems: "center", justifyContent: "center" },
-  feedAvatarText: { fontSize: 13, fontWeight: "700", color: Colors.navy },
-  feedUserInfo: { flex: 1 },
-  feedNameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  feedName: { fontSize: 14, fontWeight: "700", color: Colors.navy },
-  feedLevelBadge: { backgroundColor: Colors.navy50, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2 },
-  feedLevelText: { fontSize: 10, fontWeight: "700", color: Colors.navyMuted },
-  feedStreakRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
-  feedStreak: { fontSize: 11, color: Colors.muted },
-  feedTime: { fontSize: 11, color: Colors.muted },
-  feedContent: { gap: 4 },
-  feedTitle: { fontSize: 15, fontWeight: "700", color: Colors.navy },
-  feedMessage: { fontSize: 13, color: Colors.navyMuted, lineHeight: 19 },
-  feedFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  fistBumpButton: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
-  fistBumpButtonActive: { backgroundColor: Colors.accentAlpha10, borderColor: Colors.accentAlpha40 },
-  fistBumpEmoji: { fontSize: 16, lineHeight: 20 },
-  fistBumpCount: { fontSize: 13, color: Colors.navyMuted, fontWeight: "600" },
-  fistBumpCountActive: { color: Colors.gold },
-  reportButton: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 999 },
-  reportText: { fontSize: 12, color: Colors.muted, fontWeight: "700" },
-  listHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
-  listHeaderLink: { fontSize: 13, color: Colors.gold, fontWeight: "800" },
-  budsCount: { fontSize: 13, color: Colors.muted, fontWeight: "500" },
-  budCard: { backgroundColor: Colors.card, borderRadius: 14, padding: 14, shadowColor: Colors.navy, shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
-  budCardPressed: { backgroundColor: Colors.navy50, transform: [{ scale: 0.99 }] },
-  budCardRow: { flexDirection: "row", alignItems: "center" },
-  budCardAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.navy50, alignItems: "center", justifyContent: "center", marginRight: 12 },
-  budCardInitials: { fontSize: 14, fontWeight: "700", color: Colors.navy },
-  budCardInfo: { flex: 1, minWidth: 0, paddingRight: 6 },
-  budCardName: { fontSize: 14, fontWeight: "700", color: Colors.navy, marginBottom: 3 },
-  budCardStatsRow: { flexDirection: "row", alignItems: "center", maxWidth: "100%" },
-  budCardStats: { fontSize: 11, color: Colors.muted, flexShrink: 1 },
-  followButton: { alignItems: "center", justifyContent: "center", height: 32, borderRadius: 999, paddingHorizontal: 14, marginLeft: 10, backgroundColor: Colors.accentAlpha10, borderWidth: 1, borderColor: Colors.accentAlpha40 },
-  followButtonActive: { backgroundColor: "transparent", borderColor: Colors.border },
-  followText: { fontSize: 13, fontWeight: "800", color: Colors.gold, letterSpacing: 0.2 },
+  header: { paddingHorizontal: Spacing.lg },
+  brandHeader: { marginBottom: 10 },
+  titleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, paddingBottom: 14 },
+  profileStrip: { flex: 1, flexDirection: "row", alignItems: "center", gap: 11 },
+  profileCopy: { flex: 1, minWidth: 0 },
+  screenTitle: { fontSize: 25, fontWeight: "900", letterSpacing: -0.4, color: Colors.brandOnDark },
+  profileMeta: { ...Type.caption, color: Colors.brandOnDarkMuted, marginTop: 2 },
+  inviteButton: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: Colors.accentAlpha12, borderWidth: 1, borderColor: Colors.accentAlpha30 },
+  tabs: { flexDirection: "row", borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.08)" },
+  tab: { flex: 1, minHeight: 48, alignItems: "center", justifyContent: "center", borderBottomWidth: 2, borderBottomColor: "transparent" },
+  tabActive: { borderBottomColor: Colors.gold },
+  tabText: { ...Type.caption, color: Colors.brandOnDarkMuted },
+  tabTextActive: { color: Colors.gold, fontWeight: "800" },
+  feedContent: { paddingHorizontal: Spacing.md, paddingTop: Spacing.sm },
+  feedHeader: { gap: Spacing.sm, marginBottom: Spacing.md },
+  privacyNote: { minHeight: 36, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
+  privacyNoteText: { ...Type.caption, color: Colors.navyMuted },
+  separator: { height: Spacing.md },
+  smallSeparator: { height: 10 },
+  pageLoader: { minHeight: 70, alignItems: "center", justifyContent: "center" },
+  feedEnd: { ...Type.caption, color: Colors.muted, textAlign: "center", paddingVertical: 24, paddingHorizontal: 30 },
+  listContent: { padding: Spacing.lg },
+  discoverHeader: { gap: Spacing.lg, marginBottom: Spacing.md },
+  sectionIntro: { gap: 5, marginBottom: Spacing.md },
+  sectionTitle: { ...Type.h2, color: Colors.navy },
+  sectionBody: { ...Type.body, color: Colors.muted },
+  searchBox: { height: 48, flexDirection: "row", alignItems: "center", gap: 9, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.card, paddingHorizontal: 14 },
+  searchInput: { flex: 1, height: "100%", color: Colors.navy, fontSize: 15 },
+  budCard: { minHeight: 76, flexDirection: "row", alignItems: "center", gap: 11, padding: 14, borderRadius: Radius.xl, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.card, ...Shadow.sm },
+  budCardPressed: { transform: [{ scale: 0.99 }], opacity: 0.92 },
+  budInfo: { flex: 1, minWidth: 0, gap: 3 },
+  budName: { ...Type.bodyStrong, color: Colors.navy },
+  budMeta: { ...Type.caption, color: Colors.muted },
+  followButton: { minHeight: 38, justifyContent: "center", paddingHorizontal: 14, borderRadius: Radius.pill, backgroundColor: Colors.gold, borderWidth: 1, borderColor: Colors.gold },
+  followButtonActive: { backgroundColor: Colors.surface, borderColor: Colors.border },
+  followText: { ...Type.caption, color: Colors.onAccent, fontWeight: "800" },
   followTextActive: { color: Colors.muted },
-  searchContainer: { marginBottom: 16 },
-  searchInput: { backgroundColor: Colors.card, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15, color: Colors.navy, borderWidth: 1, borderColor: Colors.border },
-  discoverSectionTitle: { fontSize: 16, fontWeight: "700", color: Colors.navy, marginBottom: 4 },
-  discoverSectionSub: { fontSize: 13, color: Colors.muted, marginBottom: 12 },
-  phase2Card: { backgroundColor: Colors.card, borderRadius: 16, padding: 20, gap: 12, marginTop: 8, shadowColor: Colors.navy, shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
-  phase2TitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  phase2Title: { fontSize: 16, fontWeight: "800", color: Colors.navy },
-  phase2Sub: { fontSize: 13, color: Colors.muted, lineHeight: 19 },
-  phase2Cta: { borderRadius: 12, overflow: "hidden", shadowColor: Colors.gold, shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 4 },
-  phase2CtaGrad: { paddingVertical: 13, alignItems: "center" },
-  phase2CtaText: { fontSize: 15, fontWeight: "700", color: Colors.onAccent },
+  floatingCreate: { position: "absolute", right: 20, width: 58, height: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", backgroundColor: Colors.gold, shadowColor: Colors.gold, shadowOpacity: 0.34, shadowRadius: 15, shadowOffset: { width: 0, height: 7 }, elevation: 8 },
+  emptyState: { minHeight: 300, alignItems: "center", justifyContent: "center", gap: 9, padding: Spacing.xl, borderRadius: 22, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.card },
+  emptyIcon: { width: 58, height: 58, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: Colors.accentAlpha12 },
+  emptyTitle: { ...Type.h2, color: Colors.navy, textAlign: "center" },
+  emptyBody: { ...Type.body, color: Colors.muted, textAlign: "center", maxWidth: 300 },
+  emptyAction: { minHeight: 44, justifyContent: "center", paddingHorizontal: 18, borderRadius: Radius.pill, backgroundColor: Colors.gold, marginTop: 5 },
+  emptyActionText: { ...Type.bodyStrong, color: Colors.onAccent },
+  inlineNotice: { minHeight: 42, flexDirection: "row", alignItems: "center", gap: 8, borderRadius: Radius.md, paddingHorizontal: 12, backgroundColor: Colors.accentAlpha07, borderWidth: 1, borderColor: Colors.accentAlpha20 },
+  inlineNoticeText: { ...Type.caption, color: Colors.navyMuted, flex: 1 },
+  loadingCard: { padding: Spacing.md, gap: Spacing.md, borderRadius: 22, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border },
+  loadingHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
+  loadingAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: Colors.navy50 },
+  loadingLines: { flex: 1, gap: 7 },
+  loadingLineWide: { width: "48%", height: 10, borderRadius: 5, backgroundColor: Colors.navy50 },
+  loadingLineShort: { width: "30%", height: 8, borderRadius: 4, backgroundColor: Colors.navy50 },
+  loadingMedia: { minHeight: 330, borderRadius: 18, alignItems: "center", justifyContent: "center", gap: 9, backgroundColor: Colors.navy50 },
+  loadingText: { ...Type.caption, color: Colors.muted },
 });

@@ -21,15 +21,28 @@ export function WealthLeagueVisual({
   league,
   scoreValue,
   onPress,
+  compact = false,
 }: {
   league: League;
   scoreValue?: number;
   onPress?: () => void;
+  compact?: boolean;
 }) {
   const currentUser = league.users.find((user) => user.isCurrentUser);
   const currentScore = scoreValue ?? currentUser?.financialScore ?? 300;
   const tierIndex = Math.max(0, TIER_STEPS.findIndex((tier) => tier.name === league.tier));
   const podiumUsers = useMemo(() => podiumOrder(league.users.slice(0, 3)), [league.users]);
+
+  if (compact) {
+    return (
+      <CompactLeague
+        league={league}
+        currentScore={currentScore}
+        tierIndex={tierIndex}
+        onPress={onPress}
+      />
+    );
+  }
 
   return (
     <Pressable
@@ -128,6 +141,59 @@ export function WealthLeagueVisual({
   );
 }
 
+function CompactLeague({
+  league,
+  currentScore,
+  tierIndex,
+  onPress,
+}: {
+  league: League;
+  currentScore: number;
+  tierIndex: number;
+  onPress?: () => void;
+}) {
+  const currentTier = TIER_STEPS[tierIndex];
+  const nextTier = TIER_STEPS[tierIndex + 1];
+  const tierSpan = nextTier ? nextTier.minimum - currentTier.minimum : 1;
+  const progress = nextTier
+    ? Math.max(0.04, Math.min(1, (currentScore - currentTier.minimum) / tierSpan))
+    : 1;
+
+  return (
+    <Pressable
+      accessibilityRole={onPress ? "button" : undefined}
+      accessibilityLabel={onPress ? `Open ${league.tier} Wealth League standings` : undefined}
+      disabled={!onPress}
+      onPress={onPress}
+      style={({ pressed }) => [styles.compactWrapper, pressed && styles.pressed]}
+    >
+      <LinearGradient
+        colors={[Colors.brandGradientStart, Colors.brandGradientMid]}
+        style={styles.compactCard}
+      >
+        <View style={styles.compactEmblem}>
+          <Icon name="trophy" size={20} color={Colors.gold} strokeWidth={2.3} />
+        </View>
+        <View style={styles.compactContent}>
+          <View style={styles.compactTitleRow}>
+            <Text style={styles.compactTitle}>Wealth League</Text>
+            <Text style={styles.compactTier}>{league.tier}</Text>
+          </View>
+          <View style={styles.compactTrack}>
+            <View style={[styles.compactFill, { width: `${progress * 100}%` }]} />
+          </View>
+          <Text style={styles.compactMeta}>
+            {nextTier
+              ? `${Math.max(0, nextTier.minimum - currentScore)} points to ${nextTier.name}`
+              : `Champion · ${leagueResetLabel(league.resetDate)} to reset`}
+          </Text>
+        </View>
+        {onPress ? <Icon name="chevron-right" size={19} color={Colors.brandOnDarkMuted} /> : null}
+      </LinearGradient>
+    </Pressable>
+  );
+}
+
 function PodiumColumn({ user }: { user: LeagueUser }) {
   const place = user.rank ?? 1;
   const height = place === 1 ? 84 : place === 2 ? 66 : 54;
@@ -211,4 +277,32 @@ const styles = StyleSheet.create({
   standingScoreWrap: { flex: 1 },
   standingScore: { fontSize: 20, fontWeight: "900", color: Colors.gold },
   standingScoreLabel: { fontSize: 8, fontWeight: "800", color: Colors.brandOnDarkMuted, letterSpacing: 0.8 },
+  compactWrapper: { borderRadius: Radius.xl, ...Shadow.md },
+  compactCard: {
+    minHeight: 104,
+    borderRadius: Radius.xl,
+    padding: Spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    borderWidth: 1,
+    borderColor: Colors.accentAlpha20,
+  },
+  compactEmblem: {
+    width: 46,
+    height: 46,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.accentAlpha12,
+    borderWidth: 1,
+    borderColor: Colors.accentAlpha30,
+  },
+  compactContent: { flex: 1, minWidth: 0, gap: 8 },
+  compactTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  compactTitle: { ...Type.h3, color: Colors.brandOnDark },
+  compactTier: { ...Type.caption, color: Colors.gold, fontWeight: "800" },
+  compactTrack: { height: 6, borderRadius: 3, overflow: "hidden", backgroundColor: "rgba(255,255,255,0.12)" },
+  compactFill: { height: 6, borderRadius: 3, backgroundColor: Colors.gold },
+  compactMeta: { ...Type.micro, color: Colors.brandOnDarkMuted, letterSpacing: 0.2 },
 });

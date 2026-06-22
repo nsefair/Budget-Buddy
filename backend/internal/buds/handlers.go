@@ -18,7 +18,9 @@ import (
 type authMiddleware func(http.Handler) http.Handler
 
 type Handler struct {
-	db *pgxpool.Pool
+	db       *pgxpool.Pool
+	mediaDir string
+	basePath string
 }
 
 type BudProfile struct {
@@ -37,14 +39,39 @@ type BudProfile struct {
 }
 
 type FeedPost struct {
-	ID            string     `json:"id"`
-	User          BudProfile `json:"user"`
-	Type          string     `json:"type"`
-	Title         string     `json:"title"`
-	Message       string     `json:"message"`
-	Timestamp     string     `json:"timestamp"`
-	FistBumps     int        `json:"fistBumps"`
-	HasFistBumped bool       `json:"hasFistBumped"`
+	ID              string             `json:"id"`
+	User            BudProfile         `json:"user"`
+	Type            string             `json:"type"`
+	Title           string             `json:"title"`
+	Message         string             `json:"message"`
+	Timestamp       string             `json:"timestamp"`
+	FistBumps       int                `json:"fistBumps"`
+	HasFistBumped   bool               `json:"hasFistBumped"`
+	Visibility      string             `json:"visibility"`
+	CommentsEnabled bool               `json:"commentsEnabled"`
+	CommentCount    int                `json:"commentCount"`
+	Achievement     *PublicAchievement `json:"achievement,omitempty"`
+	Media           []FeedMedia        `json:"media"`
+}
+
+type PublicAchievement struct {
+	Kind     string `json:"kind"`
+	Label    string `json:"label"`
+	Verified bool   `json:"verified"`
+}
+
+type FeedMedia struct {
+	ID       string `json:"id"`
+	URL      string `json:"url"`
+	MimeType string `json:"mimeType"`
+	Width    int    `json:"width"`
+	Height   int    `json:"height"`
+	Position int    `json:"position"`
+}
+
+type FeedPage struct {
+	Items      []FeedPost `json:"items"`
+	NextCursor string     `json:"nextCursor,omitempty"`
 }
 
 type WealthLeague struct {
@@ -66,9 +93,14 @@ type LeagueUser struct {
 }
 
 type createPostRequest struct {
-	Type    string `json:"type"`
-	Title   string `json:"title"`
-	Message string `json:"message"`
+	Type             string   `json:"type"`
+	Title            string   `json:"title"`
+	Message          string   `json:"message"`
+	Visibility       string   `json:"visibility"`
+	CommentsEnabled  *bool    `json:"commentsEnabled"`
+	MediaIDs         []string `json:"mediaIds"`
+	AchievementKind  string   `json:"achievementKind"`
+	AchievementRefID string   `json:"achievementRefId"`
 }
 
 type reportRequest struct {
@@ -82,66 +114,25 @@ type fistBumpResponse struct {
 	HasFistBumped bool `json:"hasFistBumped"`
 }
 
-func RegisterRoutes(mux *http.ServeMux, basePath string, db *pgxpool.Pool, requireAuth authMiddleware) {
-	handler := &Handler{db: db}
-	mux.Handle("GET "+basePath+"/buds/feed", requireAuth(http.HandlerFunc(handler.feed)))
+func RegisterRoutes(mux *http.ServeMux, basePath string, db *pgxpool.Pool, mediaDir string, requireAuth authMiddleware) {
+	handler := &Handler{db: db, mediaDir: mediaDir, basePath: basePath}
+	mux.Handle("GET "+basePath+"/buds/feed", requireAuth(http.HandlerFunc(handler.feedV2)))
 	mux.Handle("GET "+basePath+"/buds/league", requireAuth(http.HandlerFunc(handler.league)))
 	mux.Handle("GET "+basePath+"/buds/following", requireAuth(http.HandlerFunc(handler.following)))
 	mux.Handle("GET "+basePath+"/buds/followers", requireAuth(http.HandlerFunc(handler.followers)))
 	mux.Handle("GET "+basePath+"/buds/discover", requireAuth(http.HandlerFunc(handler.discover)))
+	mux.Handle("GET "+basePath+"/buds/shareable-achievements", requireAuth(http.HandlerFunc(handler.shareableAchievements)))
 	mux.Handle("GET "+basePath+"/buds/profile/{id}", requireAuth(http.HandlerFunc(handler.profile)))
 	mux.Handle("POST "+basePath+"/buds/{id}/follow", requireAuth(http.HandlerFunc(handler.follow)))
 	mux.Handle("POST "+basePath+"/buds/{id}/unfollow", requireAuth(http.HandlerFunc(handler.unfollow)))
 	mux.Handle("POST "+basePath+"/buds/{id}/block", requireAuth(http.HandlerFunc(handler.block)))
 	mux.Handle("POST "+basePath+"/buds/{id}/report", requireAuth(http.HandlerFunc(handler.report)))
-	mux.Handle("POST "+basePath+"/buds/posts", requireAuth(http.HandlerFunc(handler.createPost)))
+	mux.Handle("POST "+basePath+"/buds/posts", requireAuth(http.HandlerFunc(handler.createPostV2)))
 	mux.Handle("POST "+basePath+"/buds/posts/{id}/fist-bump", requireAuth(http.HandlerFunc(handler.fistBump)))
-}
-
-func (h *Handler) feed(w http.ResponseWriter, r *http.Request) {
-	userID, _ := auth.UserIDFromContext(r.Context())
-	rows, err := h.db.Query(
-		r.Context(),
-		`select p.id::text, p.type, p.title, p.message, p.created_at,
-		        u.id::text, u.first_name, u.last_name, coalesce(u.avatar_url, ''),
-		        u.level, u.streak, u.financial_health_score,
-		        exists(select 1 from bud_follows f where f.follower_id = $1 and f.following_id = u.id) as is_following,
-		        (select count(*) from bud_follows f where f.following_id = u.id) as follower_count,
-		        (select count(*) from bud_follows f where f.follower_id = u.id) as following_count,
-		        (select count(*) from buds_fist_bumps b where b.post_id = p.id) as fist_bumps,
-		        exists(select 1 from buds_fist_bumps b where b.post_id = p.id and b.user_id = $1) as has_fist_bumped
-		   from buds_posts p
-		   join users u on u.id = p.user_id
-		  where p.deleted_at is null
-		    and not exists (
-		      select 1 from bud_blocks b
-		       where (b.blocker_id = $1 and b.blocked_id = u.id)
-		          or (b.blocker_id = u.id and b.blocked_id = $1)
-		    )
-		    and (p.user_id = $1 or exists (
-		      select 1 from bud_follows f where f.follower_id = $1 and f.following_id = p.user_id
-		    ))
-		  order by p.created_at desc
-		  limit 60`,
-		userID,
-	)
-	if err != nil {
-		respond.Error(w, http.StatusInternalServerError, "buds_feed_failed", "Could not load Buds feed.")
-		return
-	}
-	defer rows.Close()
-
-	posts := []FeedPost{}
-	for rows.Next() {
-		post, err := scanFeedPost(rows)
-		if err != nil {
-			respond.Error(w, http.StatusInternalServerError, "buds_feed_failed", "Could not load Buds feed.")
-			return
-		}
-		posts = append(posts, post)
-	}
-
-	respond.JSON(w, http.StatusOK, posts)
+	mux.Handle("GET "+basePath+"/buds/posts/{id}/comments", requireAuth(http.HandlerFunc(handler.comments)))
+	mux.Handle("POST "+basePath+"/buds/posts/{id}/comments", requireAuth(http.HandlerFunc(handler.addComment)))
+	mux.Handle("POST "+basePath+"/buds/media", requireAuth(http.HandlerFunc(handler.uploadMedia)))
+	mux.Handle("GET "+basePath+"/buds/media/{id}", requireAuth(http.HandlerFunc(handler.serveMedia)))
 }
 
 func (h *Handler) league(w http.ResponseWriter, r *http.Request) {
@@ -543,36 +534,6 @@ func (h *Handler) report(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 }
 
-func (h *Handler) createPost(w http.ResponseWriter, r *http.Request) {
-	userID, _ := auth.UserIDFromContext(r.Context())
-
-	var req createPostRequest
-	if err := decodeJSON(r, &req); err != nil {
-		respond.Error(w, http.StatusBadRequest, "invalid_json", "Request body must be valid JSON.")
-		return
-	}
-
-	postType := normalizePostType(req.Type)
-	title := cleanPublicText(req.Title, 80)
-	message := cleanPublicText(req.Message, 220)
-	if title == "" || message == "" {
-		respond.Error(w, http.StatusBadRequest, "validation_error", "Post title and message are required.")
-		return
-	}
-	if looksFinanciallySensitive(title) || looksFinanciallySensitive(message) {
-		respond.Error(w, http.StatusBadRequest, "privacy_guard", "Buds posts cannot include balances, transaction amounts, income, or debt details.")
-		return
-	}
-
-	post, err := h.insertPost(r, userID, postType, title, message)
-	if err != nil {
-		respond.Error(w, http.StatusInternalServerError, "buds_post_failed", "Could not share this win.")
-		return
-	}
-
-	respond.JSON(w, http.StatusCreated, post)
-}
-
 func (h *Handler) fistBump(w http.ResponseWriter, r *http.Request) {
 	userID, _ := auth.UserIDFromContext(r.Context())
 	postID := r.PathValue("id")
@@ -596,9 +557,12 @@ func (h *Handler) fistBump(w http.ResponseWriter, r *http.Request) {
 		           where (b.blocker_id = $1 and b.blocked_id = p.user_id)
 		              or (b.blocker_id = p.user_id and b.blocked_id = $1)
 		        )
-		        and (p.user_id = $1 or exists (
-		          select 1 from bud_follows f where f.follower_id = $1 and f.following_id = p.user_id
-		        )) as visible
+		        and (
+		          p.user_id = $1
+		          or (p.visibility = 'buds' and exists (
+		            select 1 from bud_follows f where f.follower_id = $1 and f.following_id = p.user_id
+		          ))
+		        ) as visible
 		   from buds_posts p
 		  where p.id = $2 and p.deleted_at is null`,
 		userID,
@@ -663,69 +627,8 @@ func (h *Handler) fistBump(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *Handler) insertPost(r *http.Request, userID, postType, title, message string) (FeedPost, error) {
-	return scanFeedPost(
-		h.db.QueryRow(
-			r.Context(),
-			`insert into buds_posts (user_id, type, title, message)
-			 values ($1, $2, $3, $4)
-			 returning id::text, type, title, message, created_at,
-			           (select id::text from users where id = $1),
-			           (select first_name from users where id = $1),
-			           (select last_name from users where id = $1),
-			           (select coalesce(avatar_url, '') from users where id = $1),
-			           (select level from users where id = $1),
-			           (select streak from users where id = $1),
-			           (select financial_health_score from users where id = $1),
-			           false,
-			           (select count(*) from bud_follows f where f.following_id = $1),
-			           (select count(*) from bud_follows f where f.follower_id = $1),
-			           0,
-			           false`,
-			userID,
-			postType,
-			title,
-			message,
-		),
-	)
-}
-
 type feedRow interface {
 	Scan(dest ...any) error
-}
-
-func scanFeedPost(row feedRow) (FeedPost, error) {
-	var post FeedPost
-	var createdAt time.Time
-	var firstName string
-	var lastName string
-	err := row.Scan(
-		&post.ID,
-		&post.Type,
-		&post.Title,
-		&post.Message,
-		&createdAt,
-		&post.User.ID,
-		&firstName,
-		&lastName,
-		&post.User.Avatar,
-		&post.User.Level,
-		&post.User.Streak,
-		&post.User.FinancialHealthScore,
-		&post.User.IsFollowing,
-		&post.User.FollowerCount,
-		&post.User.FollowingCount,
-		&post.FistBumps,
-		&post.HasFistBumped,
-	)
-	if err != nil {
-		return FeedPost{}, err
-	}
-	post.User.DisplayName, post.User.Initials = displayName(firstName, lastName)
-	post.User.LeagueTier = financialScoreLeagueTier(post.User.FinancialHealthScore)
-	post.User.BadgeCount = badgeCount(post.User.Level, post.User.Streak)
-	post.Timestamp = createdAt.UTC().Format(time.RFC3339)
-	return post, nil
 }
 
 type profileRow interface {
@@ -879,7 +782,7 @@ func badgeCount(level, streak int) int {
 
 func normalizePostType(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "quest_complete", "goal_milestone", "level_up", "streak_milestone", "badge_earned", "week_review":
+	case "quest_complete", "goal_milestone", "score_milestone", "league_progress", "level_up", "streak_milestone", "badge_earned", "week_review":
 		return strings.ToLower(strings.TrimSpace(value))
 	default:
 		return "quest_complete"
@@ -904,7 +807,8 @@ func cleanPublicText(value string, max int) string {
 	return value
 }
 
-var sensitivePattern = regexp.MustCompile(`(?i)(\$|\bbalance\b|\bincome\b|\bdebt balance\b|\btransaction\b|\bspent\b|\bspending\b|\bsalary\b|\bpaycheck\b|\baccount\b)`)
+var sensitivePattern = regexp.MustCompile(`(?i)(\$|£|€|\b\d[\d,.]*\s*(dollars?|bucks?|usd)\b|\bbalance\b|\bincome\b|\bdebt balance\b|\btransaction\b|\bspent\b|\bspending\b|\bsalary\b|\bpaycheck\b|\baccount\b|\b(saved?|saving|paid|earned)\b.{0,30}\b\d[\d,.]*\b)`)
+var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$`)
 
 func looksFinanciallySensitive(value string) bool {
 	return sensitivePattern.MatchString(value)

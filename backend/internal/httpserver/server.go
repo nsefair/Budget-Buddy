@@ -30,7 +30,7 @@ func New(cfg config.Config, logger *slog.Logger, db *pgxpool.Pool) *http.Server 
 	authHandler := auth.NewHandler(auth.NewService(db, cfg, logger))
 	auth.RegisterRoutes(mux, cfg.APIBasePath, authHandler)
 	billing.RegisterRoutes(mux, cfg.APIBasePath, db, cfg, authHandler.RequireAuth)
-	buds.RegisterRoutes(mux, cfg.APIBasePath, db, authHandler.RequireAuth)
+	buds.RegisterRoutes(mux, cfg.APIBasePath, db, cfg.BudsMediaDir, authHandler.RequireAuth)
 	goals.RegisterRoutes(mux, cfg.APIBasePath, db, authHandler.RequireAuth)
 	notifications.RegisterRoutes(mux, cfg.APIBasePath, db, cfg, authHandler.RequireAuth)
 	budget.RegisterRoutes(mux, cfg.APIBasePath, db, authHandler.RequireAuth)

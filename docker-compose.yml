@@ -56,8 +56,11 @@ services:
       PLAID_SECRET: ${PLAID_SECRET:-}
       PLAID_TOKEN_ENCRYPTION_KEY: ${PLAID_TOKEN_ENCRYPTION_KEY:-}
       PLAID_TRANSACTION_DAYS: ${PLAID_TRANSACTION_DAYS:-90}
+      BUDS_MEDIA_DIR: /var/lib/budget-buddy/media
     ports:
       - "8080:8080"
+    volumes:
+      - budget_buddy_media:/var/lib/budget-buddy/media
     depends_on:
       db:
         condition: service_healthy
@@ -79,3 +82,4 @@ services:
 
 volumes:
   budget_buddy_pgdata:
+  budget_buddy_media:

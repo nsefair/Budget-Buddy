@@ -32,6 +32,7 @@ func TestProductionValidationAcceptsConfiguredSecrets(t *testing.T) {
 		PlaidTokenEncryptionKey: "a_unique_plaid_token_encryption_key_123456789",
 		PlaidWebhookURL:         "https://api.budgetbuddy.app/v1/plaid/webhook",
 		PlaidTransactionDays:    90,
+		BudsMediaDir:            "/var/lib/budget-buddy/media",
 	}
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("Validate returned error: %v", err)

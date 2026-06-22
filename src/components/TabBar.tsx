@@ -103,6 +103,9 @@ function TabItem({ routeName, label, isFocused, onPress, onLongPress, isBudTab }
         onLongPress={onLongPress}
         style={styles.budWrapper}
         activeOpacity={0.85}
+        accessibilityRole="tab"
+        accessibilityLabel={label}
+        accessibilityState={{ selected: isFocused }}
       >
         <Animated.View style={[styles.budContainer, { transform: [{ scale }] }]}>
           <View style={[styles.budButton, isFocused && styles.budButtonActive]}>
@@ -127,6 +130,9 @@ function TabItem({ routeName, label, isFocused, onPress, onLongPress, isBudTab }
       onLongPress={onLongPress}
       style={styles.tabItem}
       activeOpacity={0.7}
+      accessibilityRole="tab"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: isFocused }}
     >
       <Animated.View style={[styles.tabItemInner, { transform: [{ scale }] }]}>
         <Animated.View style={{ transform: [{ translateY }] }}>

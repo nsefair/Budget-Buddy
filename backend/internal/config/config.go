@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -50,6 +51,7 @@ type Config struct {
 	IOSPremiumAnnualID      string
 	IOSEliteMonthlyID       string
 	IOSEliteAnnualID        string
+	BudsMediaDir            string
 }
 
 func Load() Config {
@@ -96,6 +98,7 @@ func Load() Config {
 		IOSPremiumAnnualID:      env("IOS_PREMIUM_ANNUAL_PRODUCT_ID", "budget_buddy_premium_annual"),
 		IOSEliteMonthlyID:       env("IOS_ELITE_MONTHLY_PRODUCT_ID", "budget_buddy_elite_monthly"),
 		IOSEliteAnnualID:        env("IOS_ELITE_ANNUAL_PRODUCT_ID", "budget_buddy_elite_annual"),
+		BudsMediaDir:            env("BUDS_MEDIA_DIR", "./data/buds-media"),
 	}
 }
 
@@ -134,6 +137,9 @@ func (c Config) Validate() error {
 	}
 	if c.PlaidTransactionDays < 90 || c.PlaidTransactionDays > 730 {
 		problems = append(problems, "PLAID_TRANSACTION_DAYS must be between 90 and 730 in production")
+	}
+	if strings.TrimSpace(c.BudsMediaDir) == "" || !filepath.IsAbs(c.BudsMediaDir) {
+		problems = append(problems, "BUDS_MEDIA_DIR must be an absolute path on durable storage in production")
 	}
 	if len(problems) > 0 {
 		return errors.New(strings.Join(problems, "; "))
