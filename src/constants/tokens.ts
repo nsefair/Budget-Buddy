@@ -132,3 +132,8 @@ export const Motion = {
 // Apple HIG: 44pt. Material: 48dp. Use 44 across the app.
 export const HitSlop = { top: 8, right: 8, bottom: 8, left: 8 } as const;
 export const MinTouchTarget = Platform.select({ ios: 44, default: 48 }) ?? 44;
+
+// ─── Layout ─────────────────────────────────────────────────────────────────
+// Height reserved for the floating tab bar. Screens add their own bottom
+// inset on top of this when padding scroll content.
+export const TAB_BAR_HEIGHT = 80;

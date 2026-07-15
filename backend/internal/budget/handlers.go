@@ -3,6 +3,7 @@ package budget
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -115,6 +116,7 @@ func RegisterRoutes(mux *http.ServeMux, basePath string, db *pgxpool.Pool, requi
 	mux.Handle("GET "+basePath+"/budget/accounts", requireAuth(http.HandlerFunc(handler.accounts)))
 	mux.Handle("GET "+basePath+"/today/summary", requireAuth(http.HandlerFunc(handler.todaySummary)))
 	mux.Handle("GET "+basePath+"/today/transactions/recent", requireAuth(http.HandlerFunc(handler.recentTransactions)))
+	mux.Handle("GET "+basePath+"/today/bud-insight", requireAuth(http.HandlerFunc(handler.budInsight)))
 }
 
 func (h *Handler) months(w http.ResponseWriter, r *http.Request) {
@@ -417,6 +419,92 @@ func (h *Handler) todaySummary(w http.ResponseWriter, r *http.Request) {
 		"topCategoryName":   firstNonEmpty(topName, topCategory.Name),
 		"topCategoryAmount": firstNonZero(topAmount, topCategory.Spent),
 	})
+}
+
+// budInsight builds Today's insight from the user's synced transactions:
+// this week's outgoing spend vs the week before, plus the category driving it.
+// Deterministic and cheap — no AI call, so it works offline-first.
+func (h *Handler) budInsight(w http.ResponseWriter, r *http.Request) {
+	userID, _ := auth.UserIDFromContext(r.Context())
+
+	var thisWeekCents, lastWeekCents int64
+	err := h.db.QueryRow(r.Context(), `
+		select coalesce(sum(case when date >= current_date - 6 then amount_cents end), 0)::bigint,
+		       coalesce(sum(case when date < current_date - 6 then amount_cents end), 0)::bigint
+		  from plaid_transactions
+		 where user_id = $1 and pending = false and amount_cents > 0
+		   and date >= current_date - 13
+		   and coalesce(personal_finance_category_primary, '') not in ('INCOME', 'TRANSFER_IN', 'TRANSFER_OUT', 'LOAN_PAYMENTS')`,
+		userID).Scan(&thisWeekCents, &lastWeekCents)
+	if err != nil {
+		respond.Error(w, http.StatusInternalServerError, "bud_insight_failed", "Could not build today's insight.")
+		return
+	}
+
+	var topCategory string
+	var topCents int64
+	err = h.db.QueryRow(r.Context(), `
+		select coalesce(personal_finance_category_primary, 'GENERAL'), sum(amount_cents)::bigint
+		  from plaid_transactions
+		 where user_id = $1 and pending = false and amount_cents > 0
+		   and date >= current_date - 6
+		   and coalesce(personal_finance_category_primary, '') not in ('INCOME', 'TRANSFER_IN', 'TRANSFER_OUT', 'LOAN_PAYMENTS')
+		 group by 1
+		 order by 2 desc
+		 limit 1`, userID).Scan(&topCategory, &topCents)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		respond.Error(w, http.StatusInternalServerError, "bud_insight_failed", "Could not build today's insight.")
+		return
+	}
+
+	insightType := "spending"
+	var message string
+	switch {
+	case thisWeekCents == 0 && lastWeekCents == 0:
+		insightType = "motivation"
+		message = "No spending has synced this week yet. Connect or refresh your bank in Budget and Bud will start reading your real patterns."
+	case lastWeekCents > 0:
+		delta := float64(thisWeekCents-lastWeekCents) / float64(lastWeekCents)
+		percent := int(math.Round(math.Abs(delta) * 100))
+		switch {
+		case delta <= -0.05:
+			message = fmt.Sprintf(
+				"You spent %d%% less this week than the week before — about %s kept. That pace moves your goals up, not just your score.",
+				percent, dollarsLabel(lastWeekCents-thisWeekCents),
+			)
+		case delta >= 0.05:
+			message = fmt.Sprintf(
+				"Spending is up %d%% versus last week, mostly from %s. One quiet no-spend day would flatten the curve.",
+				percent, prettyCategory(topCategory),
+			)
+		default:
+			message = "Spending is holding steady week over week. Consistency like this is exactly what builds your Financial Health score."
+		}
+	default:
+		message = fmt.Sprintf(
+			"Most of this week's %s went to %s. Worth a quick look before the weekend locks it in.",
+			dollarsLabel(thisWeekCents), prettyCategory(topCategory),
+		)
+	}
+
+	respond.JSON(w, http.StatusOK, map[string]any{
+		"id":          "insight_" + time.Now().UTC().Format("2006-01-02"),
+		"message":     message,
+		"generatedAt": time.Now().UTC().Format(time.RFC3339),
+		"type":        insightType,
+	})
+}
+
+func dollarsLabel(cents int64) string {
+	return fmt.Sprintf("$%d", int(math.Round(float64(cents)/100)))
+}
+
+func prettyCategory(raw string) string {
+	if raw == "" || raw == "GENERAL" {
+		return "everyday spending"
+	}
+	label := strings.ToLower(strings.ReplaceAll(raw, "_", " "))
+	return strings.ReplaceAll(label, " and ", " & ")
 }
 
 func (h *Handler) recentTransactions(w http.ResponseWriter, r *http.Request) {

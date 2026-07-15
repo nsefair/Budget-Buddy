@@ -52,7 +52,7 @@ export const MOCK_QUESTS: Quest[] = [
     category: "planning",
     title: "Keep surprise spending at zero for 5 days",
     whyItMatters:
-      "Your score is 620 — planning a few choices before they happen is the clearest path to the next range.",
+      "Planning a few choices before they happen keeps your week calm and leaves more room for your goals.",
     instructions:
       "At the end of a day when every purchase was planned, add one check-in.",
     checkInLabel: "Day stayed planned",
@@ -96,19 +96,19 @@ export const MOCK_QUESTS: Quest[] = [
 ];
 
 export const MOCK_SCORE: FinancialScore = {
-  value: 620,
-  previousValue: 612,
-  change: 8,
+  value: 280,
+  previousValue: 278,
+  change: 2,
   band: "Strong",
   leagueTier: "Platinum",
   nextLeagueTier: "Diamond",
-  pointsToNextTier: 70,
+  pointsToNextTier: 75,
   components: {
-    quests: 72,
-    budgeting: 64,
-    saving: 58,
-    goals: 70,
-    consistency: 67,
+    quests: 58,
+    budgeting: 57,
+    saving: 55,
+    goals: 60,
+    consistency: 54,
   },
   updatedAt: new Date().toISOString(),
 };
@@ -119,11 +119,11 @@ export const MOCK_LEAGUE: League = {
   resetDate: reset.toISOString(),
   currentUserRank: 4,
   users: [
-    { id: "u1", name: "Jordan K.", level: 12, xp: 5800, streak: 30, financialScore: 676, rank: 1 },
-    { id: "u2", name: "Priya M.", level: 10, xp: 5200, streak: 22, financialScore: 658, rank: 2 },
-    { id: "u3", name: "Derek T.", level: 9, xp: 4800, streak: 19, financialScore: 637, rank: 3 },
-    { id: "u_me", name: "Andre R.", level: 7, xp: 3240, streak: 14, financialScore: 620, rank: 4, isCurrentUser: true },
-    { id: "u4", name: "Sofia L.", level: 7, xp: 3100, streak: 11, financialScore: 614, rank: 5 },
+    { id: "u1", name: "Jordan K.", level: 12, xp: 5800, streak: 30, financialScore: 316, rank: 1 },
+    { id: "u2", name: "Priya M.", level: 10, xp: 5200, streak: 22, financialScore: 302, rank: 2 },
+    { id: "u3", name: "Derek T.", level: 9, xp: 4800, streak: 19, financialScore: 291, rank: 3 },
+    { id: "u_me", name: "Nicolas S.", level: 7, xp: 3240, streak: 12, financialScore: 280, rank: 4, isCurrentUser: true },
+    { id: "u4", name: "Sofia L.", level: 7, xp: 3100, streak: 11, financialScore: 271, rank: 5 },
   ],
 };
 
@@ -177,7 +177,7 @@ export function checkInMockQuest(questId: string): QuestCheckInResult {
   const score = {
     ...mockDashboard.score,
     previousValue: mockDashboard.score.value,
-    value: Math.min(850, mockDashboard.score.value + scoreIncrease),
+    value: Math.min(500, mockDashboard.score.value + scoreIncrease),
     change: scoreIncrease,
     updatedAt: new Date().toISOString(),
   };

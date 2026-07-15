@@ -26,19 +26,21 @@ export interface BudMessage {
 export const MOCK_BUD_INSIGHT: BudInsight = {
   id: "insight_today",
   message:
-    "You spent 18% less on dining this week compared to last week — that's $34 saved. At this pace, your Emergency Fund goal moves up by 3 weeks.",
+    "You're on track this week. Dining is calmer, and that gives your Emergency Fund a little more room. Today, log one goal move so Bud can keep the plan warm.",
   generatedAt: new Date().toISOString(),
   type: "spending",
 };
 
-export const MOCK_BUD_GREETING = (firstName: string, streak: number): string => {
+// Not mock data — a local copy template fed by the real user's name and
+// streak. Lives here beside Bud's other voice content.
+export const budGreeting = (firstName: string, streak: number): string => {
   const hour = new Date().getHours();
   if (hour < 12) {
-    return `Good morning, ${firstName}. You're on a ${streak}-day streak — let's make today count.`;
+    return `Good morning, ${firstName}. Bud found one thing worth your attention.`;
   } else if (hour < 17) {
-    return `Hey ${firstName}. You've got ${streak} days running — stay sharp this afternoon.`;
+    return `Hey ${firstName}. You're okay. Let's keep the next move simple.`;
   } else {
-    return `Good evening, ${firstName}. ${streak} days strong. Tonight's a good time to check your spending.`;
+    return `Good evening, ${firstName}. One quick check-in keeps your ${streak}-day streak alive.`;
   }
 };
 

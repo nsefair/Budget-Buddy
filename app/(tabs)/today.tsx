@@ -1,24 +1,18 @@
 /**
- * Today Tab — Home Dashboard
+ * Today Tab — the daily emotional check-in.
  *
- * Matches the CEO's vision drawing:
- *   • Emotional Why anchor at top (the user's reason)
- *   • Stats Card — Net Worth, Health Score, Level + Streak / XP / Savings Rate
- *   • Daily Spend Snapshot — $X of $Y today, top merchant
- *   • Upcoming Bills — recurring charges within 48h
- *   • Recent Transactions — last 4 from Plaid
- *   • Goal Progress Card — most active goal
+ * CEO pre-test notes: Today answers exactly one question - "How am I doing,
+ * and what do I do right now?" Three elements, nothing else:
+ *   1. Today's Insight from Bud as the hero
+ *   2. Calm financial read (1-500 score, only on Today, secondary)
+ *   3. One action for today (first open quest check-in, feeds the streak)
  *
- * Strict rules followed (developer review §6):
- *   • Emojis are reserved for spending categories and Buds kudos only
- *   • Bud's greeting copy passes the Friend / Cringe / Shame tests
- *   • No prescriptive language ("you should/must/need to")
- *
- * Data layer: each section reads from a service/mock so the swap to the
- * real backend is transparent (controlled by EXPO_PUBLIC_USE_MOCK).
+ * Everything that used to live here moved out:
+ *   Net worth / saving rate / transactions / bills -> Budget tab
+ *   Level / XP / quest strip / league -> Quests tab
  */
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
   Pressable,
@@ -34,108 +28,38 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 
 import { Colors } from "@/constants/colors";
+import { TAB_BAR_HEIGHT } from "@/constants/tokens";
 import { useUser } from "@/hooks/useAuth";
 import { BrandHeader, BrandLogo } from "@/components/BrandLogo";
 import { Icon } from "@/components/Icon";
-import {
-  MOCK_UPCOMING_BILLS,
-  type AccountSummary,
-  type Transaction,
-} from "@/mock/budget";
-import { MOCK_BUD_GREETING } from "@/mock/bud";
-import { budgetService, linkedAccountNetWorth } from "@/services/budgetService";
-import { goalsService } from "@/services/goalsService";
-import { todayService, type TodaySummary } from "@/services/todayService";
-import type { Goal } from "@/mock/goals";
-import { formatCurrency, secureLog } from "@/utils/security";
+import { budGreeting, type BudInsight } from "@/mock/bud";
+import { todayService } from "@/services/todayService";
+import { secureLog } from "@/utils/security";
 import { CountUp, FadeInUp } from "@/animations";
-import { ActiveQuestStrip } from "@/features/quests/QuestHub";
-import { useQuestDashboard } from "@/features/quests/useQuestDashboard";
+import {
+  questCheckInMessage,
+  useQuestDashboard,
+} from "@/features/quests/useQuestDashboard";
+import type { FinancialScore, Quest } from "@/features/quests/types";
 
-const TAB_BAR_HEIGHT = 80;
-
-const SPENDING_EMOJI: Record<string, string> = {
-  food: "🍔",
-  transport: "🚗",
-  shopping: "🛍️",
-  housing: "🏠",
-  entertainment: "🎬",
-  health: "💊",
-  personal: "✂️",
-  education: "📚",
-};
-
-const EMPTY_TODAY_SUMMARY: TodaySummary = {
-  totalSpent: 0,
-  dailyBudget: 0,
-  topCategoryName: "",
-  topCategoryAmount: 0,
-};
-
-function currentMonthId() {
-  const now = new Date();
-  const month = `${now.getMonth() + 1}`.padStart(2, "0");
-  return `${now.getFullYear()}-${month}`;
-}
+const SCORE_MAX = 500;
 
 export default function TodayScreen() {
   const insets = useSafeAreaInsets();
   const user = useUser();
-  const { data: questDashboard } = useQuestDashboard();
+  const {
+    data: questDashboard,
+    refetch: refetchQuests,
+    checkIn,
+    checkingIn,
+  } = useQuestDashboard();
 
   const fade = useRef(new Animated.Value(0)).current;
   const lift = useRef(new Animated.Value(16)).current;
 
-  const [activeGoal, setActiveGoal] = useState<Goal | null>(null);
-  const [summary, setSummary] = useState<TodaySummary>(EMPTY_TODAY_SUMMARY);
-  const [recentTxns, setRecentTxns] = useState<Transaction[]>([]);
-  const [linkedAccounts, setLinkedAccounts] = useState<AccountSummary[]>([]);
-  const [accountsLoaded, setAccountsLoaded] = useState(false);
-  const [savingsRate, setSavingsRate] = useState(0);
+  const [insight, setInsight] = useState<BudInsight | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-
-  const loadActiveGoal = useCallback(async () => {
-    try {
-      const { goals } = await goalsService.list();
-      const sorted = [...goals].sort(
-        (a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime()
-      );
-      setActiveGoal(sorted[0] ?? null);
-    } catch (e) {
-      secureLog.error("today.goals failed", e);
-    }
-  }, []);
-
-  const loadMoneySnapshot = useCallback(async () => {
-    try {
-      const nextSummary = await todayService.getSummary();
-      setSummary(nextSummary);
-    } catch (error) {
-      secureLog.warn("today.summary failed", error);
-    }
-
-    try {
-      const nextTransactions = await todayService.getRecentTransactions();
-      setRecentTxns(nextTransactions);
-    } catch (error) {
-      secureLog.warn("today.transactions failed", error);
-    }
-
-    try {
-      const nextAccounts = await budgetService.getAccounts();
-      setLinkedAccounts(nextAccounts);
-      setAccountsLoaded(true);
-    } catch (error) {
-      secureLog.warn("today.accounts failed", error);
-    }
-
-    try {
-      const currentOverview = await budgetService.getOverview(currentMonthId());
-      setSavingsRate(Math.max(0, Math.round(currentOverview.savingsRate)));
-    } catch (error) {
-      secureLog.warn("today.overview failed", error);
-    }
-  }, []);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
 
   useEffect(() => {
     Animated.parallel([
@@ -145,14 +69,22 @@ export default function TodayScreen() {
   }, [fade, lift]);
 
   useEffect(() => {
-    loadActiveGoal();
-    loadMoneySnapshot();
-  }, [loadActiveGoal, loadMoneySnapshot]);
+    todayService
+      .getInsight()
+      .then(setInsight)
+      .catch((error) => secureLog.warn("today.insight failed", error));
+  }, []);
 
   const onRefresh = async () => {
     setRefreshing(true);
     try {
-      await Promise.all([loadActiveGoal(), loadMoneySnapshot()]);
+      await Promise.all([
+        refetchQuests(),
+        todayService
+          .getInsight()
+          .then(setInsight)
+          .catch((error) => secureLog.warn("today.insight failed", error)),
+      ]);
     } finally {
       setRefreshing(false);
     }
@@ -160,10 +92,32 @@ export default function TodayScreen() {
 
   if (!user) return null;
 
-  const greeting = MOCK_BUD_GREETING(user.firstName, user.streak);
-  const linkedNetWorth = accountsLoaded
-    ? linkedAccountNetWorth(linkedAccounts)
-    : user.netWorth;
+  const greeting = budGreeting(user.firstName, user.streak);
+  const score: FinancialScore | null = questDashboard?.score ?? null;
+  const scoreValue = score?.value ?? (user.financialHealthScore || 280);
+  const nextAction =
+    questDashboard?.quests.find(
+      (quest) => quest.status === "active" && !quest.checkedInToday
+    ) ?? null;
+  const allDone = Boolean(questDashboard && !nextAction);
+
+  const handleAction = async (quest: Quest) => {
+    try {
+      const result = await checkIn(quest.id);
+      setActionNotice(null);
+      if (result.quest.status === "completed") {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+    } catch (error) {
+      // The backend rejects check-ins it cannot verify against synced
+      // transactions (e.g. a food charge on a no-dining-out day). Show why.
+      secureLog.warn("today.action check-in failed", error);
+      setActionNotice(questCheckInMessage(error));
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -183,7 +137,6 @@ export default function TodayScreen() {
         }
       >
         <Animated.View style={{ opacity: fade, transform: [{ translateY: lift }] }}>
-          {/* Hero scrolls with content — avoids a fixed blue strip behind the feed */}
           <LinearGradient
             colors={[Colors.navy800, Colors.navy600, Colors.navy600]}
             locations={[0, 0.55, 1]}
@@ -218,101 +171,59 @@ export default function TodayScreen() {
                   <Text style={styles.greetingText}>{greeting}</Text>
                 </View>
               </View>
-
-              {user.why ? (
-                <WhyCard firstName={user.firstName} why={user.why} />
-              ) : null}
             </View>
           </LinearGradient>
 
           <View style={styles.bodyPadding}>
-          {/* Stats Card */}
-          <FadeInUp delay={60}>
-            <StatsCard
-              netWorth={linkedNetWorth}
-              accountCount={linkedAccounts.length}
-              healthScore={questDashboard?.score.value ?? (user.financialHealthScore || 500)}
-              level={user.level}
-              streak={user.streak}
-              xp={user.xp}
-              savingsRate={savingsRate}
-            />
-          </FadeInUp>
-
-          <FadeInUp delay={140}>
-            <ActiveQuestStrip />
-          </FadeInUp>
-
-          {/* Daily Spend Snapshot */}
-          <FadeInUp delay={220}>
-            <DailySpendCard
-              summary={summary}
-              onPress={() => {
-                Haptics.selectionAsync();
-                router.push("/(tabs)/budget");
-              }}
-            />
-          </FadeInUp>
-
-          {/* Upcoming Bills */}
-          <FadeInUp delay={300}>
-            <UpcomingBillsCard />
-          </FadeInUp>
-
-          {/* Recent Transactions */}
-          <SectionHeader
-            title="Recent transactions"
-            action="See all"
-            onAction={() => router.push("/transactions")}
-          />
-          <View style={styles.txnCard}>
-            {recentTxns.length === 0 && (
-              <Text style={styles.emptyTransactions}>
-                No synced spending transactions yet.
-              </Text>
-            )}
-            {recentTxns.map((t, i) => (
-              <React.Fragment key={t.id}>
-                <View style={styles.txnRow}>
-                  <View style={styles.txnLeft}>
-                    <View style={styles.txnIconBox}>
-                      <Text style={styles.txnEmoji}>
-                        {SPENDING_EMOJI[t.categoryId] ?? "💸"}
-                      </Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.txnMerchant}>{t.merchant}</Text>
-                      <Text style={styles.txnCategory}>
-                        {t.category}
-                        {t.isRecurring ? " · Recurring" : ""}
-                      </Text>
-                    </View>
-                  </View>
-                  <Text
-                    style={[
-                      styles.txnAmount,
-                      t.amount < 0 ? { color: Colors.emerald } : null,
-                    ]}
-                  >
-                    {formatCurrency(t.amount < 0 ? Math.abs(t.amount) : -t.amount, { sign: true })}
-                  </Text>
-                </View>
-                {i < recentTxns.length - 1 && <View style={styles.txnDivider} />}
-              </React.Fragment>
-            ))}
-          </View>
-
-          {/* Goal Progress */}
-          {activeGoal && (
-            <>
-              <SectionHeader
-                title="Goal in motion"
-                action="See all"
-                onAction={() => router.push("/(tabs)/goals")}
+            {/* 1. Insight: Bud's hero moment */}
+            <FadeInUp delay={60}>
+              <InsightHero
+                message={
+                  insight?.message ??
+                  "Bud is reading your latest activity. Today's insight lands in a moment."
+                }
+                scoreValue={scoreValue}
+                band={score?.band}
+                streak={user.streak}
+                onAskBud={() => {
+                  Haptics.selectionAsync();
+                  router.push("/(tabs)/bud");
+                }}
               />
-              <GoalProgressCard goal={activeGoal} />
-            </>
-          )}
+            </FadeInUp>
+
+            {/* 2. Action: one thing to do right now */}
+            <FadeInUp delay={180}>
+              <ActionCard
+                quest={nextAction}
+                allDone={allDone}
+                streak={user.streak}
+                busy={checkingIn}
+                onDone={handleAction}
+                onSeeQuests={() => {
+                  Haptics.selectionAsync();
+                  router.push("/(tabs)/quests");
+                }}
+              />
+            </FadeInUp>
+
+            {actionNotice ? (
+              <FadeInUp>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Dismiss check-in message"
+                  onPress={() => setActionNotice(null)}
+                  style={styles.actionNotice}
+                >
+                  <Icon name="shield-check" size={18} color={Colors.amber} strokeWidth={2.4} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.actionNoticeTitle}>Bud couldn't verify that yet.</Text>
+                    <Text style={styles.actionNoticeBody}>{actionNotice}</Text>
+                  </View>
+                  <Icon name="x" size={15} color={Colors.muted} />
+                </Pressable>
+              </FadeInUp>
+            ) : null}
           </View>
         </Animated.View>
       </ScrollView>
@@ -320,267 +231,149 @@ export default function TodayScreen() {
   );
 }
 
-// ─── Why card ────────────────────────────────────────────────────────────────
+// ─── Today's insight hero ───────────────────────────────────────────────────
 
-function WhyCard({ firstName, why }: { firstName: string; why: string }) {
-  return (
-    <View style={styles.whyCard}>
-      <View style={styles.whyHeader}>
-        <Icon name="sparkles" size={12} color={Colors.gold} />
-        <Text style={styles.whyEyebrow}>{firstName.toUpperCase()}'S WHY</Text>
-      </View>
-      <Text style={styles.whyQuote}>“{why}”</Text>
-    </View>
-  );
+function scoreStatusFor(value: number, band?: FinancialScore["band"]) {
+  if (band === "Exceptional" || band === "Thriving" || value >= 360) {
+    return { label: "On track", color: Colors.gold };
+  }
+  if (band === "Strong" || value >= 270) {
+    return { label: "Good base", color: Colors.gold };
+  }
+  if (band === "Steady" || value >= 180) {
+    return { label: "Building", color: Colors.gold };
+  }
+  return { label: "Getting started", color: Colors.brandOnDarkMuted };
 }
 
-// ─── Stats card (CEO drawing — the central hero) ─────────────────────────────
-
-function StatsCard({
-  netWorth,
-  accountCount,
-  healthScore,
-  level,
+function InsightHero({
+  message,
+  scoreValue,
+  band,
   streak,
-  xp,
-  savingsRate,
+  onAskBud,
 }: {
-  netWorth: number;
-  accountCount: number;
-  healthScore: number;
-  level: number;
+  message: string;
+  scoreValue: number;
+  band?: FinancialScore["band"];
   streak: number;
-  xp: number;
-  savingsRate: number;
+  onAskBud: () => void;
 }) {
-  const flameAnim = useRef(new Animated.Value(1)).current;
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(flameAnim, { toValue: 1.12, duration: 900, useNativeDriver: true }),
-        Animated.timing(flameAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
-      ])
-    ).start();
-  }, [flameAnim]);
+  const status = scoreStatusFor(scoreValue, band);
 
   return (
-    <View style={styles.statsCard}>
-      {/* Top row — Net Worth + Health Score + Level */}
-      <View style={styles.statsTopRow}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.statsEyebrow}>NET WORTH</Text>
-          <CountUp
-            value={netWorth}
-            format={(n) => formatCurrency(n)}
-            style={styles.netWorthAmount}
-            accessibilityLabel={`Net worth ${formatCurrency(netWorth)}`}
-          />
-          <View style={styles.netWorthChange}>
-            <Icon name="building" size={11} color={Colors.emerald} />
-            <Text style={styles.netWorthChangeText}>
-              {accountCount > 0
-                ? `${accountCount} linked ${accountCount === 1 ? "account" : "accounts"}`
-                : "No linked accounts yet"}
+    <LinearGradient
+      colors={[Colors.brandGradientStart, Colors.brandGradientMid, Colors.brandGradientEnd]}
+      style={styles.insightHero}
+      accessibilityLabel={`Today's insight. ${message} Financial score ${scoreValue} out of ${SCORE_MAX}, ${status.label}.`}
+    >
+      <View style={styles.insightHeroGlow} />
+      <View style={styles.insightHeroHeader}>
+        <View style={styles.insightHeroEyebrowRow}>
+          <Icon name="sparkles" size={15} color={Colors.gold} strokeWidth={2.6} />
+          <Text style={styles.insightHeroEyebrow}>TODAY'S INSIGHT</Text>
+        </View>
+        <View style={styles.streakPill}>
+          <Icon name="flame" size={14} color={Colors.gold} strokeWidth={2.4} />
+          <Text style={styles.streakPillText}>
+            {streak} day{streak === 1 ? "" : "s"}
+          </Text>
+        </View>
+      </View>
+
+      <Text style={styles.insightHeroText}>{message}</Text>
+
+      <View style={styles.insightHeroFooter}>
+        <View style={styles.scoreMini}>
+          <Text style={styles.scoreMiniLabel}>Financial Score</Text>
+          <View style={styles.scoreMiniRow}>
+            <CountUp value={scoreValue} style={styles.scoreMiniValue} />
+            <Text style={styles.scoreMiniMax}>/ {SCORE_MAX}</Text>
+          </View>
+          <View style={styles.scoreMiniStatus}>
+            <View style={[styles.statusDot, { backgroundColor: status.color }]} />
+            <Text style={[styles.scoreMiniStatusText, { color: status.color }]}>
+              {status.label}
             </Text>
           </View>
         </View>
-
-        <View style={styles.healthBox}>
-          <Text style={styles.healthLabel}>HEALTH</Text>
-          <CountUp value={healthScore} style={styles.healthScore} />
-        </View>
-
-        <View style={styles.levelBadge}>
-          <LinearGradient colors={[Colors.gold400, Colors.gold600]} style={styles.levelBadgeInner}>
-            <Text style={styles.levelBadgeText}>{level}</Text>
-          </LinearGradient>
-          <Text style={styles.levelLabel}>LEVEL</Text>
-        </View>
+        <Pressable onPress={onAskBud} hitSlop={8} style={styles.insightAction}>
+          <Text style={styles.insightActionText}>Ask Bud</Text>
+          <Icon name="chevron-right" size={14} color={Colors.gold} strokeWidth={2.6} />
+        </Pressable>
       </View>
-
-      {/* Divider */}
-      <View style={styles.statsDivider} />
-
-      {/* Bottom row — Streak / XP / Savings Rate */}
-      <View style={styles.statsBottomRow}>
-        <View style={styles.statsCell}>
-          <Animated.View style={{ transform: [{ scale: flameAnim }] }}>
-            <Icon name="flame" size={18} color={Colors.gold} strokeWidth={2.4} />
-          </Animated.View>
-          <View>
-            <Text style={styles.statsCellValue}>{streak}</Text>
-            <Text style={styles.statsCellLabel}>day streak</Text>
-          </View>
-        </View>
-        <View style={styles.statsCell}>
-          <Icon name="zap" size={18} color={Colors.teal} strokeWidth={2.4} />
-          <View>
-            <CountUp
-              value={xp}
-              format={(n) => Math.round(n).toLocaleString()}
-              style={styles.statsCellValue}
-            />
-            <Text style={styles.statsCellLabel}>XP</Text>
-          </View>
-        </View>
-        <View style={styles.statsCell}>
-          <Icon name="piggy-bank" size={18} color={Colors.emerald} strokeWidth={2.2} />
-          <View>
-            <CountUp
-              value={savingsRate}
-              format={(n) => `${Math.round(n)}%`}
-              style={styles.statsCellValue}
-            />
-            <Text style={styles.statsCellLabel}>saving rate</Text>
-          </View>
-        </View>
-      </View>
-    </View>
+    </LinearGradient>
   );
 }
 
-// ─── Daily spend ────────────────────────────────────────────────────────────
+// ─── One action for today ────────────────────────────────────────────────────
 
-function DailySpendCard({
-  summary,
-  onPress,
+function ActionCard({
+  quest,
+  allDone,
+  streak,
+  busy,
+  onDone,
+  onSeeQuests,
 }: {
-  summary: TodaySummary;
-  onPress: () => void;
+  quest: Quest | null;
+  allDone: boolean;
+  streak: number;
+  busy: boolean;
+  onDone: (quest: Quest) => void;
+  onSeeQuests: () => void;
 }) {
-  const dailyBudget = Math.max(0, summary.dailyBudget);
-  const pct = dailyBudget > 0 ? Math.min(100, (summary.totalSpent / dailyBudget) * 100) : 0;
-  const status =
-    pct >= 100 ? { label: "Over today's limit", color: Colors.coral }
-    : pct >= 80 ? { label: "Approaching limit", color: Colors.amber }
-    : { label: "On track", color: Colors.emerald };
-  const topSpendLabel =
-    summary.topCategoryAmount > 0 && summary.topCategoryName
-      ? `${summary.topCategoryName} · ${formatCurrency(summary.topCategoryAmount)}`
-      : "No spending synced today";
-
-  return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.dailyCard, pressed && { opacity: 0.94 }]}>
-      <View style={styles.cardHeader}>
-        <Text style={styles.cardTitle}>Today</Text>
-        <View style={styles.statusPill}>
-          <View style={[styles.statusDot, { backgroundColor: status.color }]} />
-          <Text style={[styles.statusText, { color: status.color }]}>{status.label}</Text>
+  if (allDone) {
+    return (
+      <View style={styles.actionCard}>
+        <View style={[styles.actionCheck, styles.actionCheckDone]}>
+          <Icon name="check" size={16} color={Colors.onAccent} strokeWidth={3} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.actionTitle}>You're done for today.</Text>
+          <Text style={styles.actionSub}>
+            Streak safe — day {streak + 1} starts tomorrow.
+          </Text>
         </View>
       </View>
-      <Text style={styles.dailyAmount}>
-        {formatCurrency(summary.totalSpent)}
-        <Text style={styles.dailyAmountLight}> / {formatCurrency(dailyBudget)}</Text>
-      </Text>
-      <View style={styles.dailyTrack}>
-        <View style={[styles.dailyFill, { width: `${pct}%`, backgroundColor: status.color }]} />
-      </View>
-      <View style={styles.merchantRow}>
-        <Text style={styles.merchantLabel}>Top spend</Text>
-        <Text style={styles.merchantValue}>{topSpendLabel}</Text>
-      </View>
-    </Pressable>
-  );
-}
+    );
+  }
 
-// ─── Upcoming bills ──────────────────────────────────────────────────────────
-
-function UpcomingBillsCard() {
-  if (MOCK_UPCOMING_BILLS.length === 0) return null;
+  if (!quest) {
+    return (
+      <Pressable onPress={onSeeQuests} style={({ pressed }) => [styles.actionCard, pressed && { opacity: 0.94 }]}>
+        <View style={styles.actionCheck} />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.actionTitle}>Pick this week's first move</Text>
+          <Text style={styles.actionSub}>Your quests are waiting</Text>
+        </View>
+        <Icon name="chevron-right" size={18} color={Colors.muted} />
+      </Pressable>
+    );
+  }
 
   return (
-    <View style={styles.billsCard}>
-      <View style={styles.cardHeader}>
-        <Text style={styles.cardTitle}>Upcoming bills</Text>
-        <Icon name="bell" size={14} color={Colors.muted} />
-      </View>
-      {MOCK_UPCOMING_BILLS.map((b, i) => {
-        const days = Math.max(
-          0,
-          Math.ceil((new Date(b.dueAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-        );
-        const dueLabel = days === 0 ? "Today" : days === 1 ? "Tomorrow" : `In ${days} days`;
-        return (
-          <React.Fragment key={b.id}>
-            <View style={styles.billRow}>
-              <View style={styles.billLeft}>
-                <View
-                  style={[
-                    styles.billIndicator,
-                    { backgroundColor: b.isCovered ? Colors.emerald50 : Colors.coral50 },
-                  ]}
-                >
-                  <Icon
-                    name={b.isCovered ? "shield-check" : "alert-circle"}
-                    size={14}
-                    color={b.isCovered ? Colors.emerald : Colors.coral}
-                  />
-                </View>
-                <View>
-                  <Text style={styles.billMerchant}>{b.merchant}</Text>
-                  <Text style={styles.billDue}>{dueLabel}</Text>
-                </View>
-              </View>
-              <Text style={styles.billAmount}>−{formatCurrency(b.amount)}</Text>
-            </View>
-            {i < MOCK_UPCOMING_BILLS.length - 1 && <View style={styles.billDivider} />}
-          </React.Fragment>
-        );
-      })}
-    </View>
-  );
-}
-
-// ─── Goal progress card ──────────────────────────────────────────────────────
-
-function GoalProgressCard({ goal }: { goal: Goal }) {
-  const pct = goal.targetAmount === 0 ? 0 : goal.alreadySaved / goal.targetAmount;
-  const remaining = goal.targetAmount - goal.alreadySaved;
-
-  return (
-    <Pressable
-      style={({ pressed }) => [styles.goalCard, pressed && { opacity: 0.94 }]}
-      onPress={() => router.push("/(tabs)/goals")}
-    >
-      <View style={styles.goalCardTop}>
-        <Text style={styles.goalCardName}>{goal.name}</Text>
-        <Text style={styles.goalCardPct}>{Math.round(pct * 100)}%</Text>
-      </View>
-      <Text style={styles.goalCardReason} numberOfLines={2}>
-        “{goal.reason}”
-      </Text>
-      <View style={styles.goalCardTrack}>
-        <View style={[styles.goalCardFill, { width: `${pct * 100}%` }]} />
-      </View>
-      <View style={styles.goalCardBottom}>
-        <Text style={styles.goalCardSaved}>{formatCurrency(goal.alreadySaved)}</Text>
-        <Text style={styles.goalCardRemaining}>
-          {formatCurrency(remaining)} to go
+    <View style={styles.actionCard}>
+      <View style={styles.actionCheck} />
+      <Pressable onPress={onSeeQuests} style={{ flex: 1 }} hitSlop={4}>
+        <Text style={styles.actionTitle} numberOfLines={2}>
+          {quest.checkInLabel}
         </Text>
-      </View>
-    </Pressable>
-  );
-}
-
-// ─── Section header (shared) ────────────────────────────────────────────────
-
-function SectionHeader({
-  title,
-  action,
-  onAction,
-}: {
-  title: string;
-  action: string;
-  onAction: () => void;
-}) {
-  return (
-    <View style={styles.sectionHeader}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <Pressable onPress={onAction} hitSlop={10}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-          <Text style={styles.sectionAction}>{action}</Text>
-          <Icon name="chevron-right" size={14} color={Colors.gold} strokeWidth={2.4} />
-        </View>
+        <Text style={styles.actionSub}>
+          {quest.title} · keeps your {streak}-day streak alive
+        </Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Check in: ${quest.checkInLabel}`}
+        disabled={busy}
+        onPress={() => onDone(quest)}
+        style={({ pressed }) => [
+          styles.actionButton,
+          (pressed || busy) && { opacity: 0.8 },
+        ]}
+      >
+        <Text style={styles.actionButtonText}>Done</Text>
       </Pressable>
     </View>
   );
@@ -602,8 +395,8 @@ const styles = StyleSheet.create({
   },
   bodyPadding: {
     paddingHorizontal: 18,
-    paddingTop: 8,
-    gap: 6,
+    paddingTop: 12,
+    gap: 14,
     backgroundColor: Colors.surface,
   },
 
@@ -645,368 +438,210 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
 
-  // Why
-  whyCard: {
-    backgroundColor: Colors.greenSurface,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: Colors.greenBorder,
+  // Insight hero
+  insightHero: {
+    minHeight: 292,
+    borderRadius: 24,
+    padding: 22,
+    overflow: "hidden",
+    shadowColor: Colors.navy,
+    shadowOpacity: 0.14,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
   },
-  whyHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 },
-  whyEyebrow: {
-    fontSize: 10,
+  insightHeroGlow: {
+    position: "absolute",
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: Colors.accentAlpha12,
+    right: -92,
+    top: -96,
+  },
+  insightHeroHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 22,
+  },
+  insightHeroEyebrowRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    flexShrink: 1,
+  },
+  insightHeroEyebrow: {
+    fontSize: 11,
     fontWeight: "800",
     color: Colors.gold,
     letterSpacing: 1.6,
   },
-  whyQuote: {
-    fontSize: 15,
-    color: Colors.navy,
-    fontWeight: "600",
-    lineHeight: 22,
-    fontStyle: "italic",
-  },
-
-  // Stats card
-  statsCard: {
-    backgroundColor: Colors.card,
-    borderRadius: 18,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    shadowColor: Colors.navy,
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 3,
-  },
-  statsTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 14,
-  },
-  statsEyebrow: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: Colors.muted,
-    letterSpacing: 1.4,
-    marginBottom: 4,
-  },
-  netWorthAmount: {
-    fontSize: 26,
-    fontWeight: "800",
-    color: Colors.navy,
-    letterSpacing: 0,
-  },
-  netWorthChange: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
-  netWorthChangeText: { fontSize: 11, fontWeight: "600", color: Colors.emerald },
-
-  healthBox: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    backgroundColor: Colors.navy50,
-    alignItems: "center",
-    minWidth: 64,
-  },
-  healthLabel: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Colors.navyMuted,
-    letterSpacing: 1,
-  },
-  healthScore: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: Colors.navy,
-    letterSpacing: 0,
-    marginTop: 1,
-  },
-
-  levelBadge: { alignItems: "center", gap: 4 },
-  levelBadgeInner: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: Colors.gold,
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 4,
-  },
-  levelBadgeText: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: Colors.onAccent,
-    letterSpacing: 0,
-  },
-  levelLabel: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Colors.navyMuted,
-    letterSpacing: 1.2,
-  },
-
-  statsDivider: {
-    height: 1,
-    backgroundColor: Colors.border,
-    marginBottom: 12,
-  },
-  statsBottomRow: { flexDirection: "row" },
-  statsCell: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  statsCellValue: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: Colors.navy,
-    letterSpacing: 0,
-  },
-  statsCellLabel: { fontSize: 10, color: Colors.muted, fontWeight: "600", marginTop: 1 },
-
-  // League snapshot
-  leagueSnapshot: {
-    backgroundColor: Colors.card,
-    borderRadius: 16,
-    padding: 15,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  leagueSnapshotTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
-  leagueSnapshotTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  leagueSnapshotTitle: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: Colors.navy,
-    letterSpacing: 0,
-  },
-  leagueSnapshotRank: {
-    fontSize: 14,
-    fontWeight: "900",
-    color: Colors.gold,
-    letterSpacing: 0,
-  },
-  leagueSnapshotBody: {
-    fontSize: 12,
-    color: Colors.navyMuted,
-    fontWeight: "700",
-    marginBottom: 10,
-  },
-  leagueMiniTrack: {
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: Colors.border,
-    overflow: "hidden",
-  },
-  leagueMiniFill: {
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: Colors.gold,
-  },
-
-  // Daily card
-  dailyCard: {
-    backgroundColor: Colors.card,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 10,
-  },
-  cardTitle: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: Colors.navy,
-    letterSpacing: 0,
-  },
-  statusPill: {
+  streakPill: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: Colors.navy50,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.09)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
   },
-  statusDot: { width: 6, height: 6, borderRadius: 3 },
-  statusText: { fontSize: 10, fontWeight: "800", letterSpacing: 0.4 },
-  dailyAmount: {
-    fontSize: 26,
+  streakPillText: {
+    fontSize: 12,
     fontWeight: "800",
-    color: Colors.navy,
-    letterSpacing: 0,
-    marginBottom: 8,
+    color: Colors.brandOnDark,
   },
-  dailyAmountLight: { fontSize: 16, color: Colors.muted, fontWeight: "600" },
-  dailyTrack: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Colors.border,
-    overflow: "hidden",
-    marginBottom: 12,
+  insightHeroText: {
+    fontSize: 26,
+    fontWeight: "900",
+    color: Colors.brandOnDark,
+    lineHeight: 34,
   },
-  dailyFill: { height: 6, borderRadius: 3 },
-  merchantRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  merchantLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: Colors.muted,
-    letterSpacing: 0.6,
+  insightHeroFooter: {
+    marginTop: 24,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: 14,
+  },
+  scoreMini: {
+    flex: 1,
+    minWidth: 0,
+  },
+  scoreMiniLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Colors.brandOnDarkMuted,
+    letterSpacing: 1.1,
     textTransform: "uppercase",
   },
-  merchantValue: { fontSize: 13, fontWeight: "700", color: Colors.navy },
-
-  // Bills
-  billsCard: {
-    backgroundColor: Colors.card,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  billRow: {
+  scoreMiniRow: {
+    marginTop: 3,
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 8,
+    alignItems: "baseline",
+    gap: 6,
   },
-  billLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
-  billIndicator: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
+  scoreMiniValue: {
+    fontSize: 24,
+    fontWeight: "900",
+    color: Colors.brandOnDark,
   },
-  billMerchant: { fontSize: 13, fontWeight: "700", color: Colors.navy },
-  billDue: { fontSize: 11, color: Colors.muted, marginTop: 1 },
-  billAmount: { fontSize: 14, fontWeight: "700", color: Colors.navy },
-  billDivider: { height: 1, backgroundColor: Colors.border },
-
-  // Section
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 6,
-    marginBottom: 10,
-  },
-  sectionTitle: {
-    fontSize: 14,
+  scoreMiniMax: {
+    fontSize: 13,
     fontWeight: "800",
-    color: Colors.navy,
-    letterSpacing: 0,
+    color: Colors.brandOnDarkMuted,
   },
-  sectionAction: { fontSize: 12, color: Colors.gold, fontWeight: "700" },
-
-  // Transactions
-  txnCard: {
-    backgroundColor: Colors.card,
-    borderRadius: 16,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginBottom: 12,
-  },
-  txnRow: {
+  statusDot: { width: 6, height: 6, borderRadius: 3 },
+  scoreMiniStatus: {
+    marginTop: 4,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    gap: 6,
+  },
+  scoreMiniStatusText: {
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  insightAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    alignSelf: "auto",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    backgroundColor: "rgba(255,255,255,0.09)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+  },
+  insightActionText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: Colors.gold,
+  },
+
+  // Action
+  actionCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: Colors.card,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    shadowColor: Colors.navy,
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2,
+  },
+  // navy200 disappeared against the dark-mode card — navy300 reads in both.
+  actionCheck: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: Colors.navy300,
+  },
+  actionNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: Colors.card,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.amber,
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
-  txnLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
-  txnIconBox: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    backgroundColor: Colors.navy50,
+  actionNoticeTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: Colors.navy,
+  },
+  actionNoticeBody: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Colors.navyMuted,
+    marginTop: 2,
+    lineHeight: 17,
+  },
+  actionCheckDone: {
+    borderColor: Colors.gold,
+    backgroundColor: Colors.gold,
     alignItems: "center",
     justifyContent: "center",
   },
-  txnEmoji: { fontSize: 16, lineHeight: 20 },
-  txnMerchant: { fontSize: 13, fontWeight: "700", color: Colors.navy },
-  txnCategory: { fontSize: 11, color: Colors.muted, marginTop: 1 },
-  txnAmount: { fontSize: 14, fontWeight: "700", color: Colors.navy },
-  txnDivider: { height: 1, backgroundColor: Colors.border, marginHorizontal: 14 },
-  emptyTransactions: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    textAlign: "center",
-    fontSize: 13,
-    fontWeight: "700",
-    color: Colors.muted,
-  },
-
-  // Goal card
-  goalCard: {
-    backgroundColor: Colors.card,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginBottom: 4,
-  },
-  goalCardTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 6,
-  },
-  goalCardName: {
-    fontSize: 16,
+  actionTitle: {
+    fontSize: 15,
     fontWeight: "800",
     color: Colors.navy,
-    letterSpacing: 0,
   },
-  goalCardPct: {
-    fontSize: 16,
+  actionSub: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Colors.muted,
+    marginTop: 2,
+  },
+  actionButton: {
+    paddingHorizontal: 18,
+    paddingVertical: 11,
+    borderRadius: 999,
+    backgroundColor: Colors.gold,
+    shadowColor: Colors.gold,
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+  actionButtonText: {
+    fontSize: 14,
     fontWeight: "800",
-    color: Colors.gold,
-    letterSpacing: 0,
+    color: Colors.onAccent,
   },
-  goalCardReason: {
-    fontSize: 13,
-    color: Colors.navyMuted,
-    fontStyle: "italic",
-    lineHeight: 19,
-    marginBottom: 12,
-  },
-  goalCardTrack: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Colors.border,
-    overflow: "hidden",
-    marginBottom: 10,
-  },
-  goalCardFill: { height: 6, backgroundColor: Colors.gold, borderRadius: 3 },
-  goalCardBottom: { flexDirection: "row", justifyContent: "space-between" },
-  goalCardSaved: { fontSize: 14, fontWeight: "800", color: Colors.navy },
-  goalCardRemaining: { fontSize: 12, color: Colors.muted, fontWeight: "600" },
 });

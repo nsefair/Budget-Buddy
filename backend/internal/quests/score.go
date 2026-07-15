@@ -3,9 +3,13 @@ package quests
 import "math"
 
 const (
-	minimumFinancialScore = 300
-	maximumFinancialScore = 850
+	minimumFinancialScore = 1
+	initialFinancialScore = 280
+	maximumFinancialScore = 500
 )
+
+// scoreMultiplier maps the 0–100 weighted component blend onto the 1–500 range.
+const scoreMultiplier = 4.99
 
 func calculateFinancialScore(components ScoreComponents) int {
 	weighted := clampPercent(components.Quests)*0.30 +
@@ -14,7 +18,7 @@ func calculateFinancialScore(components ScoreComponents) int {
 		clampPercent(components.Goals)*0.20 +
 		clampPercent(components.Consistency)*0.10
 
-	return clampScore(int(math.Round(minimumFinancialScore + weighted*5.5)))
+	return clampScore(int(math.Round(minimumFinancialScore + weighted*scoreMultiplier)))
 }
 
 func clampPercent(value float64) float64 {
@@ -33,13 +37,13 @@ func clampScore(value int) int {
 
 func scoreBand(score int) string {
 	switch {
-	case score >= 780:
+	case score >= 435:
 		return "Exceptional"
-	case score >= 700:
+	case score >= 360:
 		return "Thriving"
-	case score >= 600:
+	case score >= 270:
 		return "Strong"
-	case score >= 500:
+	case score >= 180:
 		return "Steady"
 	default:
 		return "Foundation"
@@ -48,15 +52,15 @@ func scoreBand(score int) string {
 
 func leagueTier(score int) string {
 	switch {
-	case score >= 770:
+	case score >= 425:
 		return "Champion"
-	case score >= 690:
+	case score >= 355:
 		return "Diamond"
-	case score >= 610:
+	case score >= 280:
 		return "Platinum"
-	case score >= 530:
+	case score >= 210:
 		return "Gold"
-	case score >= 450:
+	case score >= 135:
 		return "Silver"
 	default:
 		return "Bronze"
@@ -68,11 +72,11 @@ func nextLeague(score int) (name string, points int) {
 		name  string
 		score int
 	}{
-		{"Silver", 450},
-		{"Gold", 530},
-		{"Platinum", 610},
-		{"Diamond", 690},
-		{"Champion", 770},
+		{"Silver", 135},
+		{"Gold", 210},
+		{"Platinum", 280},
+		{"Diamond", 355},
+		{"Champion", 425},
 	}
 	for _, threshold := range thresholds {
 		if score < threshold.score {

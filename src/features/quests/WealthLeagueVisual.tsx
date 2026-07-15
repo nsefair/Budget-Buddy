@@ -9,12 +9,12 @@ import { Radius, Shadow, Spacing, Type } from "@/constants/tokens";
 import type { League, LeagueUser } from "@/features/quests/types";
 
 const TIER_STEPS: Array<{ name: League["tier"]; short: string; minimum: number }> = [
-  { name: "Bronze", short: "B", minimum: 300 },
-  { name: "Silver", short: "S", minimum: 450 },
-  { name: "Gold", short: "G", minimum: 530 },
-  { name: "Platinum", short: "P", minimum: 610 },
-  { name: "Diamond", short: "D", minimum: 690 },
-  { name: "Champion", short: "C", minimum: 770 },
+  { name: "Bronze", short: "B", minimum: 1 },
+  { name: "Silver", short: "S", minimum: 135 },
+  { name: "Gold", short: "G", minimum: 210 },
+  { name: "Platinum", short: "P", minimum: 280 },
+  { name: "Diamond", short: "D", minimum: 355 },
+  { name: "Champion", short: "C", minimum: 425 },
 ];
 
 export function WealthLeagueVisual({
@@ -29,7 +29,7 @@ export function WealthLeagueVisual({
   compact?: boolean;
 }) {
   const currentUser = league.users.find((user) => user.isCurrentUser);
-  const currentScore = scoreValue ?? currentUser?.financialScore ?? 300;
+  const currentScore = scoreValue ?? currentUser?.financialScore ?? 1;
   const tierIndex = Math.max(0, TIER_STEPS.findIndex((tier) => tier.name === league.tier));
   const podiumUsers = useMemo(() => podiumOrder(league.users.slice(0, 3)), [league.users]);
 

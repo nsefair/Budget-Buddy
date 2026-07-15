@@ -208,8 +208,7 @@ export default function ProfileScreen() {
         {/* Billing */}
         <FadeInUp delay={200}>
           <SettingsGroup title="MEMBERSHIP">
-            <Row icon="badge-check" label="Subscription & billing" sub="App Store" onPress={() => openSettings("subscription")} />
-            <Row icon="user-plus" label="Invite Buds - earn rewards" onPress={() => openRoute("/buds/invite")} last />
+            <Row icon="badge-check" label="Subscription & billing" sub="App Store" onPress={() => openSettings("subscription")} last />
           </SettingsGroup>
         </FadeInUp>
 
@@ -217,7 +216,7 @@ export default function ProfileScreen() {
         <FadeInUp delay={260}>
           <SettingsGroup title="PREFERENCES">
             <Row icon="bell" label="Notifications" onPress={() => openSettings("notifications")} />
-            <Row icon="lock" label="Privacy & what Buds see" onPress={() => openSettings("privacy")} last />
+            <Row icon="lock" label="Privacy" onPress={() => openSettings("privacy")} last />
           </SettingsGroup>
         </FadeInUp>
 

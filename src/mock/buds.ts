@@ -196,15 +196,15 @@ export const MOCK_SHAREABLE_ACHIEVEMENTS: ShareableAchievement[] = [
   {
     kind: "score",
     refId: "",
-    title: "Financial Score reached 620",
+    title: "Financial Score reached 280",
     label: "Verified score",
     verifiedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
   },
   {
     kind: "league",
     refId: "",
-    title: "Reached Platinum League",
-    label: "Verified league",
+    title: "Built a steady week",
+    label: "Verified progress",
     verifiedAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
   },
 ];

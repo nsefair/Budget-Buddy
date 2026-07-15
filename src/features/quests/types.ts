@@ -13,8 +13,14 @@ export type QuestVerificationType =
   | "self_report"
   | "bank_no_spend"
   | "bank_no_delivery"
+  | "bank_no_dining_out"
   | "goal_contribution"
   | "budget_limit";
+
+/** Bank-verified quests need fresh Plaid data before the backend can confirm them. */
+export function isBankVerified(verificationType: QuestVerificationType) {
+  return verificationType.startsWith("bank_");
+}
 
 export interface Quest {
   id: string;

@@ -12,7 +12,7 @@
  * Only these exact messages are dropped; every other log passes through.
  */
 
-import { LogBox } from "react-native";
+import { Platform } from "react-native";
 
 export const IGNORED_WARNINGS = [
   "SafeAreaView has been deprecated",
@@ -20,7 +20,10 @@ export const IGNORED_WARNINGS = [
   "Sending `onAnimatedValueUpdate` with no listeners registered",
 ];
 
-LogBox.ignoreLogs(IGNORED_WARNINGS);
+if (Platform.OS !== "web") {
+  const { LogBox } = require("react-native") as typeof import("react-native");
+  LogBox?.ignoreLogs?.(IGNORED_WARNINGS);
+}
 
 const isIgnored = (arg: unknown) =>
   typeof arg === "string" && IGNORED_WARNINGS.some((p) => arg.includes(p));

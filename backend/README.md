@@ -15,7 +15,7 @@ Go API service for Budget Buddy. The backend now includes production-shaped foun
 - dated manual goal contributions and trailing-30-day completion projections
 - durable Plaid webhook processing with idempotent linked-goal contributions
 - database-randomized weekly quests with once-per-day, idempotent check-ins
-- persisted 300–850 Financial Score breakdowns and score-based Wealth Leagues
+- persisted 1–500 Financial Health Score breakdowns and score-based Wealth Leagues
 
 The mobile app already centralizes all endpoint paths in `src/api/endpoints.ts`.
 Keep this backend aligned with those paths and only change the frontend endpoint
@@ -137,7 +137,7 @@ the previous four weeks are excluded from the random pool. Check-ins use
 farm progress or XP.
 
 The Financial Score is persisted on the user plus a detailed
-`financial_health_profiles` row. It spans 300–850 and combines quest history,
+`financial_health_profiles` row. It spans 1–500 and combines quest history,
 budget consistency, savings pace, goal progress, and streak consistency. Weekly
 League tiers and rankings use this score; public responses expose the score and
 gamification signals only, never balances, budgets, or transactions.

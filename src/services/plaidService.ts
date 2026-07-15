@@ -67,6 +67,19 @@ export type PlaidExchangeMetadata = {
   linkSessionId?: string;
 };
 
+export type PlaidSyncResult = {
+  synced: boolean;
+  message?: string;
+  relinkRequired?: boolean;
+  items?: Array<{
+    itemId: string;
+    addedCount: number;
+    modifiedCount: number;
+    removedCount: number;
+    totalTransactions: number;
+  }>;
+};
+
 const mockStatus: PlaidStatus = {
   configured: false,
   encryptionConfigured: false,
@@ -77,6 +90,15 @@ const mockStatus: PlaidStatus = {
   message: "Plaid is not configured in this local build yet.",
   connections: [],
 };
+
+function isPlaidRelinkRequired(error: unknown) {
+  const responseError = (error as { response?: { data?: { error?: { code?: string; message?: string } } } })
+    ?.response?.data?.error;
+  return (
+    responseError?.code === "plaid_sync_failed" &&
+    /login|required|credentials|update mode/i.test(responseError.message ?? "")
+  );
+}
 
 export const plaidService = {
   status: async (): Promise<PlaidStatus> => {
@@ -108,15 +130,16 @@ export const plaidService = {
     });
   },
 
-  sync: async (): Promise<{
-    synced: boolean;
-    message?: string;
-    items?: Array<{
-      itemId: string;
-      addedCount: number;
-      modifiedCount: number;
-      removedCount: number;
-      totalTransactions: number;
-    }>;
-  }> => api.post(ENDPOINTS.PLAID.SYNC),
+  sync: async (): Promise<PlaidSyncResult> => {
+    try {
+      return await api.post<PlaidSyncResult>(ENDPOINTS.PLAID.SYNC);
+    } catch (error) {
+      if (!isPlaidRelinkRequired(error)) throw error;
+      return {
+        synced: false,
+        relinkRequired: true,
+        message: "Bank login needs a quick refresh before new transactions can sync.",
+      };
+    }
+  },
 };

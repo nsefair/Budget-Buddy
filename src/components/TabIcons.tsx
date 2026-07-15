@@ -85,6 +85,36 @@ export function BudIcon({ color, size = 24, filled }: IconProps) {
   );
 }
 
+export function QuestsIcon({ color, size = 24, filled }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect
+        x="4"
+        y="3"
+        width="16"
+        height="18"
+        rx="3"
+        stroke={color}
+        strokeWidth={filled ? 0 : 2}
+        fill={filled ? color : "none"}
+      />
+      <Path
+        d="M8 8h8M8 12h8M8 16h5"
+        stroke={filled ? Colors.onAccent : color}
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M6.8 8l.6.6 1.2-1.4"
+        stroke={filled ? Colors.onAccent : color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 export function GoalsIcon({ color, size = 24, filled }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">

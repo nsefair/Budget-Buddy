@@ -12,7 +12,6 @@
  *   6. Pricing             — tier select + monthly/annual + lifetime
  *   7. First Goal          — concrete target + deadline + reason
  *   8. First Quest + Streak — Bud assigns + flame ignites
- *   9. Buds Share          — opt-in starting moment
  *
  * Architecture:
  *   • Each step is a self-contained component in src/features/onboarding/steps/.
@@ -42,7 +41,6 @@ import { StepPricing } from "@/features/onboarding/steps/StepPricing";
 import { StepFirstGoal } from "@/features/onboarding/steps/StepFirstGoal";
 import { StepFirstQuest } from "@/features/onboarding/steps/StepFirstQuest";
 import { StepAccount } from "@/features/onboarding/steps/StepAccount";
-import { StepShare } from "@/features/onboarding/steps/StepShare";
 
 import { WHY_OPTIONS } from "@/features/onboarding/data";
 import { onboardingService } from "@/services/onboardingService";
@@ -64,8 +62,7 @@ type StepKey =
   | "pricing"
   | "firstGoal"
   | "firstQuest"
-  | "account"
-  | "share";
+  | "account";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -93,7 +90,6 @@ export default function OnboardingScreen() {
       "pricing",
       "firstGoal",
       "firstQuest",
-      "share",
     ],
     [requiresAccount],
   );
@@ -150,8 +146,6 @@ export default function OnboardingScreen() {
             draft.accountPassword.length >= 8 &&
             draft.accountPassword === draft.accountPasswordConfirm
         );
-      case "share":
-        return true;
       default:
         return false;
     }
@@ -229,8 +223,8 @@ export default function OnboardingScreen() {
     setSubmitting(true);
     try {
       const { text, icon } = resolveWhy();
-      const finalDraft = { ...draft, whyText: text, whyIcon: icon };
-      patch({ whyText: text, whyIcon: icon });
+      const finalDraft = { ...draft, whyText: text, whyIcon: icon, shareToBuds: false };
+      patch({ whyText: text, whyIcon: icon, shareToBuds: false });
 
       if (requiresAccount && !accountCreated) {
         const ready = await createAccount();
@@ -296,19 +290,9 @@ export default function OnboardingScreen() {
     if (currentStep === "firstQuest") {
       return (
         <PrimaryButton
-          label={canAdvance ? "Sounds good" : "Picking your quest..."}
-          onPress={goNext}
-          disabled={!canAdvance}
-        />
-      );
-    }
-    if (currentStep === "share") {
-      return (
-        <PrimaryButton
-          label={
-            draft.shareToBuds ? "Post & enter Budget Buddy" : "Enter Budget Buddy"
-          }
+          label={canAdvance ? "Enter Budget Buddy" : "Picking your quest..."}
           onPress={handleFinish}
+          disabled={!canAdvance}
           loading={submitting}
         />
       );
@@ -434,14 +418,6 @@ export default function OnboardingScreen() {
         />
       )}
 
-      {currentStep === "share" && (
-        <StepShare
-          firstName={draft.firstName}
-          whyIcon={draft.whyIcon}
-          share={draft.shareToBuds}
-          onChangeShare={(v) => patch({ shareToBuds: v })}
-        />
-      )}
     </OnboardingShell>
   );
 }

@@ -68,8 +68,8 @@ const SCREEN_META: Record<
   },
   privacy: {
     eyebrow: "PRIVACY",
-    title: "What Buds see",
-    subtitle: "Social stays about effort and wins. Financial data stays private.",
+    title: "Privacy",
+    subtitle: "Control the private data Bud can use for your app experience.",
     icon: "lock",
   },
   "bank-connections": {
@@ -460,17 +460,10 @@ function NotificationsBody() {
       />
       <ToggleRow
         icon="trophy"
-        title="Wealth League"
-        body="Promotion, reset, and rank movement updates."
+        title="Weekly recap"
+        body="A calm summary of your score and check-in momentum."
         value={values.weeklyEnabled}
         onValueChange={(value) => set("weeklyEnabled", value)}
-      />
-      <ToggleRow
-        icon="users"
-        title="Bud activity"
-        body="Wins from people you follow and Fist Bumps you receive."
-        value={values.budsEnabled}
-        onValueChange={(value) => set("budsEnabled", value)}
       />
       <ToggleRow
         icon="calendar"
@@ -555,33 +548,33 @@ function PrivacyBody() {
       <InfoCard
         icon="shield-check"
         title="Always private"
-        body="Balances, transactions, income, budgets, debt, and dollar amounts never appear on Bud profiles or the feed."
+        body="Balances, transactions, income, budgets, debt, and dollar amounts stay private inside Bud."
       />
       <ToggleRow
         icon="star"
         title="Level and badges"
-        body="Show your public gamification identity."
+        body="Use your progress identity inside your own app views."
         value={values.level}
         onValueChange={(value) => set("level", value)}
       />
       <ToggleRow
         icon="flame"
         title="Streak"
-        body="Let Buds see your streak count."
+        body="Use streaks for your own reminders and progress views."
         value={values.streak}
         onValueChange={(value) => set("streak", value)}
       />
       <ToggleRow
         icon="trophy"
-        title="Wealth League tier"
-        body="Show your current public league tier."
+        title="Progress tier"
+        body="Use your current tier inside the app."
         value={values.league}
         onValueChange={(value) => set("league", value)}
       />
       <ToggleRow
-        icon="users"
-        title="Shareable wins"
-        body="Allow explicit opt-in sharing from milestones and quests."
+        icon="sparkles"
+        title="Milestone highlights"
+        body="Let Bud turn important progress moments into private encouragement."
         value={values.wins}
         onValueChange={(value) => set("wins", value)}
       />
@@ -626,7 +619,7 @@ function BankConnectionsBody() {
       <InfoCard
         icon="eye"
         title="Private to you"
-        body="Buds never see balances, transactions, income, debts, account names, or dollar amounts."
+        body="Bud never shares balances, transactions, income, debts, account names, or dollar amounts."
       />
 
       <View style={styles.stackTight}>
@@ -742,7 +735,7 @@ function SubscriptionBody() {
       <PlanCard
         title="Free"
         price="$0"
-        body="Core budget, goals, XP, streaks, and Buds."
+        body="Core budget, goals, streaks, and Bud."
         active={status?.tier === "free"}
       />
       <PlanCard
@@ -809,8 +802,8 @@ function LegalBody() {
       />
       <InfoCard
         icon="lock"
-        title="Social privacy"
-        body="Buds surfaces behavior and progress signals only. Public posts must not include balances, income, debt, transaction details, or dollar amounts."
+        title="Private app data"
+        body="Bud can use behavior and progress signals inside the app, but balances, income, debts, and transaction details stay private."
       />
       <InfoCard
         icon="info"

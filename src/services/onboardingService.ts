@@ -20,7 +20,6 @@
 
 import { api, IS_MOCK } from "@/api/client";
 import { ENDPOINTS } from "@/api/endpoints";
-import { budsService } from "@/services/budsService";
 import type {
   FirstGoal,
   FirstQuest,
@@ -148,7 +147,7 @@ function toApiOnboardingPayload(draft: OnboardingDraft): ApiOnboardingPayload {
     plan: draft.plan,
     firstGoal: draft.firstGoal,
     firstQuest: draft.firstQuest,
-    shareToBuds: draft.shareToBuds,
+    shareToBuds: false,
   };
 }
 
@@ -203,7 +202,7 @@ export const onboardingService = {
   /**
    * Final atomic submission — sends the entire draft to the backend at once.
    * The backend creates the user profile, the first goal, the first quest,
-   * the streak record, and (if opted in) the Buds post in a single transaction.
+   * and the streak record in a single transaction.
    *
    * Splitting submission per step is also fine — but a single call keeps
    * onboarding atomic from a UX perspective: success or rollback together.
@@ -215,12 +214,5 @@ export const onboardingService = {
     }
     const payload = toApiOnboardingPayload(draft);
     await api.post(ENDPOINTS.USER.ONBOARDING, payload);
-    if (draft.shareToBuds) {
-      await budsService.sharePost({
-        type: "quest_complete",
-        title: "Day 1 started",
-        message: "Starting today, I'm building better money habits with Bud.",
-      });
-    }
   },
 };

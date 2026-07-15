@@ -28,18 +28,21 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, useFocusEffect } from "expo-router";
 import { MotiView } from "moti";
 import * as Haptics from "expo-haptics";
+import { LinearGradient } from "expo-linear-gradient";
+import Svg, { Polyline } from "react-native-svg";
 
 import { Colors } from "@/constants/colors";
+import { TAB_BAR_HEIGHT } from "@/constants/tokens";
 import { BrandHeader } from "@/components/BrandLogo";
-import { ScreenHeader } from "@/components/ui";
+import { GradientHeader } from "@/components/ui";
 import { Icon, type IconName } from "@/components/Icon";
-import {
-  MOCK_UPCOMING_BILLS,
-  type AccountSummary,
-  type BudgetOverview,
-  type BudgetCategory,
-  type BudgetMonthOption,
-  type Transaction,
+import type {
+  AccountSummary,
+  BudgetOverview,
+  BudgetCategory,
+  BudgetMonthOption,
+  Transaction,
+  UpcomingBill,
 } from "@/mock/budget";
 import { IS_MOCK } from "@/api/client";
 import {
@@ -55,8 +58,6 @@ import {
   SpendingDonutChart,
   TransactionCalendar,
 } from "@/features/budget/BudgetVisuals";
-
-const TAB_BAR_HEIGHT = 80;
 
 const CATEGORY_EMOJI: Record<string, string> = {
   food: "🍔",
@@ -98,6 +99,49 @@ function suggestionDraftsFrom(suggestions: BudgetSuggestionSet) {
   );
 }
 
+function isPlaidRelinkRequired(error: unknown) {
+  const responseError = (error as { response?: { data?: { error?: { code?: string; message?: string } } } })
+    ?.response?.data?.error;
+  return (
+    responseError?.code === "plaid_sync_failed" &&
+    /login|required|credentials|update mode/i.test(responseError.message ?? "")
+  );
+}
+
+/**
+ * Predict upcoming bills from synced recurring transactions: the latest
+ * charge per merchant, projected one month forward. Keeps the Upcoming tab
+ * on real Plaid data instead of mock fixtures.
+ */
+function upcomingBillsFrom(transactions: Transaction[]): UpcomingBill[] {
+  const latestByMerchant = new Map<string, Transaction>();
+  for (const txn of transactions) {
+    if (!txn.isRecurring || txn.amount <= 0) continue;
+    const existing = latestByMerchant.get(txn.merchant);
+    if (!existing || new Date(txn.date) > new Date(existing.date)) {
+      latestByMerchant.set(txn.merchant, txn);
+    }
+  }
+
+  const now = Date.now();
+  return [...latestByMerchant.values()]
+    .map((txn) => {
+      const dueAt = new Date(txn.date);
+      dueAt.setMonth(dueAt.getMonth() + 1);
+      return {
+        id: `upcoming_${txn.id}`,
+        merchant: txn.merchant,
+        amount: txn.amount,
+        dueAt: dueAt.toISOString(),
+        category: txn.category,
+        isCovered: false,
+      };
+    })
+    .filter((bill) => new Date(bill.dueAt).getTime() >= now - 24 * 3600 * 1000)
+    .sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())
+    .slice(0, 6);
+}
+
 export default function BudgetScreen() {
   const insets = useSafeAreaInsets();
   const [txnTab, setTxnTab] = useState<"recent" | "upcoming">("recent");
@@ -111,10 +155,6 @@ export default function BudgetScreen() {
   const [suggestionDrafts, setSuggestionDrafts] = useState<Record<string, string>>({});
   const [savingSuggestions, setSavingSuggestions] = useState(false);
   const [suggestionMessage, setSuggestionMessage] = useState("");
-  const [editingLimits, setEditingLimits] = useState(false);
-  const [limitDrafts, setLimitDrafts] = useState<Record<string, string>>({});
-  const [savingLimits, setSavingLimits] = useState(false);
-  const [limitMessage, setLimitMessage] = useState("");
   const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
@@ -127,7 +167,9 @@ export default function BudgetScreen() {
           try {
             await plaidService.sync();
           } catch (error) {
-            secureLog.warn("budget.sync failed", error);
+            if (!isPlaidRelinkRequired(error)) {
+              secureLog.warn("budget.sync failed", error);
+            }
           }
         }
 
@@ -254,58 +296,6 @@ export default function BudgetScreen() {
     }
   };
 
-  const beginLimitEditing = () => {
-    if (!overview) return;
-    Haptics.selectionAsync();
-    setLimitMessage("");
-    setLimitDrafts(
-      Object.fromEntries(
-        overview.categories.map((category) => [category.id, String(category.budgetLimit)])
-      )
-    );
-    setEditingLimits(true);
-  };
-
-  const cancelLimitEditing = () => {
-    Haptics.selectionAsync();
-    setEditingLimits(false);
-    setLimitMessage("");
-  };
-
-  const saveCategoryLimits = async () => {
-    if (!overview || savingLimits) return;
-    const limits = overview.categories.map((category) => ({
-      categoryId: category.id,
-      amount: Number(limitDrafts[category.id] ?? category.budgetLimit),
-    }));
-    if (limits.some(({ amount }) => !Number.isFinite(amount) || amount < 0)) {
-      setLimitMessage("Enter a valid amount for every category.");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      return;
-    }
-
-    setSavingLimits(true);
-    setLimitMessage("");
-    try {
-      await budgetService.applySuggestions(limits);
-      const [nextOverview, nextMonths] = await Promise.all([
-        budgetService.getOverview(selectedMonthId),
-        budgetService.getAvailableMonths(),
-      ]);
-      setOverview(nextOverview);
-      setMonths(nextMonths);
-      setEditingLimits(false);
-      setLimitMessage("Your category limits are saved for future months.");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (error) {
-      secureLog.error("budget.category-limits.save failed", error);
-      setLimitMessage("Could not save category limits. Try again in a moment.");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } finally {
-      setSavingLimits(false);
-    }
-  };
-
   if (!overview) {
     return (
       <View style={styles.container}>
@@ -319,19 +309,18 @@ export default function BudgetScreen() {
 
   const savingsRate = Math.round(overview.savingsRate);
   const recent = transactions.slice(0, 4);
+  const upcomingBills = upcomingBillsFrom(transactions);
 
   return (
     <View style={styles.container}>
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
-          { paddingTop: insets.top + 16, paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 24 },
+          { paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 24 },
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <BrandHeader style={styles.brandHeader} />
-
-        <ScreenHeader
+        <GradientHeader
           eyebrow="MONEY TRUTH"
           title="Budget"
           right={
@@ -348,6 +337,15 @@ export default function BudgetScreen() {
             </View>
           }
         />
+
+        <View style={styles.body}>
+        {/* Net worth + accounts — the Rocket Money-style money truth, top of tab */}
+        <NetWorthHero accounts={accounts} transactions={transactions} />
+
+        <Card>
+          <CardHeader title="Accounts" />
+          <AccountsBlock accounts={accounts} />
+        </Card>
 
         <MonthNavigator
           months={months}
@@ -441,77 +439,15 @@ export default function BudgetScreen() {
           />
         )}
 
-        {/* Budget detail — category fill bars */}
+        {/* Budget detail — category fill bars. Limits are managed from Bud's
+            starting budget above: tweak a number and hit "Save my budget". */}
         <Card>
-          <CardHeader
-            title="Budget detail"
-            hint={editingLimits ? "Set your monthly caps" : "Per category"}
-            right={
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={editingLimits ? "Cancel editing budget limits" : "Edit budget limits"}
-                onPress={editingLimits ? cancelLimitEditing : beginLimitEditing}
-                style={({ pressed }) => [
-                  styles.editLimitsButton,
-                  pressed && styles.recommendationPressed,
-                ]}
-              >
-                <Icon
-                  name={editingLimits ? "x" : "settings"}
-                  size={13}
-                  color={Colors.gold}
-                  strokeWidth={2.4}
-                />
-                <Text style={styles.editLimitsText}>{editingLimits ? "Cancel" : "Edit limits"}</Text>
-              </Pressable>
-            }
-          />
+          <CardHeader title="Budget detail" hint="Per category" />
           <View style={{ gap: 12 }}>
             {overview.categories.map((c) => (
-              <CategoryRow
-                key={c.id}
-                category={c}
-                editing={editingLimits}
-                draftValue={limitDrafts[c.id] ?? String(c.budgetLimit)}
-                onChangeDraft={(value) => {
-                  setLimitMessage("");
-                  setLimitDrafts((current) => ({
-                    ...current,
-                    [c.id]: moneyInput(value),
-                  }));
-                }}
-              />
+              <CategoryRow key={c.id} category={c} />
             ))}
           </View>
-          {limitMessage ? (
-            <Text
-              style={[
-                styles.recommendationMessage,
-                limitMessage.startsWith("Your") && styles.recommendationMessageSuccess,
-              ]}
-            >
-              {limitMessage}
-            </Text>
-          ) : null}
-          {editingLimits ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Save budget category limits"
-              disabled={savingLimits}
-              onPress={saveCategoryLimits}
-              style={({ pressed }) => [
-                styles.saveLimitsButton,
-                savingLimits && styles.recommendationDisabled,
-                pressed && !savingLimits && styles.recommendationPressed,
-              ]}
-            >
-              {savingLimits ? (
-                <ActivityIndicator size="small" color={Colors.onAccent} />
-              ) : (
-                <Text style={styles.saveLimitsText}>Save category limits</Text>
-              )}
-            </Pressable>
-          ) : null}
         </Card>
 
         {/* Transactions — Recent | Upcoming */}
@@ -562,7 +498,13 @@ export default function BudgetScreen() {
             </View>
           ) : (
             <View style={styles.txnList}>
-              {MOCK_UPCOMING_BILLS.map((b, i) => {
+              {upcomingBills.length === 0 && (
+                <Text style={styles.emptyTransactions}>
+                  No recurring charges detected yet. Bud predicts bills from your
+                  synced transactions.
+                </Text>
+              )}
+              {upcomingBills.map((b, i) => {
                 const days = Math.max(
                   0,
                   Math.ceil((new Date(b.dueAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
@@ -575,7 +517,7 @@ export default function BudgetScreen() {
                       amount={-b.amount}
                       emoji={emojiForCategory(b.category)}
                     />
-                    {i < MOCK_UPCOMING_BILLS.length - 1 && <View style={styles.txnDivider} />}
+                    {i < upcomingBills.length - 1 && <View style={styles.txnDivider} />}
                   </React.Fragment>
                 );
               })}
@@ -604,14 +546,85 @@ export default function BudgetScreen() {
             <Text style={styles.emptyInvestmentAmount}>{formatCurrency(0)}</Text>
           </View>
         </Card>
+        </View>
 
-        {/* Accounts */}
-        <Card>
-          <CardHeader title="Accounts" />
-          <AccountsBlock accounts={accounts} />
-        </Card>
       </ScrollView>
     </View>
+  );
+}
+
+// ─── Net worth hero ──────────────────────────────────────────────────────────
+
+const SPARK_WIDTH = 96;
+const SPARK_HEIGHT = 34;
+
+function NetWorthHero({
+  accounts,
+  transactions,
+}: {
+  accounts: AccountSummary[];
+  transactions: Transaction[];
+}) {
+  const netWorth = linkedAccountNetWorth(accounts);
+
+  // Cumulative net cash flow over the month drives the mini trend line.
+  const sparkPoints = useMemo(() => {
+    const ordered = [...transactions].sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+    const values: number[] = [0];
+    let running = 0;
+    for (const txn of ordered) {
+      running += -txn.amount; // spending is positive in the data; flip to flow
+      values.push(running);
+    }
+    if (values.length < 2) return null;
+
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const span = max - min || 1;
+    return values
+      .map((value, index) => {
+        const x = (index / (values.length - 1)) * SPARK_WIDTH;
+        const y = SPARK_HEIGHT - 3 - ((value - min) / span) * (SPARK_HEIGHT - 6);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      })
+      .join(" ");
+  }, [transactions]);
+
+  const monthFlow = useMemo(
+    () => transactions.reduce((sum, txn) => sum + -txn.amount, 0),
+    [transactions]
+  );
+
+  return (
+    <LinearGradient
+      colors={[Colors.brandGradientStart, Colors.brandGradientMid, Colors.brandGradientEnd]}
+      style={styles.netWorthHero}
+      accessibilityLabel={`Net worth ${formatCurrency(netWorth)}`}
+    >
+      <Text style={styles.netWorthEyebrow}>NET WORTH</Text>
+      <View style={styles.netWorthRow}>
+        <Text style={styles.netWorthValue}>{formatCurrency(netWorth)}</Text>
+        {sparkPoints ? (
+          <Svg width={SPARK_WIDTH} height={SPARK_HEIGHT}>
+            <Polyline
+              points={sparkPoints}
+              fill="none"
+              stroke={Colors.gold}
+              strokeWidth={2.4}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </Svg>
+        ) : null}
+      </View>
+      <Text style={styles.netWorthSub}>
+        {accounts.length > 0
+          ? `${monthFlow >= 0 ? "+" : "−"}${formatCurrency(Math.abs(monthFlow), { compact: true })} this month · ${accounts.length} linked ${accounts.length === 1 ? "account" : "accounts"}`
+          : "Connect a bank in Profile to track your balances here."}
+      </Text>
+    </LinearGradient>
   );
 }
 
@@ -959,17 +972,7 @@ function RuleCell({ label, value }: { label: string; value: number }) {
   );
 }
 
-function CategoryRow({
-  category,
-  editing,
-  draftValue,
-  onChangeDraft,
-}: {
-  category: BudgetCategory;
-  editing: boolean;
-  draftValue: string;
-  onChangeDraft: (value: string) => void;
-}) {
+function CategoryRow({ category }: { category: BudgetCategory }) {
   const pct = useMemo(() => {
     if (category.budgetLimit === 0) return 0;
     return Math.min(1.2, category.spent / category.budgetLimit);
@@ -1004,26 +1007,12 @@ function CategoryRow({
             ) : null}
           </View>
         </View>
-        {editing ? (
-          <View style={styles.categoryLimitInputWrap}>
-            <Text style={styles.categoryLimitPrefix}>$</Text>
-            <TextInput
-              accessibilityLabel={`${category.name} budget limit`}
-              value={draftValue}
-              onChangeText={onChangeDraft}
-              keyboardType="decimal-pad"
-              selectTextOnFocus
-              style={styles.categoryLimitInput}
-            />
-          </View>
-        ) : (
-          <Text style={styles.catNumbers}>
-            {formatCurrency(category.spent, { compact: true })}{" "}
-            <Text style={styles.catBudget}>
-              / {formatCurrency(category.budgetLimit, { compact: true })}
-            </Text>
+        <Text style={styles.catNumbers}>
+          {formatCurrency(category.spent, { compact: true })}{" "}
+          <Text style={styles.catBudget}>
+            / {formatCurrency(category.budgetLimit, { compact: true })}
           </Text>
-        )}
+        </Text>
       </View>
       <View style={styles.catTrack}>
         <View
@@ -1164,7 +1153,8 @@ function AccountsBlock({ accounts }: { accounts: AccountSummary[] }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.surface },
-  scroll: { paddingHorizontal: 18, gap: 12 },
+  scroll: {},
+  body: { paddingHorizontal: 18, paddingTop: 12, gap: 12 },
   loadingState: {
     flex: 1,
     paddingHorizontal: 18,
@@ -1178,6 +1168,43 @@ const styles = StyleSheet.create({
   },
 
   brandHeader: { marginBottom: 18 },
+  netWorthHero: {
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+    overflow: "hidden",
+    marginBottom: 12,
+    shadowColor: Colors.navy,
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
+  netWorthEyebrow: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Colors.gold,
+    letterSpacing: 1.6,
+    marginBottom: 6,
+  },
+  netWorthRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  netWorthValue: {
+    fontSize: 32,
+    fontWeight: "900",
+    color: Colors.brandOnDark,
+    letterSpacing: -0.8,
+  },
+  netWorthSub: {
+    marginTop: 6,
+    fontSize: 12,
+    fontWeight: "700",
+    color: Colors.brandOnDarkMuted,
+  },
   header: {
     marginBottom: 14,
     flexDirection: "row",
@@ -1372,27 +1399,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
   },
   cardHint: { fontSize: 11, color: Colors.muted, marginTop: 2 },
-  editLimitsButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 999,
-    backgroundColor: Colors.accentAlpha08,
-    borderWidth: 1,
-    borderColor: Colors.accentAlpha25,
-  },
-  editLimitsText: { fontSize: 11, fontWeight: "800", color: Colors.gold },
-  saveLimitsButton: {
-    minHeight: 48,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 16,
-    borderRadius: 14,
-    backgroundColor: Colors.gold,
-  },
-  saveLimitsText: { fontSize: 13, fontWeight: "900", color: Colors.onAccent },
   viewAllButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -1536,6 +1542,8 @@ const styles = StyleSheet.create({
   },
   recommendationMessageSuccess: { color: Colors.teal },
   recommendationActions: { flexDirection: "row", gap: 10, marginTop: 14 },
+  // Both actions sit on Colors.card — use surfaces that stay visible in dark
+  // mode (Colors.surface goes near-black there, so it is banned here).
   recommendationSecondary: {
     flex: 1,
     minHeight: 46,
@@ -1543,8 +1551,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surface,
+    borderColor: Colors.accentAlpha40,
+    backgroundColor: Colors.accentAlpha10,
   },
   recommendationPrimary: {
     flex: 1,
@@ -1553,8 +1561,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 14,
     backgroundColor: Colors.gold,
+    borderWidth: 1,
+    borderColor: Colors.gold,
   },
-  recommendationSecondaryText: { fontSize: 12, fontWeight: "800", color: Colors.navy },
+  recommendationSecondaryText: { fontSize: 12, fontWeight: "800", color: Colors.gold },
   recommendationPrimaryText: { fontSize: 12, fontWeight: "900", color: Colors.onAccent },
   recommendationPressed: { opacity: 0.85, transform: [{ scale: 0.99 }] },
   recommendationDisabled: { opacity: 0.6 },
@@ -1620,27 +1630,6 @@ const styles = StyleSheet.create({
   catSourceAdjusted: { color: Colors.gold },
   catNumbers: { fontSize: 13, fontWeight: "700", color: Colors.navy },
   catBudget: { color: Colors.muted, fontWeight: "600" },
-  categoryLimitInputWrap: {
-    width: 104,
-    minHeight: 42,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.accentAlpha30,
-    backgroundColor: Colors.surface,
-  },
-  categoryLimitPrefix: { fontSize: 13, fontWeight: "900", color: Colors.gold },
-  categoryLimitInput: {
-    flex: 1,
-    paddingVertical: 9,
-    paddingLeft: 4,
-    textAlign: "right",
-    fontSize: 13,
-    fontWeight: "800",
-    color: Colors.navy,
-  },
   catTrack: {
     height: 5,
     borderRadius: 3,

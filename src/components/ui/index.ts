@@ -10,4 +10,5 @@
 export { Card } from "@/components/ui/Card";
 export { SectionHeader } from "@/components/ui/SectionHeader";
 export { ScreenHeader } from "@/components/ui/ScreenHeader";
+export { GradientHeader } from "@/components/ui/GradientHeader";
 export { EmptyState } from "@/components/ui/EmptyState";

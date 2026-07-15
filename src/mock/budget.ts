@@ -47,7 +47,7 @@ export interface BudgetMonthOption {
 const CATEGORY_META: Array<Omit<BudgetCategory, "spent">> = [
   { id: "food", name: "Food & Drink", icon: "receipt", budgetLimit: 400, color: "#F59E0B" },
   { id: "transport", name: "Transportation", icon: "activity", budgetLimit: 200, color: "#6366F1" },
-  { id: "shopping", name: "Shopping", icon: "wallet", budgetLimit: 250, color: "#EF4444" },
+  { id: "shopping", name: "Shopping", icon: "wallet", budgetLimit: 250, color: "#0EA5E9" },
   { id: "housing", name: "Housing", icon: "home", budgetLimit: 1200, color: "#1B2B4B" },
   { id: "entertainment", name: "Entertainment", icon: "star", budgetLimit: 100, color: "#8B5CF6" },
   { id: "health", name: "Health & Wellness", icon: "shield", budgetLimit: 80, color: "#10B981" },
@@ -126,8 +126,8 @@ export const MOCK_BUDGET_MONTHS: BudgetOverview[] = [
     income: 3800,
     categories: makeCategories({
       food: 312,
-      transport: 178,
-      shopping: 287,
+      transport: 148,
+      shopping: 176,
       housing: 1200,
       entertainment: 64,
       health: 45,
@@ -188,11 +188,11 @@ export interface DailySnapshot {
 }
 
 export const MOCK_DAILY_SNAPSHOT: DailySnapshot = {
-  spentToday: 68,
-  dailyBudget: 80,
-  topMerchant: "Walmart",
-  topMerchantAmount: 68,
-  topMerchantPctOfBudget: 85,
+  spentToday: 24,
+  dailyBudget: 60,
+  topMerchant: "Trader Joe's",
+  topMerchantAmount: 18,
+  topMerchantPctOfBudget: 30,
 };
 
 // ─── Upcoming bills (Today tab) ──────────────────────────────────────────────
@@ -228,7 +228,7 @@ export const MOCK_UPCOMING_BILLS: UpcomingBill[] = [
     amount: 258,
     dueAt: new Date(Date.now() + 2 * 24 * 3600 * 1000).toISOString(),
     category: "Debt Payments",
-    isCovered: false,
+    isCovered: true,
   },
 ];
 

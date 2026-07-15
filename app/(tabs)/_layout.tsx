@@ -29,8 +29,12 @@ export default function TabsLayout() {
       <Tabs.Screen name="today" options={{ title: "Today", tabBarLabel: "Today" }} />
       <Tabs.Screen name="budget" options={{ title: "Budget", tabBarLabel: "Budget" }} />
       <Tabs.Screen name="bud" options={{ title: "Bud", tabBarLabel: "Bud" }} />
-      <Tabs.Screen name="goals" options={{ title: "Quests", tabBarLabel: "Quests" }} />
-      <Tabs.Screen name="buds" options={{ title: "Buds", tabBarLabel: "Buds" }} />
+      <Tabs.Screen name="quests" options={{ title: "Quests", tabBarLabel: "Quests" }} />
+      <Tabs.Screen name="goals" options={{ title: "Goals", tabBarLabel: "Goals" }} />
+      <Tabs.Screen
+        name="buds"
+        options={{ title: "Buds", tabBarLabel: "Buds", href: null }}
+      />
     </Tabs>
   );
 }

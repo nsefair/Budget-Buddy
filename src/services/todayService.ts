@@ -12,7 +12,7 @@
 import { api, IS_MOCK } from "@/api/client";
 import { ENDPOINTS } from "@/api/endpoints";
 import {
-  MOCK_BUD_GREETING,
+  budGreeting,
   MOCK_BUD_INSIGHT,
   type BudInsight,
 } from "@/mock/bud";
@@ -66,9 +66,9 @@ export const todayService = {
     return api.get<TodaySummary>(ENDPOINTS.TODAY.SUMMARY);
   },
 
-  getGreeting: async (firstName: string): Promise<string> => {
-    if (IS_MOCK) return MOCK_BUD_GREETING(firstName, 14);
-    return api.get<string>(ENDPOINTS.TODAY.BUD_GREETING);
+  getGreeting: async (firstName: string, streak = 0): Promise<string> => {
+    // The greeting is generated locally in both modes — no backend route.
+    return budGreeting(firstName, streak);
   },
 
   getInsight: async (): Promise<BudInsight> => {

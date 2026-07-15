@@ -31,8 +31,8 @@ import { MotiView } from "moti";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "@/constants/colors";
-import { BrandHeader } from "@/components/BrandLogo";
-import { EmptyState, ScreenHeader } from "@/components/ui";
+import { TAB_BAR_HEIGHT } from "@/constants/tokens";
+import { EmptyState, GradientHeader } from "@/components/ui";
 import { Icon, type IconName } from "@/components/Icon";
 import { Stagger } from "@/animations";
 import { goalsService } from "@/services/goalsService";
@@ -45,9 +45,6 @@ import {
   type GoalsSummary,
 } from "@/mock/goals";
 import { formatCurrency, secureLog } from "@/utils/security";
-import { QuestHub } from "@/features/quests/QuestHub";
-
-const TAB_BAR_HEIGHT = 80;
 
 // ─── Static metadata for goal kinds ──────────────────────────────────────────
 const KIND_META: Record<
@@ -219,7 +216,7 @@ export default function GoalsScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
-          { paddingTop: insets.top + 16, paddingBottom: TAB_BAR_HEIGHT + 24 },
+          { paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 24 },
         ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -230,11 +227,10 @@ export default function GoalsScreen() {
           />
         }
       >
-        <BrandHeader style={styles.brandHeader} />
-
-        <ScreenHeader
-          eyebrow="QUESTS & PROGRESS"
-          title="Make this week count."
+        <GradientHeader
+          eyebrow="GOALS"
+          title="Goals"
+          subtitle="What you're building, and how close it is."
           right={
             <Pressable
               accessibilityRole="button"
@@ -249,32 +245,27 @@ export default function GoalsScreen() {
           }
         />
 
-        <QuestHub />
+        <View style={styles.body}>
+          {/* Summary — three top stats from the CEO drawing */}
+          {summary && <SummaryRow summary={summary} />}
 
-        <View style={styles.goalsSectionHeading}>
-          <Text style={styles.goalsSectionEyebrow}>YOUR GOALS</Text>
-          <Text style={styles.goalsSectionTitle}>What you're building.</Text>
+          {/* Goal cards — staggered entrance for premium feel */}
+          <View style={styles.grid}>
+            <Stagger gap={80}>
+              {goals.map((g) => (
+                <GoalCard key={g.id} goal={g} />
+              ))}
+            </Stagger>
+          </View>
+
+          {goals.length === 0 && (
+            <EmptyState
+              icon="target"
+              title="No active goals yet"
+              body="Bud will help you turn the next milestone into a real, trackable goal."
+            />
+          )}
         </View>
-
-        {/* Summary — three top stats from the CEO drawing */}
-        {summary && <SummaryRow summary={summary} />}
-
-        {/* Goal cards — staggered entrance for premium feel */}
-        <View style={styles.grid}>
-          <Stagger gap={80}>
-            {goals.map((g) => (
-              <GoalCard key={g.id} goal={g} />
-            ))}
-          </Stagger>
-        </View>
-
-        {goals.length === 0 && (
-          <EmptyState
-            icon="target"
-            title="No active goals yet"
-            body="Bud will help you turn the next milestone into a real, trackable goal."
-          />
-        )}
       </ScrollView>
 
       <GoalCreationSheet
@@ -1150,23 +1141,8 @@ function deadlineFromMonths(months: number) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.surface },
-  scroll: { paddingHorizontal: 18 },
-
-  brandHeader: { marginBottom: 18 },
-  header: { marginBottom: 18 },
-  eyebrow: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: Colors.gold,
-    letterSpacing: 1.6,
-    marginBottom: 6,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "800",
-    color: Colors.navy,
-    letterSpacing: 0,
-  },
+  scroll: {},
+  body: { paddingHorizontal: 18, paddingTop: 12 },
 
   summaryRow: {
     flexDirection: "row",

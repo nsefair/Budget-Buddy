@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -12,12 +12,15 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "@/constants/colors";
+import { TAB_BAR_HEIGHT } from "@/constants/tokens";
 import { useUser } from "@/hooks/useAuth";
 import { BrandHeader, BrandLogo } from "@/components/BrandLogo";
-import { MOCK_BUD_INSIGHT, MOCK_SESSIONS, MOCK_CHAT_HISTORY, BudMessage } from "@/mock/bud";
+import { MOCK_SESSIONS, MOCK_CHAT_HISTORY, BudMessage, type BudInsight } from "@/mock/bud";
 import { Icon, type IconName } from "@/components/Icon";
-
-const TAB_BAR_HEIGHT = 80;
+import { todayService } from "@/services/todayService";
+import { goalsService } from "@/services/goalsService";
+import { formatCurrency, secureLog } from "@/utils/security";
+import type { Goal } from "@/mock/goals";
 
 type BudView = "home" | "ask" | "sessions";
 
@@ -29,6 +32,19 @@ export default function BudScreen() {
   const [question, setQuestion] = useState("");
   const [chatHistory, setChatHistory] = useState<BudMessage[]>(MOCK_CHAT_HISTORY);
   const [isTyping, setIsTyping] = useState(false);
+  const [insight, setInsight] = useState<BudInsight | null>(null);
+  const [topGoal, setTopGoal] = useState<Goal | null>(null);
+
+  useEffect(() => {
+    todayService
+      .getInsight()
+      .then(setInsight)
+      .catch((error) => secureLog.warn("bud.insight failed", error));
+    goalsService
+      .list()
+      .then(({ goals }) => setTopGoal(goals[0] ?? null))
+      .catch((error) => secureLog.warn("bud.goals failed", error));
+  }, []);
 
   const handleAsk = () => {
     if (!question.trim()) return;
@@ -98,14 +114,17 @@ export default function BudScreen() {
           ]}
           showsVerticalScrollIndicator={false}
         >
-          {/* Today's Insight */}
+          {/* Today's Insight — same source as the Today tab */}
           <View style={styles.insightCard}>
             <View style={styles.insightLabelRow}>
               <Icon name="sparkles" size={13} color={Colors.gold} strokeWidth={2.4} />
               <Text style={styles.insightLabel}>Today's insight</Text>
             </View>
-            <Text style={styles.insightText}>{MOCK_BUD_INSIGHT.message}</Text>
-            <Text style={styles.insightTime}>Updated this morning</Text>
+            <Text style={styles.insightText}>
+              {insight?.message ??
+                "Bud is reading your latest activity — today's insight lands in a moment."}
+            </Text>
+            <Text style={styles.insightTime}>Built from your synced spending</Text>
           </View>
 
           {/* Action cards */}
@@ -153,23 +172,45 @@ export default function BudScreen() {
             </LinearGradient>
           </View>
 
-          {/* Bud Memory snippet */}
+          {/* Bud Memory snippet — real account facts, no canned numbers */}
           <View style={styles.memoryCard}>
             <View style={styles.memoryTitleRow}>
               <Icon name="info" size={13} color={Colors.gold} strokeWidth={2.4} />
               <Text style={styles.memoryTitle}>What Bud knows about you</Text>
             </View>
+            {user?.why ? (
+              <View style={styles.memoryItem}>
+                <View style={styles.memoryBullet} />
+                <Text style={styles.memoryText}>Your why: “{user.why}”</Text>
+              </View>
+            ) : null}
+            {topGoal ? (
+              <View style={styles.memoryItem}>
+                <View style={styles.memoryBullet} />
+                <Text style={styles.memoryText}>
+                  {topGoal.name} is at{" "}
+                  {topGoal.targetAmount > 0
+                    ? Math.round((topGoal.alreadySaved / topGoal.targetAmount) * 100)
+                    : 0}
+                  % — {formatCurrency(topGoal.alreadySaved)} of{" "}
+                  {formatCurrency(topGoal.targetAmount)}
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.memoryItem}>
+                <View style={styles.memoryBullet} />
+                <Text style={styles.memoryText}>
+                  No active goal yet — create one in Goals and Bud will coach around it
+                </Text>
+              </View>
+            )}
             <View style={styles.memoryItem}>
               <View style={styles.memoryBullet} />
-              <Text style={styles.memoryText}>Emergency Fund goal at 22% — pace is behind by $40/month</Text>
-            </View>
-            <View style={styles.memoryItem}>
-              <View style={styles.memoryBullet} />
-              <Text style={styles.memoryText}>Shopping is your highest overspend category this month</Text>
-            </View>
-            <View style={styles.memoryItem}>
-              <View style={styles.memoryBullet} />
-              <Text style={styles.memoryText}>14-day streak — best ever was 21 days</Text>
+              <Text style={styles.memoryText}>
+                {(user?.streak ?? 0) > 0
+                  ? `${user?.streak}-day streak — best ever was ${Math.max(user?.streakBestEver ?? 0, user?.streak ?? 0)} days`
+                  : "No streak yet — one check-in today starts it"}
+              </Text>
             </View>
           </View>
         </ScrollView>

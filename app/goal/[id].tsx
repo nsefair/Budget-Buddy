@@ -206,7 +206,6 @@ export default function GoalDetailScreen() {
 
             <View style={styles.secondaryRow}>
               <SecondaryBtn icon="settings" label="Edit" onPress={() => openGoalAction(goal.id, "edit")} />
-              <SecondaryBtn icon="users" label="Share to Buds" onPress={() => openGoalAction(goal.id, "share")} />
             </View>
 
             <Pressable
@@ -227,7 +226,7 @@ export default function GoalDetailScreen() {
 
 function openGoalAction(
   goalId: string,
-  action: "contribute" | "edit" | "share" | "delete",
+  action: "contribute" | "edit" | "delete",
   style?: Haptics.ImpactFeedbackStyle,
 ) {
   if (style) Haptics.impactAsync(style);

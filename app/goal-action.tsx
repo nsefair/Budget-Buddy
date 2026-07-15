@@ -20,12 +20,11 @@ import { BrandHeader } from "@/components/BrandLogo";
 import { Icon, type IconName } from "@/components/Icon";
 import { goalsService } from "@/services/goalsService";
 import { budgetService } from "@/services/budgetService";
-import { budsService } from "@/services/budsService";
 import type { AccountSummary } from "@/mock/budget";
 import type { Goal, GoalCategoryKind } from "@/mock/goals";
 import { formatCurrency } from "@/utils/security";
 
-type GoalAction = "contribute" | "edit" | "share" | "delete";
+type GoalAction = "contribute" | "edit" | "delete";
 
 const ACTION_META: Record<
   GoalAction,
@@ -42,12 +41,6 @@ const ACTION_META: Record<
     title: "Edit goal",
     subtitle: "Update the plan and choose which savings account tracks it.",
     icon: "settings",
-  },
-  share: {
-    eyebrow: "BUDS",
-    title: "Share a win",
-    subtitle: "Share progress without exposing dollar amounts or private account data.",
-    icon: "users",
   },
   delete: {
     eyebrow: "GOAL",
@@ -143,7 +136,6 @@ export default function GoalActionScreen() {
             <ContributeBody goal={goal} onUpdated={setGoal} />
           ) : null}
           {goal && resolvedAction === "edit" ? <EditBody goal={goal} /> : null}
-          {goal && resolvedAction === "share" ? <ShareBody goal={goal} /> : null}
           {goal && resolvedAction === "delete" ? <DeleteBody goal={goal} /> : null}
         </ScrollView>
       </KeyboardAvoidingView>
@@ -314,60 +306,6 @@ function EditBody({ goal }: { goal: Goal }) {
         icon="check"
         onPress={save}
         disabled={!name.trim() || saving}
-      />
-    </View>
-  );
-}
-
-function ShareBody({ goal }: { goal: Goal }) {
-  const [sharing, setSharing] = useState(false);
-  const progress = Math.round((goal.alreadySaved / goal.targetAmount) * 100);
-  const kind = KIND_LABEL[goal.kind];
-  const title = `${kind} progress`;
-  const message = `I moved a goal to ${progress}% complete. Small steps are starting to add up.`;
-
-  const share = async () => {
-    if (sharing) return;
-    setSharing(true);
-    try {
-      await budsService.sharePost({
-        type: "goal_milestone",
-        title,
-        message,
-      });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert("Shared to Buds", "Your win is live without any private numbers.");
-      router.replace("/(tabs)/buds");
-    } catch {
-      Alert.alert("Could not share", "Try again in a moment.");
-    } finally {
-      setSharing(false);
-    }
-  };
-
-  return (
-    <View style={styles.stack}>
-      <View style={styles.sharePreview}>
-        <View style={styles.shareTop}>
-          <View style={styles.shareIcon}>
-            <Icon name="users" size={18} color={Colors.accent} strokeWidth={2.4} />
-          </View>
-          <View style={styles.flex}>
-            <Text style={styles.shareEyebrow}>BUDS WIN CARD</Text>
-            <Text style={styles.shareTitle}>{title}</Text>
-          </View>
-        </View>
-        <Text style={styles.shareMessage}>{message}</Text>
-        <View style={styles.privacyPill}>
-          <Icon name="lock" size={12} color={Colors.emerald} strokeWidth={2.4} />
-          <Text style={styles.privacyPillText}>No dollar amounts included</Text>
-        </View>
-      </View>
-      <ActionButton
-        label={sharing ? "Sharing..." : "Share to Buds"}
-        icon="users"
-        onPress={share}
-        disabled={sharing}
       />
     </View>
   );
@@ -563,7 +501,7 @@ function ActionButton({
 
 function normaliseAction(value?: string): GoalAction {
   const first = Array.isArray(value) ? value[0] : value;
-  if (first === "edit" || first === "share" || first === "delete") return first;
+  if (first === "edit" || first === "delete") return first;
   return "contribute";
 }
 
@@ -791,39 +729,6 @@ const styles = StyleSheet.create({
   actionButtonSurfaceDisabled: { backgroundColor: Colors.navy100 },
   actionButtonText: { fontSize: 15, fontWeight: "900", color: Colors.onAccent },
   actionButtonTextDisabled: { color: Colors.muted },
-  sharePreview: {
-    padding: 18,
-    borderRadius: 20,
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: Colors.accentAlpha30,
-    gap: 14,
-  },
-  shareTop: { flexDirection: "row", alignItems: "center", gap: 12 },
-  shareIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 15,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Colors.greenSurface,
-    borderWidth: 1,
-    borderColor: Colors.greenBorder,
-  },
-  shareEyebrow: { fontSize: 10, fontWeight: "900", color: Colors.accent, letterSpacing: 1.2 },
-  shareTitle: { marginTop: 3, fontSize: 17, fontWeight: "900", color: Colors.navy },
-  shareMessage: { fontSize: 14, fontWeight: "700", color: Colors.navyMuted, lineHeight: 20 },
-  privacyPill: {
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 999,
-    backgroundColor: "rgba(16,185,129,0.08)",
-  },
-  privacyPillText: { fontSize: 11, fontWeight: "900", color: Colors.emerald },
   warningCard: {
     flexDirection: "row",
     alignItems: "flex-start",

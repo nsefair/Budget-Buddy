@@ -321,15 +321,23 @@ func verifyQuestEvidence(
 	}
 
 	switch verificationType {
-	case "bank_no_spend", "bank_no_delivery":
-		evidenceDate := todayDate.AddDate(0, 0, -1).Format("2006-01-02")
-		if evidenceDate < weekStart {
-			return "", questVerificationError{
-				Code:    "full_day_not_ready",
-				Message: "The first full day of this quest will be ready to verify tomorrow.",
+	case "bank_no_spend", "bank_no_delivery", "bank_no_dining_out":
+		// bank_no_spend / bank_no_delivery verify the last full day (yesterday).
+		// bank_no_dining_out verifies the check-in day itself: one synced food
+		// purchase today (groceries excluded) blocks the check-in.
+		evidenceDate := today
+		if verificationType != "bank_no_dining_out" {
+			evidenceDate = todayDate.AddDate(0, 0, -1).Format("2006-01-02")
+			if evidenceDate < weekStart {
+				return "", questVerificationError{
+					Code:    "full_day_not_ready",
+					Message: "The first full day of this quest will be ready to verify tomorrow.",
+				}
 			}
 		}
 
+		// Both cases need transaction data that covers the evidence day, which
+		// means a Plaid sync after the start of today in the user's timezone.
 		var connected, fresh bool
 		if err := tx.QueryRow(ctx, `
 			select exists(
@@ -339,8 +347,8 @@ func verifyQuestEvidence(
 			       exists(
 			         select 1 from plaid_items i
 			          where i.user_id = $1 and i.status = 'active' and i.archived_at is null
-			            and i.last_sync_at >= (($2::date + 1)::timestamp at time zone $3)
-			       )`, userID, evidenceDate, timezone).Scan(&connected, &fresh); err != nil {
+			            and i.last_sync_at >= ($2::date::timestamp at time zone $3)
+			       )`, userID, today, timezone).Scan(&connected, &fresh); err != nil {
 			return "", err
 		}
 		if !connected {
@@ -391,6 +399,27 @@ func verifyQuestEvidence(
 				return "", questVerificationError{
 					Code:    "delivery_transactions_found",
 					Message: "Bud found a delivery purchase yesterday, so that day cannot count yet.",
+				}
+			}
+		}
+
+		if verificationType == "bank_no_dining_out" {
+			// Pending charges count too — a lunch bought an hour ago is still
+			// evidence of eating out even before it settles.
+			var dining int
+			if err := tx.QueryRow(ctx, `
+				select count(*)
+				  from plaid_transactions
+				 where user_id = $1 and date = $2::date and amount_cents > 0
+				   and coalesce(personal_finance_category_primary, '') = 'FOOD_AND_DRINK'
+				   and coalesce(personal_finance_category_detailed, '') <> 'FOOD_AND_DRINK_GROCERIES'`,
+				userID, evidenceDate).Scan(&dining); err != nil {
+				return "", err
+			}
+			if dining > 0 {
+				return "", questVerificationError{
+					Code:    "dining_out_transactions_found",
+					Message: fmt.Sprintf("Bud found %d food %s today, so this check-in cannot count yet. Groceries never block it.", dining, plural(dining, "purchase", "purchases")),
 				}
 			}
 		}
@@ -533,13 +562,24 @@ func (h *Handler) ensureWeeklyQuests(ctx context.Context, tx pgx.Tx, userID stri
 
 func ensureFinancialProfile(ctx context.Context, tx pgx.Tx, userID string) error {
 	_, err := tx.Exec(ctx, `
+		with source as (
+		  select id, greatest(1, least(500, financial_health_score)) as initial_score
+		    from users
+		   where id = $1
+		)
 		insert into financial_health_profiles (user_id, score, previous_score, score_band)
 		select id,
-		       greatest(300, least(850, financial_health_score)),
-		       greatest(300, least(850, financial_health_score)),
-		       $2
-		  from users where id = $1
-		on conflict (user_id) do nothing`, userID, scoreBand(500))
+		       initial_score,
+		       initial_score,
+		       case
+		         when initial_score >= 435 then 'Exceptional'
+		         when initial_score >= 360 then 'Thriving'
+		         when initial_score >= 270 then 'Strong'
+		         when initial_score >= 180 then 'Steady'
+		         else 'Foundation'
+		       end
+		  from source
+		on conflict (user_id) do nothing`, userID)
 	return err
 }
 
@@ -610,6 +650,9 @@ func recomputeScore(ctx context.Context, tx pgx.Tx, userID, weekStart, sourceTyp
 	}
 
 	value := calculateFinancialScore(components)
+	if value < initialFinancialScore {
+		value = initialFinancialScore
+	}
 	band := scoreBand(value)
 	if _, err := tx.Exec(ctx, `
 		update financial_health_profiles
@@ -714,7 +757,7 @@ func scanWeeklyQuest(row pgx.Row) (WeeklyQuest, error) {
 func loadPersonalizationFacts(ctx context.Context, tx pgx.Tx, userID string) (personalizationFacts, error) {
 	var facts personalizationFacts
 	err := tx.QueryRow(ctx, `
-		select greatest(300, least(850, u.financial_health_score)), u.streak,
+		select greatest(1, least(500, u.financial_health_score)), u.streak,
 		       coalesce((select name from goals where user_id = u.id and archived_at is null order by deadline limit 1), ''),
 		       coalesce((select greatest(target_amount_cents - already_saved_cents, 0) from goals where user_id = u.id and archived_at is null order by deadline limit 1), 0),
 		       (select count(*) from plaid_transactions where user_id = u.id and pending = false and date >= current_date - 30),
@@ -732,7 +775,7 @@ func personalizedWhy(category string, facts personalizationFacts) string {
 		if facts.DiningSpendCents > 0 {
 			return fmt.Sprintf("Food and delivery totaled %s in the last 30 days — a few home-first choices can leave more room for what matters.", dollars(facts.DiningSpendCents))
 		}
-		return fmt.Sprintf("Your score is %d — a small spending pattern this week can turn awareness into momentum.", facts.Score)
+		return "One small spending pattern this week can turn awareness into momentum without making the whole plan heavier."
 	case "saving", "goals":
 		if facts.GoalName != "" {
 			return fmt.Sprintf("%s is %s from its finish line — one small move keeps it real and visible.", facts.GoalName, dollars(facts.GoalRemainingCents))
@@ -749,7 +792,7 @@ func personalizedWhy(category string, facts personalizationFacts) string {
 		}
 		return "Short check-ins make money awareness easier to repeat, even on busy days."
 	default:
-		return fmt.Sprintf("Your score is %d — planning a few choices before they happen is the clearest path to the next range.", facts.Score)
+		return "Planning a few choices before they happen keeps the week calm and protects room for the goals that matter."
 	}
 }
 
@@ -831,17 +874,17 @@ func (h *Handler) loadLeague(ctx context.Context, userID string, score int, rese
 func leagueBounds(score int) (int, int) {
 	switch leagueTier(score) {
 	case "Champion":
-		return 770, 850
+		return 425, 500
 	case "Diamond":
-		return 690, 769
+		return 355, 424
 	case "Platinum":
-		return 610, 689
+		return 280, 354
 	case "Gold":
-		return 530, 609
+		return 210, 279
 	case "Silver":
-		return 450, 529
+		return 135, 209
 	default:
-		return 300, 449
+		return 1, 134
 	}
 }
 

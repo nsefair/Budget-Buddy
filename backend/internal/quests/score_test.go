@@ -11,10 +11,10 @@ func TestCalculateFinancialScore(t *testing.T) {
 		components ScoreComponents
 		want       int
 	}{
-		{name: "floor", components: ScoreComponents{}, want: 300},
-		{name: "midpoint", components: ScoreComponents{50, 50, 50, 50, 50}, want: 575},
-		{name: "ceiling", components: ScoreComponents{100, 100, 100, 100, 100}, want: 850},
-		{name: "clamps inputs", components: ScoreComponents{120, -20, 100, 100, 100}, want: 740},
+		{name: "floor", components: ScoreComponents{}, want: 1},
+		{name: "midpoint", components: ScoreComponents{50, 50, 50, 50, 50}, want: 251},
+		{name: "ceiling", components: ScoreComponents{100, 100, 100, 100, 100}, want: 500},
+		{name: "clamps inputs", components: ScoreComponents{120, -20, 100, 100, 100}, want: 400},
 	}
 
 	for _, tc := range cases {
@@ -28,13 +28,13 @@ func TestCalculateFinancialScore(t *testing.T) {
 
 func TestLeagueBoundaries(t *testing.T) {
 	cases := map[int]string{
-		300: "Bronze",
-		450: "Silver",
-		530: "Gold",
-		610: "Platinum",
-		690: "Diamond",
-		770: "Champion",
-		850: "Champion",
+		1:   "Bronze",
+		135: "Silver",
+		210: "Gold",
+		280: "Platinum",
+		355: "Diamond",
+		425: "Champion",
+		500: "Champion",
 	}
 	for score, want := range cases {
 		if got := leagueTier(score); got != want {
@@ -44,13 +44,13 @@ func TestLeagueBoundaries(t *testing.T) {
 }
 
 func TestNextLeague(t *testing.T) {
-	name, points := nextLeague(620)
-	if name != "Diamond" || points != 70 {
-		t.Fatalf("nextLeague(620) = %q, %d", name, points)
+	name, points := nextLeague(300)
+	if name != "Diamond" || points != 55 {
+		t.Fatalf("nextLeague(300) = %q, %d", name, points)
 	}
-	name, points = nextLeague(800)
+	name, points = nextLeague(460)
 	if name != "" || points != 0 {
-		t.Fatalf("nextLeague(800) = %q, %d", name, points)
+		t.Fatalf("nextLeague(460) = %q, %d", name, points)
 	}
 }
 

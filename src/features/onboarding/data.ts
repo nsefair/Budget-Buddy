@@ -192,9 +192,9 @@ export const PRICING: {
     features: [
       "Bud daily check-ins",
       "Up to 3 daily quests",
-      "Streaks, XP, and levels",
-      "Public Wealth Leagues",
-      "Buds social feed + Fist Bumps",
+      "Streaks and progress tracking",
+      "Budget and goal dashboard",
+      "Daily Bud insight",
     ],
   },
   {

@@ -28,6 +28,7 @@ import {
   TodayIcon,
   BudgetIcon,
   BudIcon,
+  QuestsIcon,
   GoalsIcon,
   BudsIcon,
 } from "@/components/TabIcons";
@@ -43,7 +44,8 @@ const ICON_MAP: Record<
   today: { label: "Today", Icon: TodayIcon },
   budget: { label: "Budget", Icon: BudgetIcon },
   bud: { label: "Bud", Icon: BudIcon },
-  goals: { label: "Quests", Icon: GoalsIcon },
+  quests: { label: "Quests", Icon: QuestsIcon },
+  goals: { label: "Goals", Icon: GoalsIcon },
   buds: { label: "Buds", Icon: BudsIcon },
 };
 
@@ -152,6 +154,11 @@ function TabItem({ routeName, label, isFocused, onPress, onLongPress, isBudTab }
 // ─── Main Tab Bar ─────────────────────────────────────────────────────────────
 export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
+  const visibleRoutes = state.routes.filter((route) => {
+    const options = descriptors[route.key]?.options as { href?: unknown } | undefined;
+    return route.name !== "buds" && options?.href !== null;
+  });
+  const activeRouteKey = state.routes[state.index]?.key;
 
   return (
     <View style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom, 8) }]}>
@@ -163,13 +170,13 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
       <View style={styles.topBorder} />
 
       <View style={styles.tabRow}>
-        {state.routes.map((route: { key: string; name: string }, index: number) => {
+        {visibleRoutes.map((route: { key: string; name: string }) => {
           const { options } = descriptors[route.key];
           const label =
             typeof options.tabBarLabel === "string"
               ? options.tabBarLabel
               : options.title ?? route.name;
-          const isFocused = state.index === index;
+          const isFocused = activeRouteKey === route.key;
           const isBudTab = route.name === "bud";
 
           const onPress = () => {

@@ -3,45 +3,24 @@ import {
   ActivityIndicator,
   Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
-import Svg, { Circle } from "react-native-svg";
 
-import { CountUp, FadeInUp, PressableScale, Stagger } from "@/animations";
+import { FadeInUp, PressableScale, Stagger } from "@/animations";
 import { BrandLogo } from "@/components/BrandLogo";
 import { Icon } from "@/components/Icon";
 import { Colors } from "@/constants/colors";
 import { Radius, Shadow, Spacing, Type } from "@/constants/tokens";
-import type {
-  FinancialScore,
-  Quest,
-  QuestCheckInResult,
-  ScoreComponents,
-} from "@/features/quests/types";
-import { useQuestDashboard } from "@/features/quests/useQuestDashboard";
-import { WealthLeagueVisual } from "@/features/quests/WealthLeagueVisual";
-
-const SCORE_MIN = 300;
-const SCORE_MAX = 850;
-const SCORE_RING_SIZE = 154;
-const SCORE_RING_STROKE = 12;
-
-const COMPONENT_LABELS: Array<{
-  key: keyof ScoreComponents;
-  label: string;
-}> = [
-  { key: "quests", label: "Quests" },
-  { key: "budgeting", label: "Plan" },
-  { key: "saving", label: "Saving" },
-  { key: "goals", label: "Goals" },
-  { key: "consistency", label: "Rhythm" },
-];
+import { useUser } from "@/hooks/useAuth";
+import type { Quest, QuestCheckInResult } from "@/features/quests/types";
+import {
+  questCheckInMessage,
+  useQuestDashboard,
+} from "@/features/quests/useQuestDashboard";
 
 export function QuestHub() {
   const {
@@ -75,7 +54,7 @@ export function QuestHub() {
         await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
     } catch (error) {
-      setVerificationNotice(checkInErrorMessage(error));
+      setVerificationNotice(questCheckInMessage(error));
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
   };
@@ -117,7 +96,7 @@ export function QuestHub() {
       ) : null}
 
       <FadeInUp>
-        <FinancialScoreHero score={data.score} />
+        <ProgressHeader leagueTier={data.score.leagueTier} />
       </FadeInUp>
 
       <View style={styles.sectionHeading}>
@@ -143,14 +122,6 @@ export function QuestHub() {
         ))}
       </Stagger>
 
-      <FadeInUp delay={220}>
-        <WealthLeagueVisual
-          league={data.league}
-          scoreValue={data.score.value}
-          onPress={() => router.push("/buds/league")}
-        />
-      </FadeInUp>
-
       <QuestDetailSheet
         quest={selectedQuest}
         isCheckingIn={checkingIn && checkingInQuestId === selectedQuest?.id}
@@ -161,166 +132,43 @@ export function QuestHub() {
   );
 }
 
-export function ActiveQuestStrip() {
-  const { data, isLoading } = useQuestDashboard();
-  if (isLoading) {
-    return (
-      <View style={styles.todayLoadingCard}>
-        <ActivityIndicator color={Colors.gold} />
-        <Text style={styles.todayLoadingText}>Shuffling this week's quests…</Text>
-      </View>
-    );
-  }
-  if (!data?.quests.length) return null;
+/**
+ * Compact gamification header — level, XP, and league tier in one quiet row.
+ * All the game state lives here on Quests; the Today tab keeps only the
+ * Financial Health score.
+ */
+function ProgressHeader({ leagueTier }: { leagueTier: string }) {
+  const user = useUser();
+  if (!user) return null;
+
+  const xpProgress =
+    user.xpToNextLevel > 0
+      ? Math.max(0, Math.min(1, user.xp / user.xpToNextLevel))
+      : 0;
 
   return (
-    <View style={styles.todayStripWrap}>
-      <View style={styles.todayStripHeader}>
-        <View>
-          <Text style={styles.sectionEyebrow}>WEEKLY QUESTS</Text>
-          <Text style={styles.todayStripTitle}>Your next small win</Text>
+    <View style={styles.progressHeader}>
+      <View style={styles.levelBadge}>
+        <LinearGradient colors={[Colors.gold400, Colors.gold600]} style={styles.levelBadgeInner}>
+          <Text style={styles.levelBadgeText}>{user.level}</Text>
+        </LinearGradient>
+        <Text style={styles.levelBadgeLabel}>LEVEL</Text>
+      </View>
+      <View style={styles.xpBlock}>
+        <View style={styles.xpLabelRow}>
+          <Text style={styles.xpLabel}>
+            {user.xp.toLocaleString()} / {user.xpToNextLevel.toLocaleString()} XP
+          </Text>
+          <View style={styles.leagueChip}>
+            <Icon name="trophy" size={12} color={Colors.gold} strokeWidth={2.4} />
+            <Text style={styles.leagueChipText}>{leagueTier}</Text>
+          </View>
         </View>
-        <View style={styles.todayScorePill}>
-          <Icon name="activity" size={13} color={Colors.gold} />
-          <Text style={styles.todayScoreText}>{data.score.value}</Text>
+        <View style={styles.xpTrack}>
+          <View style={[styles.xpFill, { width: `${Math.max(3, xpProgress * 100)}%` }]} />
         </View>
       </View>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.todayStrip}
-      >
-        {data.quests.map((quest) => (
-          <Pressable
-            key={quest.id}
-            accessibilityRole="button"
-            accessibilityLabel={`Open weekly quest ${quest.title}`}
-            onPress={() => router.push("/(tabs)/goals")}
-            style={({ pressed }) => [styles.todayQuestCard, pressed && styles.pressed]}
-          >
-            <View style={styles.todayQuestTop}>
-              <View style={styles.miniQuestIcon}>
-                <Icon name={quest.iconName} size={16} color={Colors.gold} />
-              </View>
-              <Text style={styles.todayQuestProgress}>
-                {quest.progress}/{quest.total}
-              </Text>
-            </View>
-            <Text numberOfLines={2} style={styles.todayQuestTitle}>
-              {quest.title}
-            </Text>
-            <ProgressTrack progress={quest.progress} total={quest.total} />
-          </Pressable>
-        ))}
-      </ScrollView>
     </View>
-  );
-}
-
-function FinancialScoreHero({ score }: { score: FinancialScore }) {
-  const normalized = Math.max(
-    0,
-    Math.min(1, (score.value - SCORE_MIN) / (SCORE_MAX - SCORE_MIN))
-  );
-  const radius = (SCORE_RING_SIZE - SCORE_RING_STROKE) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const dashOffset = circumference * (1 - normalized);
-
-  return (
-    <LinearGradient
-      colors={[Colors.brandGradientStart, Colors.brandGradientMid, Colors.brandGradientEnd]}
-      style={styles.scoreHero}
-      accessibilityLabel={`Financial score ${score.value} out of 850, ${score.band}`}
-    >
-      <View style={styles.scoreHeroGlow} />
-      <View style={styles.scoreHeroTop}>
-        <View>
-          <Text style={styles.scoreEyebrow}>FINANCIAL SCORE</Text>
-          <Text style={styles.scoreSubtitle}>Your habits, in one living number.</Text>
-        </View>
-        <View style={styles.scoreChangePill}>
-          <Icon
-            name={score.change >= 0 ? "arrow-up-right" : "arrow-down-right"}
-            size={13}
-            color={score.change >= 0 ? Colors.gold : Colors.brandOnDarkMuted}
-          />
-          <Text style={styles.scoreChangeText}>
-            {score.change === 0 ? "Fresh" : `${score.change > 0 ? "+" : ""}${score.change}`}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.scoreHeroBody}>
-        <View style={styles.scoreRingWrap}>
-          <Svg width={SCORE_RING_SIZE} height={SCORE_RING_SIZE}>
-            <Circle
-              cx={SCORE_RING_SIZE / 2}
-              cy={SCORE_RING_SIZE / 2}
-              r={radius}
-              stroke="rgba(255,255,255,0.12)"
-              strokeWidth={SCORE_RING_STROKE}
-              fill="transparent"
-            />
-            <Circle
-              cx={SCORE_RING_SIZE / 2}
-              cy={SCORE_RING_SIZE / 2}
-              r={radius}
-              stroke={Colors.gold}
-              strokeWidth={SCORE_RING_STROKE}
-              strokeLinecap="round"
-              strokeDasharray={`${circumference} ${circumference}`}
-              strokeDashoffset={dashOffset}
-              fill="transparent"
-              rotation="-90"
-              origin={`${SCORE_RING_SIZE / 2}, ${SCORE_RING_SIZE / 2}`}
-            />
-          </Svg>
-          <View style={styles.scoreRingValue} pointerEvents="none">
-            <CountUp value={score.value} style={styles.scoreNumber} />
-            <Text style={styles.scoreRange}>300–850</Text>
-          </View>
-        </View>
-
-        <View style={styles.scoreSummary}>
-          <View style={styles.bandRow}>
-            <View style={styles.bandIcon}>
-              <Icon name="badge-check" size={18} color={Colors.gold} />
-            </View>
-            <View>
-              <Text style={styles.scoreBand}>{score.band}</Text>
-              <Text style={styles.scoreLeague}>{score.leagueTier} League</Text>
-            </View>
-          </View>
-          <Text style={styles.nextTierCopy}>
-            {score.nextLeagueTier
-              ? `${score.pointsToNextTier} points to ${score.nextLeagueTier}`
-              : "Top range reached — keep the pattern yours."}
-          </Text>
-          <View style={styles.nextTierTrack}>
-            <View style={[styles.nextTierFill, { width: `${Math.max(12, normalized * 100)}%` }]} />
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.componentGrid}>
-        {COMPONENT_LABELS.map(({ key, label }) => (
-          <View key={key} style={styles.componentItem}>
-            <View style={styles.componentValueRow}>
-              <Text style={styles.componentLabel}>{label}</Text>
-              <Text style={styles.componentValue}>{Math.round(score.components[key])}</Text>
-            </View>
-            <View style={styles.componentTrack}>
-              <View
-                style={[
-                  styles.componentFill,
-                  { width: `${Math.max(4, score.components[key])}%` },
-                ]}
-              />
-            </View>
-          </View>
-        ))}
-      </View>
-    </LinearGradient>
   );
 }
 
@@ -643,68 +491,50 @@ function resetLabel(resetDate: string) {
   return "Resets soon";
 }
 
-function checkInErrorMessage(error: unknown) {
-  const responseMessage = (
-    error as {
-      response?: { data?: { error?: { message?: unknown } } };
-    }
-  )?.response?.data?.error?.message;
-  return typeof responseMessage === "string"
-    ? responseMessage
-    : "The activity is not visible in your synced Budget data yet. Refresh and try again.";
-}
-
 const styles = StyleSheet.create({
   hub: { gap: Spacing.md, marginBottom: Spacing.xxl },
-  scoreHero: {
-    borderRadius: 24,
-    padding: Spacing.lg,
-    overflow: "hidden",
-    ...Shadow.lg,
+  progressHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radius.xl,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 14,
+    ...Shadow.sm,
   },
-  scoreHeroGlow: {
-    position: "absolute",
-    width: 230,
-    height: 230,
-    borderRadius: 115,
-    backgroundColor: Colors.accentAlpha12,
-    right: -70,
-    top: -90,
+  levelBadge: { alignItems: "center", gap: 3 },
+  levelBadgeInner: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: Colors.gold,
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
   },
-  scoreHeroTop: { flexDirection: "row", justifyContent: "space-between", gap: 12 },
-  scoreEyebrow: { ...Type.eyebrow, color: Colors.gold },
-  scoreSubtitle: { ...Type.caption, color: Colors.brandOnDarkMuted, marginTop: 4 },
-  scoreChangePill: {
+  levelBadgeText: { fontSize: 16, fontWeight: "800", color: Colors.onAccent },
+  levelBadgeLabel: { fontSize: 9, fontWeight: "800", color: Colors.navyMuted, letterSpacing: 1.2 },
+  xpBlock: { flex: 1, gap: 8 },
+  xpLabelRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  xpLabel: { ...Type.caption, color: Colors.navyMuted },
+  leagueChip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    alignSelf: "flex-start",
-    backgroundColor: "rgba(255,255,255,0.09)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: Radius.pill,
-    paddingHorizontal: 9,
-    paddingVertical: 6,
+    backgroundColor: Colors.gold50,
   },
-  scoreChangeText: { ...Type.caption, color: Colors.brandOnDark },
-  scoreHeroBody: { flexDirection: "row", alignItems: "center", gap: 14, marginTop: 18 },
-  scoreRingWrap: { width: SCORE_RING_SIZE, height: SCORE_RING_SIZE, alignItems: "center", justifyContent: "center" },
-  scoreRingValue: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
-  scoreNumber: { fontSize: 40, fontWeight: "900", color: Colors.brandOnDark, letterSpacing: -1.4 },
-  scoreRange: { ...Type.micro, color: Colors.brandOnDarkMuted, marginTop: -2 },
-  scoreSummary: { flex: 1, gap: 10 },
-  bandRow: { flexDirection: "row", alignItems: "center", gap: 9 },
-  bandIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.accentAlpha18, alignItems: "center", justifyContent: "center" },
-  scoreBand: { ...Type.h3, color: Colors.brandOnDark },
-  scoreLeague: { ...Type.caption, color: Colors.gold },
-  nextTierCopy: { ...Type.caption, color: Colors.brandOnDarkMuted },
-  nextTierTrack: { height: 6, backgroundColor: "rgba(255,255,255,0.12)", borderRadius: Radius.pill, overflow: "hidden" },
-  nextTierFill: { height: "100%", backgroundColor: Colors.gold, borderRadius: Radius.pill },
-  componentGrid: { marginTop: 18, gap: 8 },
-  componentItem: { gap: 4 },
-  componentValueRow: { flexDirection: "row", justifyContent: "space-between" },
-  componentLabel: { ...Type.micro, color: Colors.brandOnDarkMuted },
-  componentValue: { ...Type.micro, color: Colors.brandOnDark },
-  componentTrack: { height: 3, borderRadius: Radius.pill, backgroundColor: "rgba(255,255,255,0.10)", overflow: "hidden" },
-  componentFill: { height: "100%", backgroundColor: Colors.gold, borderRadius: Radius.pill },
+  leagueChipText: { fontSize: 11, fontWeight: "800", color: Colors.gold600 },
+  xpTrack: { height: 7, borderRadius: Radius.pill, backgroundColor: Colors.navy50, overflow: "hidden" },
+  xpFill: { height: "100%", borderRadius: Radius.pill, backgroundColor: Colors.gold },
   sectionHeading: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: 12, marginTop: 4 },
   sectionEyebrow: { ...Type.eyebrow, color: Colors.gold },
   sectionTitle: { ...Type.h2, color: Colors.navy, marginTop: 3 },
@@ -737,23 +567,6 @@ const styles = StyleSheet.create({
   checkInButtonComplete: { backgroundColor: Colors.emerald50, borderColor: Colors.greenBorder },
   checkInButtonText: { ...Type.caption, color: Colors.onAction },
   checkInButtonTextDisabled: { color: Colors.navyMuted },
-  leagueCard: { backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.xl, padding: Spacing.md, gap: 14, ...Shadow.sm },
-  leagueHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 },
-  leagueTitleRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  leagueIcon: { width: 40, height: 40, borderRadius: 15, backgroundColor: Colors.gold50, alignItems: "center", justifyContent: "center" },
-  leagueEyebrow: { ...Type.micro, color: Colors.gold },
-  leagueTitle: { ...Type.h3, color: Colors.navy, marginTop: 2 },
-  leagueReset: { ...Type.micro, color: Colors.muted },
-  leaderRows: { gap: 7 },
-  leaderRow: { minHeight: 40, flexDirection: "row", alignItems: "center", gap: 9, paddingHorizontal: 10, borderRadius: Radius.md, backgroundColor: Colors.navy50 },
-  leaderRank: { ...Type.caption, color: Colors.navyMuted, width: 18, textAlign: "center" },
-  leaderAvatar: { width: 28, height: 28, borderRadius: 14, backgroundColor: Colors.gold100, alignItems: "center", justifyContent: "center" },
-  leaderInitial: { ...Type.caption, color: Colors.gold600 },
-  leaderName: { ...Type.bodyStrong, color: Colors.navy, flex: 1 },
-  leaderScore: { ...Type.bodyStrong, color: Colors.navy },
-  leagueYouRow: { flexDirection: "row", justifyContent: "space-between", paddingTop: 10, borderTopWidth: 1, borderTopColor: Colors.border },
-  leagueYouLabel: { ...Type.caption, color: Colors.navyMuted },
-  leagueYouValue: { ...Type.caption, color: Colors.gold },
   rewardBanner: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: Radius.lg, padding: 12, backgroundColor: Colors.actionSurface, borderWidth: 1, borderColor: Colors.actionBorder },
   rewardIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: "rgba(0,0,0,0.10)", alignItems: "center", justifyContent: "center" },
   rewardCopy: { flex: 1 },
@@ -799,17 +612,4 @@ const styles = StyleSheet.create({
   loadingHero: { height: 300, borderRadius: 24, backgroundColor: Colors.navy800, alignItems: "center", justifyContent: "center", gap: 12 },
   loadingHeroText: { ...Type.body, color: Colors.brandOnDarkMuted },
   loadingQuest: { height: 180, borderRadius: Radius.xl, backgroundColor: Colors.navy50 },
-  todayStripWrap: { marginBottom: 12 },
-  todayStripHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
-  todayStripTitle: { ...Type.h2, color: Colors.navy, marginTop: 2 },
-  todayScorePill: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: Radius.pill, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: Colors.gold50 },
-  todayScoreText: { ...Type.bodyStrong, color: Colors.gold600 },
-  todayStrip: { gap: 10, paddingRight: 4 },
-  todayQuestCard: { width: 220, minHeight: 126, padding: 13, borderRadius: Radius.lg, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border, gap: 9, ...Shadow.sm },
-  todayQuestTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  miniQuestIcon: { width: 32, height: 32, borderRadius: 12, backgroundColor: Colors.gold50, alignItems: "center", justifyContent: "center" },
-  todayQuestProgress: { ...Type.caption, color: Colors.gold },
-  todayQuestTitle: { ...Type.bodyStrong, color: Colors.navy, flex: 1 },
-  todayLoadingCard: { minHeight: 96, borderRadius: Radius.lg, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 9, marginBottom: 12 },
-  todayLoadingText: { ...Type.caption, color: Colors.navyMuted },
 });
