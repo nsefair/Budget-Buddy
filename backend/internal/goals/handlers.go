@@ -1,7 +1,6 @@
 package goals
 
 import (
-	"encoding/json"
 	"errors"
 	"math"
 	"net/http"
@@ -12,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"budget-buddy/backend/internal/auth"
+	"budget-buddy/backend/internal/requestjson"
 	"budget-buddy/backend/internal/respond"
 )
 
@@ -117,8 +117,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	userID, _ := auth.UserIDFromContext(r.Context())
 
 	var req createGoalRequest
-	if err := decodeJSON(r, &req); err != nil {
-		respond.Error(w, http.StatusBadRequest, "invalid_json", "Request body must be valid JSON.")
+	if err := decodeJSON(w, r, &req); err != nil {
+		respond.JSONBodyError(w, err)
 		return
 	}
 
@@ -215,8 +215,8 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req updateGoalRequest
-	if err := decodeJSON(r, &req); err != nil {
-		respond.Error(w, http.StatusBadRequest, "invalid_json", "Request body must be valid JSON.")
+	if err := decodeJSON(w, r, &req); err != nil {
+		respond.JSONBodyError(w, err)
 		return
 	}
 
@@ -324,8 +324,8 @@ func (h *Handler) contribute(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
 	var req contributeRequest
-	if err := decodeJSON(r, &req); err != nil {
-		respond.Error(w, http.StatusBadRequest, "invalid_json", "Request body must be valid JSON.")
+	if err := decodeJSON(w, r, &req); err != nil {
+		respond.JSONBodyError(w, err)
 		return
 	}
 	if req.Amount <= 0 {
@@ -510,10 +510,8 @@ func scanGoal(row goalRow) (Goal, error) {
 	return goal, nil
 }
 
-func decodeJSON(r *http.Request, target any) error {
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	return decoder.Decode(target)
+func decodeJSON(w http.ResponseWriter, r *http.Request, target any) error {
+	return requestjson.Decode(w, r, target, 64<<10)
 }
 
 func normalizeGoalKind(value string) string {

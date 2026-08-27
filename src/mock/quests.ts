@@ -122,7 +122,7 @@ export const MOCK_LEAGUE: League = {
     { id: "u1", name: "Jordan K.", level: 12, xp: 5800, streak: 30, financialScore: 316, rank: 1 },
     { id: "u2", name: "Priya M.", level: 10, xp: 5200, streak: 22, financialScore: 302, rank: 2 },
     { id: "u3", name: "Derek T.", level: 9, xp: 4800, streak: 19, financialScore: 291, rank: 3 },
-    { id: "u_me", name: "Nicolas S.", level: 7, xp: 3240, streak: 12, financialScore: 280, rank: 4, isCurrentUser: true },
+    { id: "u_me", name: "Taylor M.", level: 7, xp: 3240, streak: 12, financialScore: 280, rank: 4, isCurrentUser: true },
     { id: "u4", name: "Sofia L.", level: 7, xp: 3100, streak: 11, financialScore: 271, rank: 5 },
   ],
 };

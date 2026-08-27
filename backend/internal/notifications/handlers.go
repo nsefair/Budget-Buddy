@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -14,6 +13,7 @@ import (
 
 	"budget-buddy/backend/internal/auth"
 	"budget-buddy/backend/internal/config"
+	"budget-buddy/backend/internal/requestjson"
 	"budget-buddy/backend/internal/respond"
 )
 
@@ -96,8 +96,8 @@ func (h *Handler) getPreferences(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) updatePreferences(w http.ResponseWriter, r *http.Request) {
 	var req Preferences
-	if err := decodeJSON(r, &req); err != nil {
-		respond.Error(w, http.StatusBadRequest, "invalid_json", "Request body must be valid JSON.")
+	if err := decodeJSON(w, r, &req); err != nil {
+		respond.JSONBodyError(w, err)
 		return
 	}
 	if err := validatePreferences(req); err != nil {
@@ -204,8 +204,8 @@ func (h *Handler) readAll(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) registerDevice(w http.ResponseWriter, r *http.Request) {
 	var req DeviceRequest
-	if err := decodeJSON(r, &req); err != nil {
-		respond.Error(w, http.StatusBadRequest, "invalid_json", "Request body must be valid JSON.")
+	if err := decodeJSON(w, r, &req); err != nil {
+		respond.JSONBodyError(w, err)
 		return
 	}
 	req.Provider = strings.ToLower(strings.TrimSpace(req.Provider))
@@ -258,8 +258,8 @@ func (h *Handler) createTestNotification(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	var req TestNotificationRequest
-	if err := decodeJSON(r, &req); err != nil {
-		respond.Error(w, http.StatusBadRequest, "invalid_json", "Request body must be valid JSON.")
+	if err := decodeJSON(w, r, &req); err != nil {
+		respond.JSONBodyError(w, err)
 		return
 	}
 	title := strings.TrimSpace(req.Title)
@@ -326,11 +326,6 @@ func validOptionalTime(value *string) bool {
 	return err == nil
 }
 
-func decodeJSON(r *http.Request, target any) error {
-	decoder := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
-		return err
-	}
-	return nil
+func decodeJSON(w http.ResponseWriter, r *http.Request, target any) error {
+	return requestjson.Decode(w, r, target, 64<<10)
 }

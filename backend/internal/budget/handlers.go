@@ -2,7 +2,6 @@ package budget
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -15,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"budget-buddy/backend/internal/auth"
+	"budget-buddy/backend/internal/requestjson"
 	"budget-buddy/backend/internal/respond"
 )
 
@@ -184,8 +184,8 @@ func (h *Handler) updateCategoryLimit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req categoryLimitRequest
-	if err := decodeBudgetJSON(r, &req); err != nil {
-		respond.Error(w, http.StatusBadRequest, "invalid_json", "Request body must be valid JSON.")
+	if err := decodeBudgetJSON(w, r, &req); err != nil {
+		respond.JSONBodyError(w, err)
 		return
 	}
 	amount := req.Amount
@@ -208,8 +208,8 @@ func (h *Handler) updateCategoryLimit(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) applySuggestions(w http.ResponseWriter, r *http.Request) {
 	userID, _ := auth.UserIDFromContext(r.Context())
 	var req applySuggestionsRequest
-	if err := decodeBudgetJSON(r, &req); err != nil {
-		respond.Error(w, http.StatusBadRequest, "invalid_json", "Request body must be valid JSON.")
+	if err := decodeBudgetJSON(w, r, &req); err != nil {
+		respond.JSONBodyError(w, err)
 		return
 	}
 	if len(req.Categories) == 0 {
@@ -343,10 +343,8 @@ func (h *Handler) loadRecommendedLimits(r *http.Request, userID string) (map[str
 	return limits, rows.Err()
 }
 
-func decodeBudgetJSON(r *http.Request, target any) error {
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	return decoder.Decode(target)
+func decodeBudgetJSON(w http.ResponseWriter, r *http.Request, target any) error {
+	return requestjson.Decode(w, r, target, 64<<10)
 }
 
 func validCategoryID(categoryID string) bool {

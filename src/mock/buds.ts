@@ -74,7 +74,7 @@ export interface ShareableAchievement {
   verifiedAt: string;
 }
 
-const SOCIAL_FEED_PHOTO = require("../../assets/buds/social-feed-photo-mock.jpeg");
+const SOCIAL_FEED_PHOTO = require("../../assets/brand/budget-buddy-mark-green.png");
 
 export const MOCK_BUDS_PROFILES: BudProfile[] = [
   { id: "u1", displayName: "Alex R.", initials: "AR", avatarAsset: SOCIAL_FEED_PHOTO, level: 12, streak: 30, leagueTier: "Platinum", badgeCount: 14, isFollowing: true },
