@@ -19,13 +19,43 @@ import axios, {
   AxiosResponse,
   InternalAxiosRequestConfig,
 } from "axios";
+import Constants from "expo-constants";
 import * as SecureStore from "expo-secure-store";
 
 // ─── Environment ──────────────────────────────────────────────────────────────
 // Set EXPO_PUBLIC_API_URL in your .env or app.config.js to point at any backend.
 // Changing this one value is all that's needed to switch servers.
-const RAW_API_URL =
+const CONFIGURED_API_URL =
   process.env.EXPO_PUBLIC_API_URL ?? "https://api.budgetbuddy.app/v1";
+
+function resolveDevelopmentApiUrl(url: string): string {
+  if (!__DEV__ || !url.startsWith("http://")) return url;
+
+  const expoHost = Constants.expoConfig?.hostUri?.split(":")[0];
+  if (!expoHost) return url;
+
+  try {
+    const parsed = new URL(url);
+    const isLocalHost =
+      parsed.hostname === "localhost" ||
+      parsed.hostname === "127.0.0.1" ||
+      parsed.hostname === "10.0.2.2" ||
+      /^10\./.test(parsed.hostname) ||
+      /^192\.168\./.test(parsed.hostname) ||
+      /^172\.(1[6-9]|2\d|3[0-1])\./.test(parsed.hostname);
+
+    if (isLocalHost) {
+      parsed.hostname = expoHost;
+      return parsed.toString().replace(/\/$/, "");
+    }
+  } catch {
+    return url;
+  }
+
+  return url;
+}
+
+const RAW_API_URL = resolveDevelopmentApiUrl(CONFIGURED_API_URL);
 
 /**
  * Cybersecurity guard: in production, refuse anything other than HTTPS.

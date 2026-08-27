@@ -121,8 +121,8 @@ func (h *Handler) createPostV2(w http.ResponseWriter, r *http.Request) {
 	userID, _ := auth.UserIDFromContext(r.Context())
 
 	var req createPostRequest
-	if err := decodeJSON(r, &req); err != nil {
-		respond.Error(w, http.StatusBadRequest, "invalid_json", "Request body must be valid JSON.")
+	if err := decodeJSON(w, r, &req); err != nil {
+		respond.JSONBodyError(w, err)
 		return
 	}
 	if len(req.MediaIDs) > maxPostMedia || hasDuplicateStrings(req.MediaIDs) {
@@ -664,8 +664,8 @@ func (h *Handler) addComment(w http.ResponseWriter, r *http.Request) {
 	userID, _ := auth.UserIDFromContext(r.Context())
 	postID := r.PathValue("id")
 	var req commentRequest
-	if err := decodeJSON(r, &req); err != nil {
-		respond.Error(w, http.StatusBadRequest, "invalid_json", "Request body must be valid JSON.")
+	if err := decodeJSON(w, r, &req); err != nil {
+		respond.JSONBodyError(w, err)
 		return
 	}
 	body := cleanPublicText(req.Body, 280)

@@ -1,6 +1,7 @@
 package plaid
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -12,14 +13,35 @@ import (
 
 	"budget-buddy/backend/internal/auth"
 	"budget-buddy/backend/internal/config"
+	"budget-buddy/backend/internal/requestjson"
 	"budget-buddy/backend/internal/respond"
 )
 
 type authMiddleware func(http.Handler) http.Handler
 
 type Handler struct {
-	db  *pgxpool.Pool
-	cfg config.Config
+	db              *pgxpool.Pool
+	cfg             config.Config
+	webhookVerifier plaidWebhookVerifier
+	webhookEvents   webhookEventRecorder
+}
+
+type plaidWebhookVerifier interface {
+	Verify(context.Context, string, []byte) (verifiedWebhook, error)
+}
+
+type failedWebhookVerifier struct {
+	err error
+}
+
+func (v failedWebhookVerifier) Verify(context.Context, string, []byte) (verifiedWebhook, error) {
+	return verifiedWebhook{}, v.err
+}
+
+type webhookEnvelope struct {
+	ItemID      string `json:"item_id"`
+	WebhookType string `json:"webhook_type"`
+	WebhookCode string `json:"webhook_code"`
 }
 
 type statusResponse struct {
@@ -96,7 +118,17 @@ type exchangeResponse struct {
 }
 
 func RegisterRoutes(mux *http.ServeMux, basePath string, db *pgxpool.Pool, cfg config.Config, requireAuth authMiddleware) {
-	handler := &Handler{db: db, cfg: cfg}
+	verifier, err := newWebhookVerifier(cfg)
+	var webhookVerifier plaidWebhookVerifier = verifier
+	if err != nil {
+		webhookVerifier = failedWebhookVerifier{err: errInvalidWebhookVerification}
+	}
+	handler := &Handler{
+		db:              db,
+		cfg:             cfg,
+		webhookVerifier: webhookVerifier,
+		webhookEvents:   postgresWebhookEventRecorder{db: db},
+	}
 	mux.Handle("GET "+basePath+"/plaid/status", requireAuth(http.HandlerFunc(handler.status)))
 	mux.Handle("POST "+basePath+"/plaid/link-token", requireAuth(http.HandlerFunc(handler.createLinkToken)))
 	mux.Handle("POST "+basePath+"/plaid/exchange", requireAuth(http.HandlerFunc(handler.exchange)))
@@ -194,7 +226,7 @@ func (h *Handler) exchange(w http.ResponseWriter, r *http.Request) {
 
 	var req exchangeRequest
 	if err := decodeJSON(w, r, &req); err != nil {
-		respond.Error(w, http.StatusBadRequest, "invalid_json", "Request body must be valid JSON.")
+		respond.JSONBodyError(w, err)
 		return
 	}
 	publicToken := strings.TrimSpace(req.PublicToken)
@@ -302,29 +334,44 @@ func (h *Handler) sync(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) webhook(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-
-	var payload map[string]any
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		respond.Error(w, http.StatusBadRequest, "invalid_json", "Webhook payload must be valid JSON.")
+	signedJWT := strings.TrimSpace(r.Header.Get("Plaid-Verification"))
+	if signedJWT == "" {
+		respond.Error(w, http.StatusUnauthorized, "invalid_plaid_verification", "Plaid webhook verification failed.")
 		return
 	}
 
-	payloadJSON, err := json.Marshal(payload)
+	rawBody, err := requestjson.ReadRaw(w, r, requestjson.DefaultMaxBytes)
 	if err != nil {
-		respond.Error(w, http.StatusBadRequest, "invalid_json", "Webhook payload must be valid JSON.")
+		respond.JSONBodyError(w, err)
+		return
+	}
+	verified, err := h.webhookVerifier.Verify(r.Context(), signedJWT, rawBody)
+	if err != nil {
+		respond.Error(w, http.StatusUnauthorized, "invalid_plaid_verification", "Plaid webhook verification failed.")
 		return
 	}
 
-	_, err = h.db.Exec(
-		r.Context(),
-		`insert into plaid_webhook_events (plaid_item_id, webhook_type, webhook_code, payload)
-		 values ($1, $2, $3, $4::jsonb)`,
-		stringValue(payload["item_id"]),
-		stringValue(payload["webhook_type"]),
-		stringValue(payload["webhook_code"]),
-		string(payloadJSON),
-	)
+	var payload webhookEnvelope
+	if err := json.Unmarshal(rawBody, &payload); err != nil {
+		respond.Error(w, http.StatusBadRequest, "invalid_json", "Webhook payload must be valid JSON.")
+		return
+	}
+	payload.ItemID = strings.TrimSpace(payload.ItemID)
+	payload.WebhookType = strings.TrimSpace(payload.WebhookType)
+	payload.WebhookCode = strings.TrimSpace(payload.WebhookCode)
+	if payload.WebhookType == "" || payload.WebhookCode == "" {
+		respond.Error(w, http.StatusBadRequest, "invalid_webhook", "Webhook type and code are required.")
+		return
+	}
+
+	_, err = h.webhookEvents.RecordWebhook(r.Context(), webhookEvent{
+		PlaidItemID:      payload.ItemID,
+		WebhookType:      payload.WebhookType,
+		WebhookCode:      payload.WebhookCode,
+		Payload:          append(json.RawMessage(nil), rawBody...),
+		VerificationHash: verified.BodySHA256,
+		PlaidIssuedAt:    verified.IssuedAt,
+	})
 	if err != nil {
 		respond.Error(w, http.StatusInternalServerError, "plaid_webhook_failed", "Could not record Plaid webhook.")
 		return
@@ -488,9 +535,7 @@ func (h *Handler) upsertAccounts(r *http.Request, tx pgx.Tx, itemID, userID stri
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, out any) error {
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	defer r.Body.Close()
-	return json.NewDecoder(r.Body).Decode(out)
+	return requestjson.Decode(w, r, out, 64<<10)
 }
 
 func safePlaidMessage(err error, fallback string) string {
@@ -514,9 +559,4 @@ func nilIfEmpty(value string) any {
 		return nil
 	}
 	return strings.TrimSpace(value)
-}
-
-func stringValue(value any) string {
-	text, _ := value.(string)
-	return strings.TrimSpace(text)
 }

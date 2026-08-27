@@ -33,13 +33,13 @@ export const MOCK_NEW_USER: User = {
   joinedAt: new Date().toISOString(),
 };
 
-// Mirrors the real dev account (nicosefair) so offline mock sessions look
-// like the account you actually use. Real mode ignores this entirely.
+// Fictional established profile used for offline development and screenshots.
+// Real mode ignores this fixture entirely.
 export const MOCK_FULL_USER: User = {
   id: "usr_01HZ9FAKE",
-  firstName: "Nicolas",
-  lastName: "Sefair",
-  email: "nicosefair@gmail.com",
+  firstName: "Taylor",
+  lastName: "Morgan",
+  email: "taylor@example.com",
   emailVerified: true,
   avatar: undefined,
   level: 7,

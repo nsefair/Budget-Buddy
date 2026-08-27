@@ -1,7 +1,6 @@
 package buds
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"regexp"
@@ -12,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"budget-buddy/backend/internal/auth"
+	"budget-buddy/backend/internal/requestjson"
 	"budget-buddy/backend/internal/respond"
 )
 
@@ -502,8 +502,8 @@ func (h *Handler) report(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req reportRequest
-	if err := decodeJSON(r, &req); err != nil {
-		respond.Error(w, http.StatusBadRequest, "invalid_json", "Request body must be valid JSON.")
+	if err := decodeJSON(w, r, &req); err != nil {
+		respond.JSONBodyError(w, err)
 		return
 	}
 
@@ -671,10 +671,8 @@ func scanProfile(row profileRow, profile *BudProfile) error {
 	return nil
 }
 
-func decodeJSON(r *http.Request, target any) error {
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	return decoder.Decode(target)
+func decodeJSON(w http.ResponseWriter, r *http.Request, target any) error {
+	return requestjson.Decode(w, r, target, 64<<10)
 }
 
 func (h *Handler) canSeeUser(r *http.Request, userID, targetID string) (bool, error) {

@@ -45,6 +45,23 @@ type ExchangeTokenResponse struct {
 	RequestID   string `json:"request_id"`
 }
 
+type WebhookVerificationKey struct {
+	Algorithm string `json:"alg"`
+	Curve     string `json:"crv"`
+	KeyID     string `json:"kid"`
+	KeyType   string `json:"kty"`
+	Use       string `json:"use"`
+	X         string `json:"x"`
+	Y         string `json:"y"`
+	CreatedAt int64  `json:"created_at"`
+	ExpiredAt *int64 `json:"expired_at"`
+}
+
+type webhookVerificationKeyResponse struct {
+	Key       WebhookVerificationKey `json:"key"`
+	RequestID string                 `json:"request_id"`
+}
+
 type apiError struct {
 	ErrorType    string `json:"error_type"`
 	ErrorCode    string `json:"error_code"`
@@ -135,6 +152,23 @@ func (c *Client) ExchangePublicToken(ctx context.Context, publicToken string) (E
 		return ExchangeTokenResponse{}, err
 	}
 	return result, nil
+}
+
+func (c *Client) GetWebhookVerificationKey(ctx context.Context, keyID string) (WebhookVerificationKey, error) {
+	keyID = strings.TrimSpace(keyID)
+	if keyID == "" {
+		return WebhookVerificationKey{}, errors.New("webhook verification key id is required")
+	}
+
+	var result webhookVerificationKeyResponse
+	if err := c.post(ctx, "/webhook_verification_key/get", map[string]string{
+		"client_id": c.clientID,
+		"secret":    c.secret,
+		"key_id":    keyID,
+	}, &result); err != nil {
+		return WebhookVerificationKey{}, err
+	}
+	return result.Key, nil
 }
 
 func (c *Client) post(ctx context.Context, path string, payload, out any) error {

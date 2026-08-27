@@ -1,241 +1,153 @@
-# Budget Buddy — Mobile App
+# Budget Buddy
 
-Personal finance app for 18–30 year olds. Combines AI coaching (Bud), Duolingo-style gamification, and Strava-inspired social features.
+Budget Buddy is a portfolio-stage personal-finance application for turning
+account activity, budgets, and goals into a focused daily action. The mobile
+client uses Expo and React Native; the API is written in Go and persists data
+in PostgreSQL.
 
-## Stack
+> This repository demonstrates product and engineering work. It is not a bank,
+> investment adviser, or production financial service. Use sandbox credentials
+> and fictional data only.
 
-- **Expo SDK 54** + **Expo Router** (typed routes)
-- **TypeScript** (strict)
-- **NativeWind v4** (Tailwind CSS for React Native)
-- **Zustand** (global state)
-- **React Query** (server state)
-- **Axios** (HTTP)
-- **React Native Animated** (animations — Expo Go compatible)
-- **expo-blur**, **expo-haptics**, **expo-linear-gradient**, **expo-secure-store**
-- Inter font via `@expo-google-fonts/inter`
+## What is implemented
 
-> `react-native-reanimated` and `moti` are installed but currently unused in our code (they require a dev build, not Expo Go). We use the built-in `Animated` API. When you migrate to a dev build later, you can swap them in for spring physics — see `src/components/TabBar.tsx` for a noted swap location.
+- Email/password registration, login, token refresh, verification, password
+  reset, profile updates, onboarding, and account deletion foundations.
+- A 1–500 financial score, budget views, transaction history, goals,
+  contributions, quests, wealth leagues, and action-focused daily insights.
+- Plaid Sandbox link-token exchange, encrypted access-token storage,
+  transaction synchronization, and durable webhook ingestion.
+- A social prototype for sharing selected achievements without automatically
+  exposing balances, transactions, or exact amounts.
+- Notification preferences, inbox/device registration, and a signed entitlement
+  webhook foundation for future App Store billing integration.
+- Docker-based local API and PostgreSQL development.
 
-## Run It
+Mock data remains available for UI development. Production behavior requires
+`EXPO_PUBLIC_USE_MOCK=false`, a running API, a migrated PostgreSQL database,
+and valid sandbox or production provider configuration.
 
-From inside the `budget-buddy/` folder:
+## Architecture
 
-```bash
-npm install         # only needed once
-npm run ios         # opens iOS simulator
-npm run android     # opens Android emulator
-npm run start       # opens Metro and shows QR code for Expo Go
+```text
+Expo / React Native screens
+  -> typed feature services
+  -> Axios client + Expo SecureStore
+  -> Go REST API
+  -> PostgreSQL
+  -> Plaid API / SMTP / entitlement provider adapters
 ```
 
-If anything seems stale or weird:
+The frontend keeps endpoint paths in `src/api/endpoints.ts` and transport logic
+in `src/api/client.ts`. Go route modules live under `backend/internal/`, while
+ordered PostgreSQL migrations live in `backend/migrations/`.
+
+## Technology
+
+- Expo SDK 54, Expo Router, React Native, TypeScript
+- React Query, Zustand, Axios, NativeWind
+- Go 1.26 with `net/http`
+- PostgreSQL with `pgx`
+- Docker Compose
+- Plaid Sandbox and React Native Plaid Link
+
+## Local setup
+
+### Mobile
 
 ```bash
-npm run reset-cache   # nukes Metro + Expo cache and restarts
-npm run fix-deps      # re-pins all packages to SDK 54 versions
-npm run doctor        # Expo's diagnostic tool
-npm run typecheck     # confirms TypeScript is clean
-```
-
-## Backend
-
-The first Go backend scaffold lives in `backend/`. It includes:
-
-- Go API server with health endpoints
-- Dockerfile
-- Docker Compose service wiring for API + PostgreSQL
-- PostgreSQL migrations for identity, onboarding, and goals
-
-Start there when building backend features:
-
-```bash
-cd backend
 cp .env.example .env
-go run ./cmd/api
+npm ci
+npm run start
 ```
 
-For Docker-based local development from the repo root:
+The checked-in `.env.example` contains public client configuration and
+placeholders only. Values prefixed with `EXPO_PUBLIC_` are bundled into the
+client and must never contain secrets.
+
+### API and database
 
 ```bash
+cp backend/.env.example backend/.env
 docker compose up -d db
 docker compose run --rm migrate
 docker compose up -d --build api
 ```
 
-Postgres is exposed on local port `5433` to avoid conflicts with any existing
-Postgres running on your Mac. The API container still talks to the database on
-Docker's internal `db:5432` address.
+The sample Docker configuration uses development-only credentials. Replace all
+secrets and validate production configuration before any deployment.
 
-## Project Structure
+For a physical iPhone, point `EXPO_PUBLIC_API_URL` to the Mac's reachable LAN
+address rather than `localhost`. Use HTTPS for every production API URL.
 
-```
-budget-buddy/
-├── backend/                 # Go API, Dockerfile, migrations
-├── app/                     # Expo Router file-based routing
-│   ├── _layout.tsx          # Root: providers, fonts, error boundary
-│   ├── index.tsx            # Initial redirect by auth state
-│   ├── (auth)/              # Public screens
-│   │   ├── _layout.tsx
-│   │   ├── welcome.tsx
-│   │   ├── login.tsx
-│   │   ├── register.tsx
-│   │   └── onboarding.tsx
-│   └── (tabs)/              # Authenticated app
-│       ├── _layout.tsx      # Custom tab bar wiring
-│       ├── today.tsx        # Tab 1 — Daily heartbeat
-│       ├── budget.tsx       # Tab 2 — Money truth
-│       ├── bud.tsx          # Tab 3 — AI guide (center, elevated)
-│       ├── quests.tsx       # Tab 4 — Gamification hub
-│       └── buds.tsx         # Tab 5 — Social
-├── src/
-│   ├── api/
-│   │   ├── client.ts        # Axios instance + token refresh interceptor
-│   │   └── endpoints.ts     # ALL route paths (single source of truth)
-│   ├── services/            # ★ feature data layer (mock-aware)
-│   │   ├── authService.ts
-│   │   ├── todayService.ts
-│   │   ├── budgetService.ts
-│   │   ├── budService.ts
-│   │   ├── questsService.ts
-│   │   └── budsService.ts
-│   ├── stores/
-│   │   └── authStore.ts     # Zustand auth state
-│   ├── hooks/
-│   │   └── useAuth.ts       # Selector hooks (avoid re-renders)
-│   ├── providers/
-│   │   └── QueryProvider.tsx
-│   ├── components/
-│   │   ├── TabBar.tsx       # Custom premium tab bar (blur, gold accent)
-│   │   ├── TabIcons.tsx     # SVG icons for each tab
-│   │   ├── ErrorBoundary.tsx
-│   │   └── AppSplash.tsx
-│   ├── constants/
-│   │   └── colors.ts        # Brand palette (navy, gold, emerald, coral, teal)
-│   └── mock/                # Realistic dev fixtures for every feature
-│       ├── user.ts
-│       ├── budget.ts
-│       ├── quests.ts
-│       ├── bud.ts
-│       └── buds.ts
-├── assets/                   # icons, splash, fonts (none custom yet)
-├── .env                      # ★ swap backends in one line (see below)
-├── babel.config.js           # NativeWind + Reanimated plugin
-├── tailwind.config.js        # Brand color palette as Tailwind tokens
-└── tsconfig.json             # Path alias: @/* → src/*
-```
+## Security design
 
-## Environment Variables (`.env`)
+- Tokens are stored in Expo SecureStore rather than AsyncStorage.
+- Production client configuration rejects non-HTTPS API URLs.
+- Access tokens enforce a fixed signing algorithm, issuer, subject, issued-at,
+  expiry, token type, and bounded lifetime.
+- JSON endpoints use strict decoders with hard request-size limits, reject
+  unknown fields, and reject trailing JSON values.
+- Plaid webhooks require ES256 verification, a recent issuance time, and a
+  constant-time comparison of the exact request-body SHA-256 hash; duplicate
+  payloads are retained only once.
+- The API configures timeouts, header limits, explicit CORS origins, security
+  headers, and rate limiting.
+- GitHub CI runs TypeScript, Expo, npm audit, Go tests, race detection, vet, and
+  govulncheck. Dependabot monitors npm, Go modules, and Actions.
+
+These controls reduce risk but do not constitute a security certification.
+See [SECURITY.md](SECURITY.md) for private vulnerability reporting.
+
+## Verification
 
 ```bash
-EXPO_PUBLIC_API_URL=https://api.budgetbuddy.app/v1   # Where to send requests
-EXPO_PUBLIC_USE_MOCK=true                            # Use local mock data (dev)
+npm run typecheck
+npx expo-doctor
+npm audit --audit-level=critical
+
+cd backend
+go test ./...
+go test -race ./...
+go vet ./...
+go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
 ```
 
-Set `EXPO_PUBLIC_USE_MOCK=false` and provide the real `EXPO_PUBLIC_API_URL` when the backend engineer is ready. **No code changes required.**
+Native Plaid Link, push notifications, and device-specific behavior still
+require signed builds and physical-device testing; command-line checks cannot
+replace those tests.
 
-## Design System
+Expo Doctor's React Native Directory metadata check intentionally excludes the
+official Plaid Link SDK because the directory currently marks it as untested on
+the New Architecture. This is a documented compatibility exception, not proof
+of device compatibility; signed iOS and Android builds remain required.
 
-The visual language follows the Developer Review (friend-on-your-side, premium, never bank-cold) and the `ui-ux-pro-max` skill (modular type scale, 150–300 ms motion, no shame copy).
+The current Expo 54 toolchain also has upstream Metro build-time advisories that
+cannot be removed without a major Expo upgrade. Their dependency path and the
+reason for the temporary CI policy are recorded in
+[`docs/security-known-advisories.md`](docs/security-known-advisories.md).
 
-| Layer | File | What it owns |
-|-------|------|--------------|
-| Colors / palette | `src/constants/colors.ts` | Brand accent, semantic surfaces, light/dark resolution |
-| Tokens | `src/constants/tokens.ts` | `Spacing`, `Radius`, `Shadow`, `Type`, `Motion` |
-| Primitives | `src/components/ui/` | `Card`, `ScreenHeader`, `SectionHeader`, `EmptyState` |
+## Current limitations
 
-When you build a new screen:
+- Plaid is configured for Sandbox during development; production access,
+  registered redirect/package identifiers, and a real HTTPS webhook URL remain
+  deployment work.
+- The entitlement webhook is a provider-neutral foundation. Premium plans are
+  unavailable until an App Store billing provider is selected and validated.
+- Bud insights and social/league data include development fixtures and are not
+  represented as production recommendation or community systems.
+- Production monitoring, backups, restore drills, retention jobs, and provider
+  reviews remain future work.
 
-1. Open with `<ScreenHeader eyebrow="…" title="…" />`.
-2. Wrap related rows in `<Card>` (variants: `default`, `raised`, `subtle`).
-3. Use `<SectionHeader title="…" action="See all" onAction={…} />` for subsections.
-4. Use `<EmptyState />` instead of leaving a list blank — voice rule.
-5. Pull sizes from `Spacing` / `Radius` / `Type` instead of hard-coding numbers.
+## AI-assisted development
 
-### Motion library
+AI tools assisted with portions of ideation, implementation, and documentation.
+Architecture decisions, source review, testing, security verification, and
+final responsibility remain with the maintainer. AI-generated output is not
+assumed to be secure, correct, or free of third-party obligations; changes are
+reviewed and tested before inclusion.
 
-Shared in `src/animations/` — all primitives use built-in `Animated` (Expo Go + dev build) and respect `AccessibilityInfo.isReduceMotionEnabled()`.
+## License
 
-```ts
-import { FadeInUp, Stagger, PressableScale, CountUp, Shimmer } from "@/animations";
-```
-
-| Primitive | When to use |
-|-----------|-------------|
-| `<FadeInUp delay={…}>` | Section entrance, hero text reveal. |
-| `<Stagger gap={70}>` | Wrap a list of cards/rows; each appears in cascade. |
-| `<PressableScale>` | Replace any `Pressable` that needs a satisfying press feel. |
-| `<CountUp value={…}>` | Hero numbers: net worth, XP, savings rate. |
-| `<Shimmer />` | Skeleton placeholder for any async data > 300 ms. |
-
-**Upgrade path → Moti (when you commit to dev build only):**
-
-1. Add `"react-native-worklets/plugin"` as the *last* Babel plugin in `babel.config.js`.
-2. Replace primitives screen-by-screen with `MotiView`:
-   ```tsx
-   import { MotiView } from "moti";
-
-   <MotiView from={{ opacity: 0, translateY: 14 }} animate={{ opacity: 1, translateY: 0 }} transition={{ delay: 80 }}>
-     <Card>…</Card>
-   </MotiView>
-   ```
-3. The primitives in `src/animations/` stay as a fallback that always works.
-
-### Voice (Dev Review §02)
-- Emoji is only allowed on **spending categories** and **Buds kudos**. Everything else uses Lucide via `<Icon />`.
-- No `ALERT` / `WARNING` / shame copy. Reframe: *"Dining's running hot — $187 over. Want a quick look?"*
-- Avoid: *empower, leverage, level up, financial freedom, take control, embark, delve.*
-
-## How to Integrate the Real Backend Later
-
-The architecture is layered so backend changes never reach the screen code:
-
-```
-Screen
-  └─ calls Service (todayService, etc.)
-        └─ Service checks IS_MOCK flag
-              ├─ true  → returns mock data
-              └─ false → calls api.get() → Axios → ASP.NET Core API
-```
-
-| Backend change | What you edit | Screens affected |
-|---|---|---|
-| Server URL | `.env` → `EXPO_PUBLIC_API_URL` | 0 |
-| An endpoint path | `src/api/endpoints.ts` (one line) | 0 |
-| Auth scheme (Bearer → cookie/etc) | `src/api/client.ts` request interceptor | 0 |
-| A response field name | The `toUser` mapper in the service | 0 |
-| Token storage (SecureStore → MMKV) | `TokenStore` helpers in `client.ts` | 0 |
-| Going live (mock → real) | `.env` → `EXPO_PUBLIC_USE_MOCK=false` | 0 |
-
-You should never have to ask the backend engineer to touch this repo. They give you:
-- Base URL
-- Authentication endpoint contracts (you've defined them in `endpoints.ts`)
-- Any access tokens / API keys for development environments
-
-## Brand & Voice
-
-See `Budget Buddy Developer Review .txt` (one folder up) for the full brand book. Critical rules:
-
-- **Bud** never says "you should" or "you must" — always educational framing
-- Never expose financial data in the social feed (privacy is non-negotiable)
-- Never use "ALERT", "WARNING", "DANGER", or shame-based copy
-- Never use "delve", "navigate", "embark", "level up your finances", or other tells
-- Friend-on-your-side tone: "Dining's running hot — $187 over. Want a quick look?"
-
-## Known Limitations (As of Now)
-
-1. **Animations use built-in `Animated`** instead of Reanimated — this is required for Expo Go compatibility. Migrate to Reanimated when moving to a dev build.
-2. **Plaid + Stripe** are not integrated — those are server-side concerns the backend engineer is handling.
-3. **No real auth** — currently auto-loads the mock user via `IS_MOCK`. Real auth flow is wired up but only fires when `EXPO_PUBLIC_USE_MOCK=false`.
-
-## Common Issues
-
-**"Cannot find module 'babel-preset-expo'"**
-Run `npm install` from inside `budget-buddy/`. Don't run from the parent `BUD/` folder.
-
-**"npx wants to install expo@latest"**
-You're not in the project folder. `cd budget-buddy/` first.
-
-**Red error screen with "Exception in HostFunction"**
-You imported from `react-native-reanimated` somewhere. Use built-in `Animated` from `react-native` instead while in Expo Go.
-
-**Stale visuals after editing**
-`npm run reset-cache`
+Budget Buddy is available under the [MIT License](LICENSE). Third-party
+dependencies and provider SDKs remain subject to their own licenses and terms.

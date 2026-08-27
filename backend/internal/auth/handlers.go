@@ -1,11 +1,10 @@
 package auth
 
 import (
-	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 
+	"budget-buddy/backend/internal/requestjson"
 	"budget-buddy/backend/internal/respond"
 )
 
@@ -38,8 +37,8 @@ func RegisterRoutes(mux *http.ServeMux, basePath string, handler *Handler) {
 
 func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 	var req RegisterRequest
-	if err := decodeJSON(r, &req); err != nil {
-		respond.Error(w, http.StatusBadRequest, "invalid_json", "Request body must be valid JSON.")
+	if err := decodeJSON(w, r, &req); err != nil {
+		respond.JSONBodyError(w, err)
 		return
 	}
 
@@ -54,8 +53,8 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
-	if err := decodeJSON(r, &req); err != nil {
-		respond.Error(w, http.StatusBadRequest, "invalid_json", "Request body must be valid JSON.")
+	if err := decodeJSON(w, r, &req); err != nil {
+		respond.JSONBodyError(w, err)
 		return
 	}
 
@@ -70,8 +69,8 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
 	var req RefreshRequest
-	if err := decodeJSON(r, &req); err != nil {
-		respond.Error(w, http.StatusBadRequest, "invalid_json", "Request body must be valid JSON.")
+	if err := decodeJSON(w, r, &req); err != nil {
+		respond.JSONBodyError(w, err)
 		return
 	}
 
@@ -86,8 +85,8 @@ func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) forgotPassword(w http.ResponseWriter, r *http.Request) {
 	var req ForgotPasswordRequest
-	if err := decodeJSON(r, &req); err != nil {
-		respond.Error(w, http.StatusBadRequest, "invalid_json", "Request body must be valid JSON.")
+	if err := decodeJSON(w, r, &req); err != nil {
+		respond.JSONBodyError(w, err)
 		return
 	}
 	result, err := h.service.RequestPasswordReset(r.Context(), req.Email)
@@ -100,8 +99,8 @@ func (h *Handler) forgotPassword(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) resetPassword(w http.ResponseWriter, r *http.Request) {
 	var req ResetPasswordRequest
-	if err := decodeJSON(r, &req); err != nil {
-		respond.Error(w, http.StatusBadRequest, "invalid_json", "Request body must be valid JSON.")
+	if err := decodeJSON(w, r, &req); err != nil {
+		respond.JSONBodyError(w, err)
 		return
 	}
 	if err := h.service.ResetPassword(r.Context(), req); err != nil {
@@ -123,8 +122,8 @@ func (h *Handler) requestEmailVerification(w http.ResponseWriter, r *http.Reques
 
 func (h *Handler) verifyEmail(w http.ResponseWriter, r *http.Request) {
 	var req VerifyEmailRequest
-	if err := decodeJSON(r, &req); err != nil {
-		respond.Error(w, http.StatusBadRequest, "invalid_json", "Request body must be valid JSON.")
+	if err := decodeJSON(w, r, &req); err != nil {
+		respond.JSONBodyError(w, err)
 		return
 	}
 	if err := h.service.VerifyEmail(r.Context(), req.Token); err != nil {
@@ -136,8 +135,8 @@ func (h *Handler) verifyEmail(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) changeEmail(w http.ResponseWriter, r *http.Request) {
 	var req ChangeEmailRequest
-	if err := decodeJSON(r, &req); err != nil {
-		respond.Error(w, http.StatusBadRequest, "invalid_json", "Request body must be valid JSON.")
+	if err := decodeJSON(w, r, &req); err != nil {
+		respond.JSONBodyError(w, err)
 		return
 	}
 	userID, _ := UserIDFromContext(r.Context())
@@ -151,8 +150,8 @@ func (h *Handler) changeEmail(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) confirmEmailChange(w http.ResponseWriter, r *http.Request) {
 	var req VerifyEmailRequest
-	if err := decodeJSON(r, &req); err != nil {
-		respond.Error(w, http.StatusBadRequest, "invalid_json", "Request body must be valid JSON.")
+	if err := decodeJSON(w, r, &req); err != nil {
+		respond.JSONBodyError(w, err)
 		return
 	}
 	if err := h.service.ConfirmEmailChange(r.Context(), req.Token); err != nil {
@@ -164,8 +163,8 @@ func (h *Handler) confirmEmailChange(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) changePassword(w http.ResponseWriter, r *http.Request) {
 	var req ChangePasswordRequest
-	if err := decodeJSON(r, &req); err != nil {
-		respond.Error(w, http.StatusBadRequest, "invalid_json", "Request body must be valid JSON.")
+	if err := decodeJSON(w, r, &req); err != nil {
+		respond.JSONBodyError(w, err)
 		return
 	}
 	userID, _ := UserIDFromContext(r.Context())
@@ -178,8 +177,8 @@ func (h *Handler) changePassword(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) updateProfile(w http.ResponseWriter, r *http.Request) {
 	var req UpdateProfileRequest
-	if err := decodeJSON(r, &req); err != nil {
-		respond.Error(w, http.StatusBadRequest, "invalid_json", "Request body must be valid JSON.")
+	if err := decodeJSON(w, r, &req); err != nil {
+		respond.JSONBodyError(w, err)
 		return
 	}
 	userID, _ := UserIDFromContext(r.Context())
@@ -193,8 +192,8 @@ func (h *Handler) updateProfile(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) deleteAccount(w http.ResponseWriter, r *http.Request) {
 	var req DeleteAccountRequest
-	if err := decodeJSON(r, &req); err != nil {
-		respond.Error(w, http.StatusBadRequest, "invalid_json", "Request body must be valid JSON.")
+	if err := decodeJSON(w, r, &req); err != nil {
+		respond.JSONBodyError(w, err)
 		return
 	}
 	userID, _ := UserIDFromContext(r.Context())
@@ -228,8 +227,8 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) completeOnboarding(w http.ResponseWriter, r *http.Request) {
 	var req OnboardingRequest
-	if err := decodeJSON(r, &req); err != nil {
-		respond.Error(w, http.StatusBadRequest, "invalid_json", "Request body must be valid JSON.")
+	if err := decodeJSON(w, r, &req); err != nil {
+		respond.JSONBodyError(w, err)
 		return
 	}
 
@@ -243,16 +242,8 @@ func (h *Handler) completeOnboarding(w http.ResponseWriter, r *http.Request) {
 	respond.JSON(w, http.StatusOK, user)
 }
 
-func decodeJSON(r *http.Request, target any) error {
-	decoder := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
-		return err
-	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return errors.New("request body must contain one JSON object")
-	}
-	return nil
+func decodeJSON(w http.ResponseWriter, r *http.Request, target any) error {
+	return requestjson.Decode(w, r, target, 64<<10)
 }
 
 func writeAuthError(w http.ResponseWriter, err error) {

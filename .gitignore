@@ -2,6 +2,9 @@
 
 # dependencies
 node_modules/
+.cursor/
+__pycache__/
+*.pyc
 
 # Expo
 .expo/
@@ -25,6 +28,10 @@ expo-env.d.ts
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+coverage/
+.nyc_output/
+security-audit*.json
+gitleaks*.json
 
 # macOS
 .DS_Store
@@ -32,7 +39,17 @@ yarn-error.*
 
 # local env files (never commit real keys)
 .env
+.env.*
+!.env.example
+!backend/.env.example
 .env*.local
+
+# local reports and temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+.cache/
 
 # typescript
 *.tsbuildinfo

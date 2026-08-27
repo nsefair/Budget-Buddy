@@ -1,15 +1,15 @@
 package auth
 
 import (
-	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"strings"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 
 	"budget-buddy/backend/internal/config"
 )
@@ -27,18 +27,10 @@ type AccessClaims struct {
 	ExpiresAt time.Time
 }
 
-type jwtHeader struct {
-	Algorithm string `json:"alg"`
-	Type      string `json:"typ"`
-}
-
-type jwtPayload struct {
-	Subject   string `json:"sub"`
+type accessTokenClaims struct {
 	Email     string `json:"email"`
 	TokenType string `json:"typ"`
-	Issuer    string `json:"iss"`
-	IssuedAt  int64  `json:"iat"`
-	ExpiresAt int64  `json:"exp"`
+	jwt.RegisteredClaims
 }
 
 func NewTokenManager(cfg config.Config) TokenManager {
@@ -53,65 +45,65 @@ func NewTokenManager(cfg config.Config) TokenManager {
 func (m TokenManager) GenerateAccessToken(user User) (string, time.Time, error) {
 	now := m.now().UTC()
 	expiresAt := now.Add(m.accessTTL)
-
-	header := jwtHeader{Algorithm: "HS256", Type: "JWT"}
-	payload := jwtPayload{
-		Subject:   user.ID,
+	claims := accessTokenClaims{
 		Email:     user.Email,
 		TokenType: "access",
-		Issuer:    m.issuer,
-		IssuedAt:  now.Unix(),
-		ExpiresAt: expiresAt.Unix(),
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    m.issuer,
+			Subject:   user.ID,
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(expiresAt),
+		},
 	}
-
-	encodedHeader, err := encodeSegment(header)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	token.Header["typ"] = "JWT"
+	signed, err := token.SignedString(m.accessSecret)
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	encodedPayload, err := encodeSegment(payload)
-	if err != nil {
-		return "", time.Time{}, err
-	}
-
-	unsigned := encodedHeader + "." + encodedPayload
-	signature := sign(unsigned, m.accessSecret)
-
-	return unsigned + "." + signature, expiresAt, nil
+	return signed, expiresAt, nil
 }
 
 func (m TokenManager) ParseAccessToken(raw string) (AccessClaims, error) {
-	parts := strings.Split(raw, ".")
-	if len(parts) != 3 {
+	claims := &accessTokenClaims{}
+	token, err := jwt.ParseWithClaims(
+		strings.TrimSpace(raw),
+		claims,
+		func(token *jwt.Token) (any, error) {
+			if token.Method != jwt.SigningMethodHS256 {
+				return nil, ErrUnauthorized
+			}
+			typ, _ := token.Header["typ"].(string)
+			if typ != "JWT" {
+				return nil, ErrUnauthorized
+			}
+			return m.accessSecret, nil
+		},
+		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
+		jwt.WithIssuer(m.issuer),
+		jwt.WithExpirationRequired(),
+		jwt.WithIssuedAt(),
+		jwt.WithLeeway(30*time.Second),
+		jwt.WithStrictDecoding(),
+		jwt.WithTimeFunc(m.now),
+	)
+	if err != nil || token == nil || !token.Valid || claims.Subject == "" || claims.TokenType != "access" || claims.IssuedAt == nil || claims.ExpiresAt == nil {
 		return AccessClaims{}, ErrUnauthorized
 	}
 
-	unsigned := parts[0] + "." + parts[1]
-	expected := sign(unsigned, m.accessSecret)
-	if !hmac.Equal([]byte(expected), []byte(parts[2])) {
-		return AccessClaims{}, ErrUnauthorized
-	}
-
-	payloadBytes, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return AccessClaims{}, ErrUnauthorized
-	}
-
-	var payload jwtPayload
-	if err := json.Unmarshal(payloadBytes, &payload); err != nil {
-		return AccessClaims{}, ErrUnauthorized
-	}
-	if payload.TokenType != "access" || payload.Subject == "" {
-		return AccessClaims{}, ErrUnauthorized
-	}
-
-	expiresAt := time.Unix(payload.ExpiresAt, 0).UTC()
-	if !expiresAt.After(m.now().UTC()) {
+	now := m.now().UTC()
+	issuedAt := claims.IssuedAt.Time.UTC()
+	expiresAt := claims.ExpiresAt.Time.UTC()
+	if issuedAt.After(now.Add(30*time.Second)) ||
+		issuedAt.Before(now.Add(-m.accessTTL-5*time.Minute)) ||
+		!expiresAt.After(issuedAt) ||
+		expiresAt.Sub(issuedAt) > m.accessTTL+time.Minute {
 		return AccessClaims{}, ErrUnauthorized
 	}
 
 	return AccessClaims{
-		UserID:    payload.Subject,
-		Email:     payload.Email,
+		UserID:    claims.Subject,
+		Email:     claims.Email,
 		ExpiresAt: expiresAt,
 	}, nil
 }
@@ -155,20 +147,6 @@ func BearerToken(value string) (string, error) {
 		return "", ErrUnauthorized
 	}
 	return token, nil
-}
-
-func encodeSegment(value any) (string, error) {
-	bytes, err := json.Marshal(value)
-	if err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(bytes), nil
-}
-
-func sign(unsigned string, secret []byte) string {
-	mac := hmac.New(sha256.New, secret)
-	_, _ = mac.Write([]byte(unsigned))
-	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
 func IsUnauthorized(err error) bool {
