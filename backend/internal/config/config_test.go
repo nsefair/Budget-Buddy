@@ -2,6 +2,17 @@ package config
 
 import "testing"
 
+func TestTrustedProxyValidation(t *testing.T) {
+	for _, cidr := range []string{"172.30.0.2/32", "::1/128"} {
+		if err := (Config{TrustedProxyCIDRs: []string{cidr}}).Validate(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := (Config{TrustedProxyCIDRs: []string{"trust-everyone"}}).Validate(); err == nil {
+		t.Fatal("invalid proxy network was accepted")
+	}
+}
+
 func TestProductionValidationRejectsDevelopmentDefaults(t *testing.T) {
 	cfg := Config{
 		Env:                  "production",

@@ -12,31 +12,32 @@ type SyncTransactionsRequest struct {
 }
 
 type SyncTransactionsResponse struct {
-	Added      []SyncedTransaction `json:"added"`
-	Modified   []SyncedTransaction `json:"modified"`
+	Added      []SyncedTransaction  `json:"added"`
+	Modified   []SyncedTransaction  `json:"modified"`
 	Removed    []RemovedTransaction `json:"removed"`
-	NextCursor string              `json:"next_cursor"`
-	HasMore    bool                `json:"has_more"`
-	RequestID  string              `json:"request_id"`
+	NextCursor string               `json:"next_cursor"`
+	HasMore    bool                 `json:"has_more"`
+	RequestID  string               `json:"request_id"`
 }
 
 type SyncedTransaction struct {
-	TransactionID              string                    `json:"transaction_id"`
-	AccountID                  string                    `json:"account_id"`
-	Amount                     float64                   `json:"amount"`
-	IsoCurrencyCode            string                    `json:"iso_currency_code"`
-	UnofficialCurrencyCode     string                    `json:"unofficial_currency_code"`
-	Date                       string                    `json:"date"`
-	AuthorizedDate             string                    `json:"authorized_date"`
-	Name                       string                    `json:"name"`
-	MerchantName               string                    `json:"merchant_name"`
-	Category                   []string                  `json:"category"`
-	Pending                    bool                      `json:"pending"`
-	PersonalFinanceCategory    *PersonalFinanceCategory  `json:"personal_finance_category"`
+	PendingTransactionID    string                   `json:"pending_transaction_id"`
+	TransactionID           string                   `json:"transaction_id"`
+	AccountID               string                   `json:"account_id"`
+	Amount                  float64                  `json:"amount"`
+	IsoCurrencyCode         string                   `json:"iso_currency_code"`
+	UnofficialCurrencyCode  string                   `json:"unofficial_currency_code"`
+	Date                    string                   `json:"date"`
+	AuthorizedDate          string                   `json:"authorized_date"`
+	Name                    string                   `json:"name"`
+	MerchantName            string                   `json:"merchant_name"`
+	Category                []string                 `json:"category"`
+	Pending                 bool                     `json:"pending"`
+	PersonalFinanceCategory *PersonalFinanceCategory `json:"personal_finance_category"`
 }
 
 type PersonalFinanceCategory struct {
-	Primary string `json:"primary"`
+	Primary  string `json:"primary"`
 	Detailed string `json:"detailed"`
 }
 
@@ -50,14 +51,18 @@ type AccountsBalanceResponse struct {
 }
 
 type AccountBalance struct {
-	AccountID string  `json:"account_id"`
+	Name      string   `json:"name"`
+	Mask      string   `json:"mask"`
+	Type      string   `json:"type"`
+	Subtype   string   `json:"subtype"`
+	AccountID string   `json:"account_id"`
 	Balances  Balances `json:"balances"`
 }
 
 type Balances struct {
-	Current          *float64 `json:"current"`
-	Available        *float64 `json:"available"`
-	IsoCurrencyCode  string   `json:"iso_currency_code"`
+	Current         *float64 `json:"current"`
+	Available       *float64 `json:"available"`
+	IsoCurrencyCode string   `json:"iso_currency_code"`
 }
 
 func (c *Client) SyncTransactions(ctx context.Context, req SyncTransactionsRequest) (SyncTransactionsResponse, error) {
@@ -86,7 +91,7 @@ func (c *Client) GetAccountsBalance(ctx context.Context, accessToken string) (Ac
 	}
 
 	var result AccountsBalanceResponse
-	if err := c.post(ctx, "/accounts/balance/get", payload, &result); err != nil {
+	if err := c.post(ctx, "/accounts/get", payload, &result); err != nil {
 		return AccountsBalanceResponse{}, err
 	}
 	return result, nil

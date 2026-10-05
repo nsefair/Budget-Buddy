@@ -392,7 +392,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   donutCenter: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 34,

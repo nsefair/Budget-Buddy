@@ -7,7 +7,7 @@
  */
 
 import { Tabs, Redirect } from "expo-router";
-import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
+import type { BottomTabBarProps } from "expo-router/js-tabs";
 import { useIsAuthenticated, useHasOnboarded } from "@/hooks/useAuth";
 import { CustomTabBar } from "@/components/TabBar";
 

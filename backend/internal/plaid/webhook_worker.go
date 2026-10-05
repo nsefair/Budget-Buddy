@@ -56,7 +56,24 @@ func processNextWebhook(ctx context.Context, db *pgxpool.Pool, cfg config.Config
 		return false, err
 	}
 
-	if strings.ToUpper(event.WebhookType) != "TRANSACTIONS" || event.PlaidItemID == "" {
+	if strings.ToUpper(event.WebhookType) == "ITEM" && event.PlaidItemID != "" {
+		switch strings.ToUpper(event.WebhookCode) {
+		case "ERROR", "PENDING_EXPIRATION", "PENDING_DISCONNECT", "USER_PERMISSION_REVOKED":
+			_, err := db.Exec(ctx, `update plaid_items set status='relink_required',error_code=$2,error_message='Reconnect your bank to resume updates.' where plaid_item_id=$1 and archived_at is null`, event.PlaidItemID, event.WebhookCode)
+			if err != nil {
+				_ = markWebhookFailed(ctx, db, event, err)
+				return true, err
+			}
+		case "LOGIN_REPAIRED":
+			// Verify the repair using the API below, instead of trusting event arrival order.
+		default:
+			return true, markWebhookProcessed(ctx, db, event.ID)
+		}
+		if event.WebhookCode != "LOGIN_REPAIRED" {
+			return true, markWebhookProcessed(ctx, db, event.ID)
+		}
+	}
+	if (strings.ToUpper(event.WebhookType) != "TRANSACTIONS" && event.WebhookCode != "LOGIN_REPAIRED") || event.PlaidItemID == "" {
 		return true, markWebhookProcessed(ctx, db, event.ID)
 	}
 

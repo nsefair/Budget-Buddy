@@ -3,6 +3,7 @@ package httpserver
 import (
 	"net"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"strings"
 	"sync"
@@ -34,11 +35,14 @@ type requestBucket struct {
 }
 
 type memoryLimiter struct {
-	mu      sync.Mutex
-	buckets map[string]requestBucket
-	limit   int
-	now     func() time.Time
+	mu          sync.Mutex
+	buckets     map[string]requestBucket
+	limit       int
+	now         func() time.Time
+	nextCleanup time.Time
 }
+
+const maxRateLimitBuckets = 10000
 
 func rateLimiter(cfg config.Config) func(http.Handler) http.Handler {
 	limiter := &memoryLimiter{
@@ -46,21 +50,61 @@ func rateLimiter(cfg config.Config) func(http.Handler) http.Handler {
 		limit:   cfg.RateLimitPerMinute,
 		now:     time.Now,
 	}
+	proxies := make([]netip.Prefix, 0, len(cfg.TrustedProxyCIDRs))
+	for _, cidr := range cfg.TrustedProxyCIDRs {
+		if prefix, err := netip.ParsePrefix(cidr); err == nil {
+			proxies = append(proxies, prefix)
+		}
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ip := clientIP(r, proxies)
+			if cfg.GlobalRateLimitPerMinute > 0 {
+				if allowed, retry := limiter.allow("global", "all", cfg.GlobalRateLimitPerMinute); !allowed {
+					rateLimitResponse(w, retry)
+					return
+				}
+			}
+			if allowed, retry := limiter.allow(ip, "api", limiter.limit); !allowed {
+				rateLimitResponse(w, retry)
+				return
+			}
 			class := "api"
 			limit := limiter.limit
 			if isSensitiveAuthPath(r.URL.Path) {
 				class = "auth"
 				limit = min(limit, 20)
+			} else if r.Method == http.MethodPost && isPlaidOperation(r.URL.Path) {
+				class = "plaid"
+				limit = min(limit, 6)
 			}
-			allowed, retryAfter := limiter.allow(clientIP(r), class, limit)
-			if !allowed {
-				w.Header().Set("Retry-After", strconv.Itoa(max(1, int(retryAfter.Seconds()))))
-				respond.Error(w, http.StatusTooManyRequests, "rate_limited", "Too many requests. Try again shortly.")
-				return
+			if class != "api" {
+				if allowed, retry := limiter.allow(ip, class, limit); !allowed {
+					rateLimitResponse(w, retry)
+					return
+				}
 			}
 			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func rateLimitResponse(w http.ResponseWriter, retry time.Duration) {
+	w.Header().Set("Retry-After", strconv.Itoa(max(1, int((retry+time.Second-1)/time.Second))))
+	respond.Error(w, http.StatusTooManyRequests, "rate_limited", "Too many requests. Try again shortly.")
+}
+
+func concurrencyLimiter(limit int) func(http.Handler) http.Handler {
+	active := make(chan struct{}, max(1, limit))
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			select {
+			case active <- struct{}{}:
+				defer func() { <-active }()
+				next.ServeHTTP(w, r)
+			default:
+				rateLimitResponse(w, time.Second)
+			}
 		})
 	}
 }
@@ -69,24 +113,34 @@ func (l *memoryLimiter) allow(ip, class string, limit int) (bool, time.Duration)
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := l.now().UTC()
+	if !now.Before(l.nextCleanup) {
+		for key, bucket := range l.buckets {
+			if !now.Before(bucket.resetsAt) {
+				delete(l.buckets, key)
+			}
+		}
+		l.nextCleanup = now.Add(time.Minute)
+	}
 	key := ip + ":" + class
-	bucket := l.buckets[key]
+	bucket, exists := l.buckets[key]
+	if !exists && len(l.buckets) >= maxRateLimitBuckets {
+		return false, l.nextCleanup.Sub(now)
+	}
 	if bucket.resetsAt.IsZero() || !now.Before(bucket.resetsAt) {
 		bucket = requestBucket{resetsAt: now.Add(time.Minute)}
 	}
 	if bucket.count >= limit {
-		return false, time.Until(bucket.resetsAt)
+		return false, bucket.resetsAt.Sub(now)
 	}
 	bucket.count++
 	l.buckets[key] = bucket
-	if len(l.buckets) > 10000 {
-		for bucketKey, candidate := range l.buckets {
-			if !now.Before(candidate.resetsAt) {
-				delete(l.buckets, bucketKey)
-			}
-		}
-	}
 	return true, 0
+}
+
+func isPlaidOperation(path string) bool {
+	return strings.HasSuffix(path, "/plaid/link-token") ||
+		strings.HasSuffix(path, "/plaid/exchange") ||
+		strings.HasSuffix(path, "/plaid/sync")
 }
 
 func isSensitiveAuthPath(path string) bool {
@@ -96,9 +150,20 @@ func isSensitiveAuthPath(path string) bool {
 		strings.Contains(path, "/auth/reset-password")
 }
 
-func clientIP(r *http.Request) string {
+func clientIP(r *http.Request, proxies []netip.Prefix) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err == nil && host != "" {
+		peer, parseErr := netip.ParseAddr(host)
+		if parseErr == nil {
+			for _, proxy := range proxies {
+				if proxy.Contains(peer.Unmap()) {
+					// Only our proxy may supply this header; it overwrites client input.
+					if forwarded, err := netip.ParseAddr(r.Header.Get("X-Real-IP")); err == nil {
+						return forwarded.Unmap().String()
+					}
+				}
+			}
+		}
 		return host
 	}
 	return r.RemoteAddr

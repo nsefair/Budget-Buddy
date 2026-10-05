@@ -14,6 +14,7 @@ import (
 	"budget-buddy/backend/internal/buds"
 	"budget-buddy/backend/internal/config"
 	"budget-buddy/backend/internal/goals"
+	"budget-buddy/backend/internal/money"
 	"budget-buddy/backend/internal/notifications"
 	"budget-buddy/backend/internal/plaid"
 	"budget-buddy/backend/internal/quests"
@@ -34,10 +35,11 @@ func New(cfg config.Config, logger *slog.Logger, db *pgxpool.Pool) *http.Server 
 	goals.RegisterRoutes(mux, cfg.APIBasePath, db, authHandler.RequireAuth)
 	notifications.RegisterRoutes(mux, cfg.APIBasePath, db, cfg, authHandler.RequireAuth)
 	budget.RegisterRoutes(mux, cfg.APIBasePath, db, authHandler.RequireAuth)
+	money.RegisterRoutes(mux, cfg.APIBasePath, db, authHandler.RequireAuth)
 	plaid.RegisterRoutes(mux, cfg.APIBasePath, db, cfg, authHandler.RequireAuth)
 	quests.RegisterRoutes(mux, cfg.APIBasePath, db, authHandler.RequireAuth)
 
-	handler := recoverer(logger)(requestLogger(logger)(securityHeaders(cfg)(rateLimiter(cfg)(cors(cfg)(mux)))))
+	handler := recoverer(logger)(requestLogger(logger)(securityHeaders(cfg)(rateLimiter(cfg)(concurrencyLimiter(cfg.MaxConcurrentRequests)(cors(cfg)(mux))))))
 
 	return &http.Server{
 		Addr:              cfg.Addr,
@@ -46,7 +48,7 @@ func New(cfg config.Config, logger *slog.Logger, db *pgxpool.Pool) *http.Server 
 		ReadTimeout:       cfg.ReadTimeout,
 		WriteTimeout:      cfg.WriteTimeout,
 		IdleTimeout:       cfg.IdleTimeout,
-		MaxHeaderBytes:    1 << 20,
+		MaxHeaderBytes:    16 << 10,
 	}
 }
 

@@ -9,6 +9,12 @@
  */
 
 export const ENDPOINTS = {
+  MONEY: {
+    PROFILE: "/money/profile",
+    TODAY: "/money/today",
+    SPENDING: "/money/spending",
+    ALLOCATE_YESTERDAY: "/money/yesterday/allocate",
+  },
   // ── Auth ────────────────────────────────────────────────────────────────────
   AUTH: {
     LOGIN: "/auth/login",

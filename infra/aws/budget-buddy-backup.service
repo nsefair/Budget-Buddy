@@ -1,0 +1,9 @@
+[Unit]
+Description=Budget Buddy encrypted off-host database backup
+Requires=docker.service
+After=docker.service network-online.target
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/budget-buddy/infra/aws/backup.sh budget-buddy-pilot-backups-455012390237 us-east-2
+User=root
+UMask=0077

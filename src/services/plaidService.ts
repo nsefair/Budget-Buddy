@@ -26,6 +26,8 @@ export type PlaidConnection = {
   status: "active" | "relink_required" | "error" | "archived" | string;
   accountCount: number;
   createdAt: string;
+  lastSyncAt?: string;
+  errorCode?: string;
   accounts: PlaidAccount[];
 };
 
@@ -106,15 +108,17 @@ export const plaidService = {
     return api.get<PlaidStatus>(ENDPOINTS.PLAID.STATUS);
   },
 
-  createLinkToken: async (): Promise<PlaidLinkToken> => {
+  createLinkToken: async (itemId?: string): Promise<PlaidLinkToken> => {
     if (IS_MOCK) {
       return {
         configured: false,
         message: "Plaid Link is disabled while the app is using mock data.",
       };
     }
-    return api.post<PlaidLinkToken>(ENDPOINTS.PLAID.LINK_TOKEN);
+    return api.post<PlaidLinkToken>(ENDPOINTS.PLAID.LINK_TOKEN, itemId ? { itemId } : {});
   },
+
+  completeUpdate: async (itemId: string) => api.post<PlaidSyncResult>("/plaid/update-complete", { itemId }),
 
   exchangePublicToken: async (
     publicToken: string,

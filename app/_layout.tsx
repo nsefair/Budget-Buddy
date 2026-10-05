@@ -76,7 +76,6 @@ export default function RootLayout() {
           <QueryProvider>
             <StatusBar
               style={isDark ? "light" : "dark"}
-              backgroundColor={Colors.surface}
             />
             <Stack screenOptions={{ headerShown: false, animation: "fade" }}>
               <Stack.Screen name="index" options={{ headerShown: false }} />

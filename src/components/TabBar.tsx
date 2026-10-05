@@ -20,7 +20,7 @@ import {
   Platform,
   Animated,
 } from "react-native";
-import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
+import type { BottomTabBarProps } from "expo-router/js-tabs";
 import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors } from "@/constants/colors";
@@ -163,9 +163,9 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
   return (
     <View style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom, 8) }]}>
       {Platform.OS === "ios" ? (
-        <BlurView intensity={85} tint="dark" style={StyleSheet.absoluteFillObject} />
+        <BlurView intensity={85} tint="dark" style={StyleSheet.absoluteFill} />
       ) : (
-        <View style={[StyleSheet.absoluteFillObject, styles.androidBg]} />
+        <View style={[StyleSheet.absoluteFill, styles.androidBg]} />
       )}
       <View style={styles.topBorder} />
 

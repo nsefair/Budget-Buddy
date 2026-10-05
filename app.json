@@ -6,13 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon-green.png",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "scheme": "budget-buddy",
-    "splash": {
-      "image": "./assets/splash-icon-green.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#050705"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.budgetbuddy.app"
@@ -23,7 +17,6 @@
         "backgroundColor": "#0A0A0A"
       },
       "package": "com.budgetbuddy.app",
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -32,20 +25,33 @@
       "favicon": "./assets/favicon-green.png"
     },
     "plugins": [
+      "./plugins/with-personal-team-ios",
+      "./plugins/with-minimum-ios-pod-target",
       "expo-router",
       "expo-font",
-      [
-        "expo-av",
-        {
-          "microphonePermission": false
-        }
-      ],
       "expo-secure-store",
       "expo-notifications",
       [
         "expo-image-picker",
         {
           "photosPermission": "Budget Buddy uses only the photos you choose when you share a win with your Buds."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "enableSceneSupport": true
+          }
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon-green.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#050705"
         }
       ]
     ],

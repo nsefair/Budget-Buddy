@@ -1,0 +1,120 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Budget Buddy pilot - one micro, private ECR, HTTPS, SSM; no paid-plan upgrade.
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+  AmiId:
+    Type: AWS::EC2::Image::Id
+  BudgetEmail:
+    Type: String
+    AllowedPattern: '[^\s@]+@[^\s@]+\.[^\s@]+'
+Resources:
+  Images:
+    Type: AWS::ECR::Repository
+    DeletionPolicy: Retain
+    Properties:
+      RepositoryName: budget-buddy-pilot
+      ImageTagMutability: IMMUTABLE
+      EncryptionConfiguration:
+        EncryptionType: AES256
+  ServerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: ec2.amazonaws.com}
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: PullPilotImageAndRuntime
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: '*'
+              - Effect: Allow
+                Action: [ecr:BatchCheckLayerAvailability, ecr:GetDownloadUrlForLayer, ecr:BatchGetImage]
+                Resource: !GetAtt Images.Arn
+              - Effect: Allow
+                Action: ssm:GetParameter
+                Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/budget-buddy/pilot/runtime
+  ServerProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref ServerRole]
+  Firewall:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: HTTPS and certificate issuance only; administration uses SSM
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - {IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0}
+        - {IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0}
+  Server:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: t3.micro
+      CreditSpecification: {CPUCredits: standard}
+      IamInstanceProfile: !Ref ServerProfile
+      MetadataOptions: {HttpTokens: required, HttpPutResponseHopLimit: 1}
+      NetworkInterfaces:
+        - DeviceIndex: '0'
+          SubnetId: !Ref SubnetId
+          GroupSet: [!Ref Firewall]
+          AssociatePublicIpAddress: true
+          DeleteOnTermination: true
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs: {VolumeSize: 20, VolumeType: gp3, Encrypted: true, DeleteOnTermination: false}
+      Tags:
+        - {Key: Name, Value: budget-buddy-pilot}
+        - {Key: Project, Value: budget-buddy}
+        - {Key: Environment, Value: pilot}
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          set -euo pipefail
+          dnf install -y docker amazon-ssm-agent
+          systemctl enable --now docker amazon-ssm-agent
+          install -d -m 0700 /opt/budget-buddy
+          work=$(mktemp -d)
+          trap 'rm -rf "$work"' EXIT
+          cd "$work"
+          curl -fsSLO https://github.com/docker/compose/releases/download/v5.5.1/docker-compose-linux-x86_64
+          printf '%s  docker-compose-linux-x86_64\n' db1889184726840f75c4f9c001048430d4f25b3be3cb084d3ddd762bc0aed576 | sha256sum -c -
+          install -d /usr/local/lib/docker/cli-plugins
+          install -m 0755 docker-compose-linux-x86_64 /usr/local/lib/docker/cli-plugins/docker-compose
+          docker compose version
+          touch /opt/budget-buddy/bootstrap.ready
+  Address:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      InstanceId: !Ref Server
+      Tags:
+        - {Key: Project, Value: budget-buddy}
+  CreditUsageBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: budget-buddy-pilot-credit-usage
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit: {Amount: 15, Unit: USD}
+        CostTypes: {IncludeCredit: false, IncludeRefund: false}
+      NotificationsWithSubscribers:
+        - Notification: {NotificationType: ACTUAL, ComparisonOperator: GREATER_THAN, ThresholdType: PERCENTAGE, Threshold: 50}
+          Subscribers: [{SubscriptionType: EMAIL, Address: !Ref BudgetEmail}]
+        - Notification: {NotificationType: ACTUAL, ComparisonOperator: GREATER_THAN, ThresholdType: PERCENTAGE, Threshold: 90}
+          Subscribers: [{SubscriptionType: EMAIL, Address: !Ref BudgetEmail}]
+Outputs:
+  InstanceId: {Value: !Ref Server}
+  PublicIp: {Value: !Ref Address}
+  RepositoryUri: {Value: !GetAtt Images.RepositoryUri}

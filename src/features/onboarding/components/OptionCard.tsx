@@ -142,10 +142,11 @@ export function OptionCard({
           <MotiView
             animate={{
               backgroundColor: selected ? Colors.gold : "transparent",
-              borderColor: selected ? Colors.gold : Colors.border,
             }}
             transition={reduced ? { duration: 0 } : baseTransition}
-            style={styles.check}
+            // Moti treats DynamicColorIOS objects as nested animation styles.
+            // Keep this adaptive color in native style to avoid dynamic.dynamic.
+            style={[styles.check, { borderColor: selected ? Colors.gold : Colors.border }]}
           >
             <MotiView
               animate={{

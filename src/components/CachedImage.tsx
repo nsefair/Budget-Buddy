@@ -7,7 +7,7 @@ import {
   type StyleProp,
   type ImageStyle,
 } from "react-native";
-import { requireOptionalNativeModule } from "expo-modules-core";
+import { requireOptionalNativeModule } from "expo";
 
 type ContentFit = "cover" | "contain" | "fill" | "none" | "scale-down";
 

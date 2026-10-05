@@ -577,7 +577,7 @@ const styles = StyleSheet.create({
   verificationNoticeTitle: { ...Type.bodyStrong, color: Colors.navy },
   verificationNoticeBody: { ...Type.caption, color: Colors.navyMuted, marginTop: 2 },
   modalRoot: { flex: 1, justifyContent: "flex-end" },
-  modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: Colors.blackOverlay },
+  modalBackdrop: { ...StyleSheet.absoluteFill, backgroundColor: Colors.blackOverlay },
   detailSheet: { backgroundColor: Colors.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: Spacing.lg, paddingBottom: 34, paddingTop: 10, gap: 14, ...Shadow.lg },
   sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.navy200, alignSelf: "center", marginBottom: 4 },
   detailTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },

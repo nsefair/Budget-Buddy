@@ -116,7 +116,8 @@ export function usePlaidConnection({
 
     setLinking(true);
     try {
-      const result = await plaidService.createLinkToken();
+      const reconnect = currentStatus.connections.find((item) => item.status === "relink_required" || item.status === "error");
+      const result = await plaidService.createLinkToken(reconnect?.id);
       if (!result.configured || !result.linkToken) {
         Alert.alert(
           "Plaid is not ready",
@@ -154,11 +155,16 @@ export function usePlaidConnection({
           logLevel: sdk.LinkLogLevel?.ERROR,
           onSuccess: async (success) => {
             try {
-              await plaidService.exchangePublicToken(
-                success.publicToken,
-                normalizePlaidMetadata(success.metadata),
-              );
-              await plaidService.sync();
+              if (reconnect) {
+                await plaidService.completeUpdate(reconnect.id);
+              } else {
+                await plaidService.exchangePublicToken(
+                  success.publicToken,
+                  normalizePlaidMetadata(success.metadata),
+                );
+                const synced = await plaidService.sync();
+                if (synced.relinkRequired) throw new Error("Reconnect your bank to resume updates.");
+              }
               const refreshed = await plaidService.status();
               setStatus(refreshed);
               onConnected?.(refreshed);
@@ -174,8 +180,8 @@ export function usePlaidConnection({
             } catch (error) {
               secureLog.error(`${source}.exchange failed`, error);
               Alert.alert(
-                "Plaid exchange issue",
-                "Plaid linked, but the backend could not save the connection.",
+                "Bank update delayed",
+                "We could not finish refreshing your bank. Please try again shortly.",
               );
               finish({
                 connected: false,
@@ -253,7 +259,7 @@ function showPlaidSetupChecklist(status: PlaidStatus | null) {
     [
       "Needed on the Go backend only:",
       ...missing.map((item) => `- ${item}`),
-      "- Use Sandbox here; production Plaid work comes later.",
+
     ].join("\n"),
   );
 }

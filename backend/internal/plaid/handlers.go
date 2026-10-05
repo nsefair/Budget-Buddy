@@ -62,6 +62,8 @@ type connectionResponse struct {
 	InstitutionName string            `json:"institutionName"`
 	Status          string            `json:"status"`
 	AccountCount    int               `json:"accountCount"`
+	LastSyncAt      *string           `json:"lastSyncAt,omitempty"`
+	ErrorCode       string            `json:"errorCode,omitempty"`
 	CreatedAt       string            `json:"createdAt"`
 	Accounts        []accountResponse `json:"accounts"`
 }
@@ -131,6 +133,7 @@ func RegisterRoutes(mux *http.ServeMux, basePath string, db *pgxpool.Pool, cfg c
 	}
 	mux.Handle("GET "+basePath+"/plaid/status", requireAuth(http.HandlerFunc(handler.status)))
 	mux.Handle("POST "+basePath+"/plaid/link-token", requireAuth(http.HandlerFunc(handler.createLinkToken)))
+	mux.Handle("POST "+basePath+"/plaid/update-complete", requireAuth(http.HandlerFunc(handler.completeUpdate)))
 	mux.Handle("POST "+basePath+"/plaid/exchange", requireAuth(http.HandlerFunc(handler.exchange)))
 	mux.Handle("GET "+basePath+"/plaid/accounts", requireAuth(http.HandlerFunc(handler.status)))
 	mux.Handle("POST "+basePath+"/plaid/sync", requireAuth(http.HandlerFunc(handler.sync)))
@@ -187,7 +190,37 @@ func (h *Handler) createLinkToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var request struct {
+		ItemID string `json:"itemId"`
+	}
+	if r.ContentLength != 0 {
+		if err := decodeJSON(w, r, &request); err != nil {
+			respond.JSONBodyError(w, err)
+			return
+		}
+	}
+	accessToken := ""
+	if request.ItemID != "" {
+		var ciphertext string
+		err := h.db.QueryRow(r.Context(), `select access_token_ciphertext from plaid_items where id::text=$1 and user_id=$2 and archived_at is null`, request.ItemID, userID).Scan(&ciphertext)
+		if err != nil {
+			respond.Error(w, 404, "bank_not_found", "Bank connection not found.")
+			return
+		}
+		accessToken, err = decryptToken(h.cfg.PlaidTokenEncryptionKey, ciphertext)
+		if err != nil {
+			respond.Error(w, 500, "bank_unavailable", "Could not open this bank connection.")
+			return
+		}
+	}
+	if request.ItemID == "" && h.cfg.PlaidEnvironment == "production" {
+		if err := h.reserveTrialSlot(r.Context(), userID); err != nil {
+			respond.Error(w, 409, "plaid_trial_limit", err.Error())
+			return
+		}
+	}
 	linkToken, err := client.CreateLinkToken(r.Context(), LinkTokenRequest{
+		AccessToken:        accessToken,
 		ClientName:         h.cfg.PlaidClientName,
 		ClientUserID:       userID,
 		Products:           h.cfg.PlaidProducts,
@@ -247,6 +280,16 @@ func (h *Handler) exchange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Trust account types and IDs returned by Plaid, not mobile Link metadata.
+	accounts, err := client.GetAccountsBalance(r.Context(), exchanged.AccessToken)
+	if err != nil {
+		respond.Error(w, 502, "plaid_accounts_failed", "Could not verify bank accounts.")
+		return
+	}
+	req.Metadata.Accounts = nil
+	for _, a := range accounts.Accounts {
+		req.Metadata.Accounts = append(req.Metadata.Accounts, accountMetadata{ID: a.AccountID, Name: a.Name, Mask: a.Mask, Type: a.Type, Subtype: a.Subtype})
+	}
 	encryptedToken, err := encryptToken(h.cfg.PlaidTokenEncryptionKey, exchanged.AccessToken)
 	if err != nil {
 		respond.Error(w, http.StatusInternalServerError, "plaid_token_encrypt_failed", "Could not secure the Plaid access token.")
@@ -283,8 +326,7 @@ func (h *Handler) exchange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Pull initial transactions and balances in the background of the request.
-	_, _ = SyncUserItems(r.Context(), h.db, h.cfg, userID)
+	// The client requests the initial sync; signed transaction webhooks also retry it.
 
 	respond.JSON(w, http.StatusCreated, exchangeResponse{
 		ItemID:       itemID,
@@ -305,7 +347,7 @@ func (h *Handler) sync(w http.ResponseWriter, r *http.Request) {
 	if err := h.db.QueryRow(
 		r.Context(),
 		`select count(*) from plaid_items
-		  where user_id = $1 and status = 'active' and archived_at is null`,
+		  where user_id = $1 and archived_at is null`,
 		userID,
 	).Scan(&itemCount); err != nil {
 		respond.Error(w, http.StatusInternalServerError, "plaid_sync_failed", "Could not inspect linked bank connections.")
@@ -384,7 +426,7 @@ func (h *Handler) loadConnections(r *http.Request, userID string) ([]connectionR
 	rows, err := h.db.Query(
 		r.Context(),
 		`select pi.id::text, coalesce(pi.institution_id, ''), pi.institution_name,
-		        pi.status, pi.created_at, count(pa.id)::int
+		        pi.status, pi.created_at, count(pa.id)::int, pi.last_sync_at, coalesce(pi.error_code,'')
 		   from plaid_items pi
 		   left join plaid_accounts pa on pa.item_id = pi.id and pa.is_active
 		  where pi.user_id = $1 and pi.archived_at is null
@@ -401,6 +443,7 @@ func (h *Handler) loadConnections(r *http.Request, userID string) ([]connectionR
 	for rows.Next() {
 		var connection connectionResponse
 		var createdAt time.Time
+		var lastSyncAt *time.Time
 		if err := rows.Scan(
 			&connection.ID,
 			&connection.InstitutionID,
@@ -408,10 +451,15 @@ func (h *Handler) loadConnections(r *http.Request, userID string) ([]connectionR
 			&connection.Status,
 			&createdAt,
 			&connection.AccountCount,
+			&lastSyncAt, &connection.ErrorCode,
 		); err != nil {
 			return nil, err
 		}
 		connection.CreatedAt = createdAt.UTC().Format(time.RFC3339)
+		if lastSyncAt != nil {
+			v := lastSyncAt.UTC().Format(time.RFC3339)
+			connection.LastSyncAt = &v
+		}
 		accounts, err := h.loadAccounts(r, userID, connection.ID)
 		if err != nil {
 			return nil, err
@@ -559,4 +607,66 @@ func nilIfEmpty(value string) any {
 		return nil
 	}
 	return strings.TrimSpace(value)
+}
+
+// Update mode keeps the same Item and access token; it must not exchange a new token.
+func (h *Handler) completeUpdate(w http.ResponseWriter, r *http.Request) {
+	userID, _ := auth.UserIDFromContext(r.Context())
+	var req struct {
+		ItemID string `json:"itemId"`
+	}
+	if err := decodeJSON(w, r, &req); err != nil {
+		respond.JSONBodyError(w, err)
+		return
+	}
+	var exists bool
+	err := h.db.QueryRow(r.Context(), `select exists(select 1 from plaid_items where id::text=$1 and user_id=$2 and archived_at is null)`, req.ItemID, userID).Scan(&exists)
+	if err != nil || !exists {
+		respond.Error(w, 404, "bank_not_found", "Bank connection not found.")
+		return
+	}
+	// Only successful server-side sync can clear the error status.
+	h.sync(w, r)
+}
+
+func (h *Handler) reserveTrialSlot(ctx context.Context, userID string) error {
+	tx, err := h.db.Begin(ctx)
+	if err != nil {
+		return errors.New("Bank linking is temporarily unavailable.")
+	}
+	defer tx.Rollback(ctx)
+	if _, err = tx.Exec(ctx, `select pg_advisory_xact_lock(6214701)`); err != nil {
+		return err
+	}
+	var items int
+	err = tx.QueryRow(ctx, `select count(*) from plaid_items where user_id=$1`, userID).Scan(&items)
+	if err != nil {
+		return err
+	}
+	if items > 0 {
+		return errors.New("This beta supports one bank connection per user. Reconnect the existing bank instead.")
+	}
+	var reserved bool
+	err = tx.QueryRow(ctx, `select exists(select 1 from plaid_trial_reservations where user_id=$1)`, userID).Scan(&reserved)
+	if err != nil {
+		return err
+	}
+	if !reserved {
+		var count int
+		err = tx.QueryRow(ctx, `select count(*) from (select user_id from plaid_trial_reservations union select user_id from plaid_items) s`).Scan(&count)
+		if err != nil {
+			return err
+		}
+		limit := h.cfg.PlaidMaxItems
+		if limit <= 0 {
+			limit = 10
+		}
+		if count >= limit {
+			return errors.New("All bank connection places in this beta are reserved.")
+		}
+		if _, err = tx.Exec(ctx, `insert into plaid_trial_reservations(user_id) values($1)`, userID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
 }

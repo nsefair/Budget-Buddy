@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -12,46 +13,50 @@ import (
 )
 
 type Config struct {
-	Addr                    string
-	Env                     string
-	APIBasePath             string
-	DatabaseURL             string
-	AllowedOrigins          []string
-	JWTAccessSecret         string
-	AccessTokenTTL          time.Duration
-	RefreshTokenTTL         time.Duration
-	LogLevel                slog.Level
-	ReadTimeout             time.Duration
-	WriteTimeout            time.Duration
-	IdleTimeout             time.Duration
-	RateLimitPerMinute      int
-	PlaidClientID           string
-	PlaidSecret             string
-	PlaidEnvironment        string
-	PlaidClientName         string
-	PlaidProducts           []string
-	PlaidOptionalProducts   []string
-	PlaidCountryCodes       []string
-	PlaidRedirectURI        string
-	PlaidAndroidPackageName string
-	PlaidWebhookURL         string
-	PlaidTokenEncryptionKey string
-	PlaidTransactionDays    int
-	AppPublicURL            string
-	AuthActionTokenTTL      time.Duration
-	EmailDeliveryMode       string
-	EmailFrom               string
-	SMTPHost                string
-	SMTPPort                int
-	SMTPUsername            string
-	SMTPPassword            string
-	BillingWebhookSecret    string
-	BillingEnvironment      string
-	IOSPremiumMonthlyID     string
-	IOSPremiumAnnualID      string
-	IOSEliteMonthlyID       string
-	IOSEliteAnnualID        string
-	BudsMediaDir            string
+	Addr                     string
+	Env                      string
+	APIBasePath              string
+	DatabaseURL              string
+	AllowedOrigins           []string
+	JWTAccessSecret          string
+	AccessTokenTTL           time.Duration
+	RefreshTokenTTL          time.Duration
+	LogLevel                 slog.Level
+	ReadTimeout              time.Duration
+	WriteTimeout             time.Duration
+	IdleTimeout              time.Duration
+	RateLimitPerMinute       int
+	GlobalRateLimitPerMinute int
+	MaxConcurrentRequests    int
+	TrustedProxyCIDRs        []string
+	PlaidClientID            string
+	PlaidSecret              string
+	PlaidEnvironment         string
+	PlaidClientName          string
+	PlaidProducts            []string
+	PlaidOptionalProducts    []string
+	PlaidCountryCodes        []string
+	PlaidRedirectURI         string
+	PlaidAndroidPackageName  string
+	PlaidWebhookURL          string
+	PlaidTokenEncryptionKey  string
+	PlaidMaxItems            int
+	PlaidTransactionDays     int
+	AppPublicURL             string
+	AuthActionTokenTTL       time.Duration
+	EmailDeliveryMode        string
+	EmailFrom                string
+	SMTPHost                 string
+	SMTPPort                 int
+	SMTPUsername             string
+	SMTPPassword             string
+	BillingWebhookSecret     string
+	BillingEnvironment       string
+	IOSPremiumMonthlyID      string
+	IOSPremiumAnnualID       string
+	IOSEliteMonthlyID        string
+	IOSEliteAnnualID         string
+	BudsMediaDir             string
 }
 
 func Load() Config {
@@ -65,44 +70,53 @@ func Load() Config {
 			"JWT_ACCESS_SECRET",
 			"development_only_budget_buddy_access_secret_change_me",
 		),
-		AccessTokenTTL:          durationEnv("ACCESS_TOKEN_TTL", 15*time.Minute),
-		RefreshTokenTTL:         durationEnv("REFRESH_TOKEN_TTL", 30*24*time.Hour),
-		LogLevel:                logLevel(env("LOG_LEVEL", "info")),
-		ReadTimeout:             durationEnv("READ_TIMEOUT", 5*time.Second),
-		WriteTimeout:            durationEnv("WRITE_TIMEOUT", 10*time.Second),
-		IdleTimeout:             durationEnv("IDLE_TIMEOUT", 60*time.Second),
-		RateLimitPerMinute:      intEnv("RATE_LIMIT_PER_MINUTE", 240),
-		PlaidClientID:           env("PLAID_CLIENT_ID", ""),
-		PlaidSecret:             env("PLAID_SECRET", ""),
-		PlaidEnvironment:        env("PLAID_ENV", "sandbox"),
-		PlaidClientName:         env("PLAID_CLIENT_NAME", "Budget Buddy"),
-		PlaidProducts:           csvEnv("PLAID_PRODUCTS", "transactions"),
-		PlaidOptionalProducts:   csvEnv("PLAID_OPTIONAL_PRODUCTS", ""),
-		PlaidCountryCodes:       csvEnv("PLAID_COUNTRY_CODES", "US"),
-		PlaidRedirectURI:        env("PLAID_REDIRECT_URI", ""),
-		PlaidAndroidPackageName: env("PLAID_ANDROID_PACKAGE_NAME", ""),
-		PlaidWebhookURL:         env("PLAID_WEBHOOK_URL", ""),
-		PlaidTokenEncryptionKey: env("PLAID_TOKEN_ENCRYPTION_KEY", ""),
-		PlaidTransactionDays:    intEnv("PLAID_TRANSACTION_DAYS", 90),
-		AppPublicURL:            env("APP_PUBLIC_URL", "budget-buddy://"),
-		AuthActionTokenTTL:      durationEnv("AUTH_ACTION_TOKEN_TTL", time.Hour),
-		EmailDeliveryMode:       strings.ToLower(env("EMAIL_DELIVERY_MODE", "log")),
-		EmailFrom:               env("EMAIL_FROM", "Budget Buddy <no-reply@budgetbuddy.app>"),
-		SMTPHost:                env("SMTP_HOST", ""),
-		SMTPPort:                intEnv("SMTP_PORT", 587),
-		SMTPUsername:            env("SMTP_USERNAME", ""),
-		SMTPPassword:            env("SMTP_PASSWORD", ""),
-		BillingWebhookSecret:    env("BILLING_WEBHOOK_SECRET", ""),
-		BillingEnvironment:      strings.ToLower(env("BILLING_ENV", "sandbox")),
-		IOSPremiumMonthlyID:     env("IOS_PREMIUM_MONTHLY_PRODUCT_ID", "budget_buddy_premium_monthly"),
-		IOSPremiumAnnualID:      env("IOS_PREMIUM_ANNUAL_PRODUCT_ID", "budget_buddy_premium_annual"),
-		IOSEliteMonthlyID:       env("IOS_ELITE_MONTHLY_PRODUCT_ID", "budget_buddy_elite_monthly"),
-		IOSEliteAnnualID:        env("IOS_ELITE_ANNUAL_PRODUCT_ID", "budget_buddy_elite_annual"),
-		BudsMediaDir:            env("BUDS_MEDIA_DIR", "./data/buds-media"),
+		AccessTokenTTL:           durationEnv("ACCESS_TOKEN_TTL", 15*time.Minute),
+		RefreshTokenTTL:          durationEnv("REFRESH_TOKEN_TTL", 30*24*time.Hour),
+		LogLevel:                 logLevel(env("LOG_LEVEL", "info")),
+		ReadTimeout:              durationEnv("READ_TIMEOUT", 5*time.Second),
+		WriteTimeout:             durationEnv("WRITE_TIMEOUT", 10*time.Second),
+		IdleTimeout:              durationEnv("IDLE_TIMEOUT", 60*time.Second),
+		RateLimitPerMinute:       intEnv("RATE_LIMIT_PER_MINUTE", 240),
+		GlobalRateLimitPerMinute: intEnv("GLOBAL_RATE_LIMIT_PER_MINUTE", 1200),
+		MaxConcurrentRequests:    intEnv("MAX_CONCURRENT_REQUESTS", 16),
+		TrustedProxyCIDRs:        csvEnv("TRUSTED_PROXY_CIDRS", ""),
+		PlaidClientID:            env("PLAID_CLIENT_ID", ""),
+		PlaidSecret:              env("PLAID_SECRET", ""),
+		PlaidEnvironment:         env("PLAID_ENV", "sandbox"),
+		PlaidClientName:          env("PLAID_CLIENT_NAME", "Budget Buddy"),
+		PlaidProducts:            csvEnv("PLAID_PRODUCTS", "transactions"),
+		PlaidOptionalProducts:    csvEnv("PLAID_OPTIONAL_PRODUCTS", ""),
+		PlaidCountryCodes:        csvEnv("PLAID_COUNTRY_CODES", "US"),
+		PlaidRedirectURI:         env("PLAID_REDIRECT_URI", ""),
+		PlaidAndroidPackageName:  env("PLAID_ANDROID_PACKAGE_NAME", ""),
+		PlaidWebhookURL:          env("PLAID_WEBHOOK_URL", ""),
+		PlaidTokenEncryptionKey:  env("PLAID_TOKEN_ENCRYPTION_KEY", ""),
+		PlaidMaxItems:            intEnv("PLAID_MAX_ITEMS", 10),
+		PlaidTransactionDays:     intEnv("PLAID_TRANSACTION_DAYS", 90),
+		AppPublicURL:             env("APP_PUBLIC_URL", "budget-buddy://"),
+		AuthActionTokenTTL:       durationEnv("AUTH_ACTION_TOKEN_TTL", time.Hour),
+		EmailDeliveryMode:        strings.ToLower(env("EMAIL_DELIVERY_MODE", "log")),
+		EmailFrom:                env("EMAIL_FROM", "Budget Buddy <no-reply@budgetbuddy.app>"),
+		SMTPHost:                 env("SMTP_HOST", ""),
+		SMTPPort:                 intEnv("SMTP_PORT", 587),
+		SMTPUsername:             env("SMTP_USERNAME", ""),
+		SMTPPassword:             env("SMTP_PASSWORD", ""),
+		BillingWebhookSecret:     env("BILLING_WEBHOOK_SECRET", ""),
+		BillingEnvironment:       strings.ToLower(env("BILLING_ENV", "sandbox")),
+		IOSPremiumMonthlyID:      env("IOS_PREMIUM_MONTHLY_PRODUCT_ID", "budget_buddy_premium_monthly"),
+		IOSPremiumAnnualID:       env("IOS_PREMIUM_ANNUAL_PRODUCT_ID", "budget_buddy_premium_annual"),
+		IOSEliteMonthlyID:        env("IOS_ELITE_MONTHLY_PRODUCT_ID", "budget_buddy_elite_monthly"),
+		IOSEliteAnnualID:         env("IOS_ELITE_ANNUAL_PRODUCT_ID", "budget_buddy_elite_annual"),
+		BudsMediaDir:             env("BUDS_MEDIA_DIR", "./data/buds-media"),
 	}
 }
 
 func (c Config) Validate() error {
+	for _, cidr := range c.TrustedProxyCIDRs {
+		if _, err := netip.ParsePrefix(cidr); err != nil {
+			return fmt.Errorf("invalid TRUSTED_PROXY_CIDRS entry: %q", cidr)
+		}
+	}
 	if c.Env != "production" {
 		return nil
 	}

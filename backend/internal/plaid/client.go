@@ -21,6 +21,7 @@ type Client struct {
 }
 
 type LinkTokenRequest struct {
+	AccessToken        string
 	ClientName         string
 	ClientUserID       string
 	Products           []string
@@ -128,6 +129,14 @@ func (c *Client) CreateLinkToken(ctx context.Context, req LinkTokenRequest) (Lin
 		payload["android_package_name"] = strings.TrimSpace(req.AndroidPackageName)
 	}
 
+	if req.AccessToken != "" {
+		payload["access_token"] = req.AccessToken
+		delete(payload, "products")
+		delete(payload, "optional_products")
+		delete(payload, "transactions")
+	} else {
+		payload["account_filters"] = map[string]any{"depository": map[string]any{"account_subtypes": []string{"checking"}}, "credit": map[string]any{"account_subtypes": []string{"credit card"}}}
+	}
 	var result LinkTokenResponse
 	if err := c.post(ctx, "/link/token/create", payload, &result); err != nil {
 		return LinkTokenResponse{}, err

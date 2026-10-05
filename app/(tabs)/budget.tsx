@@ -725,12 +725,13 @@ function MonthNavigator({
             >
               <MotiView
                 animate={{
-                  backgroundColor: active ? Colors.gold : Colors.surface,
-                  borderColor: active ? Colors.gold : Colors.border,
                   scale: active ? 1 : 0.97,
                 }}
                 transition={{ type: "timing", duration: 220 }}
-                style={styles.monthChip}
+                style={[styles.monthChip, {
+                  backgroundColor: active ? Colors.gold : Colors.surface,
+                  borderColor: active ? Colors.gold : Colors.border,
+                }]}
               >
                 <Text style={[styles.monthChipText, active && styles.monthChipTextActive]}>
                   {month.shortLabel}
