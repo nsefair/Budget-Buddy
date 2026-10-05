@@ -1,10 +1,11 @@
 import { api } from "@/api/client";
+import { plaidService } from "./plaidService";
 import { ENDPOINTS } from "@/api/endpoints";
 
 export interface MoneyProfile {
   timezone: string;
   startDate: string;
-  sources: { id: string; amountCents: number; periodDays: number; monthly: boolean; nextArrival: string }[];
+  sources: { id: string; amountCents: number; periodDays: number; monthly: boolean; nextArrival: string; lastThreeMonthsCents?: number[] }[];
   bills: { name: string; monthlyCents: number; merchants: string[] }[];
   goalMonthlyCents: number;
 }
@@ -33,9 +34,16 @@ export interface MoneySpending {
 
 // All arithmetic remains on the backend. Never fall back to invented balances.
 export const moneyService = {
+  recalculate: async (syncBank: boolean) => {
+    if (syncBank) {
+      const sync = await plaidService.sync();
+      if (sync.relinkRequired || !sync.synced) throw new Error(sync.message ?? "Bank sync did not finish. Try again.");
+    }
+    return moneyService.today();
+  },
   today: () => api.get<MoneyToday>(ENDPOINTS.MONEY.TODAY),
   profile: () => api.get<{ profile: MoneyProfile; cycle: MoneyCycle }>(ENDPOINTS.MONEY.PROFILE),
-  saveProfile: (profile: MoneyProfile) => api.put<{ profile: MoneyProfile; cycle: MoneyCycle; suggestedGoalCents: number }>(ENDPOINTS.MONEY.PROFILE, profile),
+  saveProfile: (profile: MoneyProfile) => api.put<{ profile: MoneyProfile; cycle: MoneyCycle; suggestedGoalCents: number; today: MoneyToday }>(ENDPOINTS.MONEY.PROFILE, profile),
   spend: (spending: MoneySpending) => api.post<MoneyToday>(ENDPOINTS.MONEY.SPENDING, spending),
   allocateYesterday: (goalId: string) => api.post<{ allocatedCents: number; alreadyAllocated: boolean }>(ENDPOINTS.MONEY.ALLOCATE_YESTERDAY, { goalId }),
 };

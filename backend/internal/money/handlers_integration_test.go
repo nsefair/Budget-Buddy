@@ -1,10 +1,16 @@
 package money
 
 import (
+	"budget-buddy/backend/internal/auth"
+	"budget-buddy/backend/internal/config"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -68,6 +74,42 @@ func TestPersistedBaselineAndMissedPayday(t *testing.T) {
 	if count != 1 {
 		t.Fatal(count)
 	}
+	// Editing income must persist an updated calculation in the same request,
+	// while keeping the original morning baseline and today's spending intact.
+	cfg := config.Config{JWTAccessSecret: "synthetic-test-secret-only", AccessTokenTTL: time.Hour}
+	manager := auth.NewTokenManager(cfg)
+	token, _, e := manager.GenerateAccessToken(auth.User{ID: user, Email: "test@example.com"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	authHandler := auth.NewHandler(auth.NewService(db, cfg, slog.Default()))
+	save := func(amount int64) todayResponse {
+		t.Helper()
+		p.Sources[0].AmountCents = amount
+		req := httptest.NewRequest("PUT", "/money/profile", bytes.NewBufferString(marshal(p)))
+		req.Header.Set("Authorization", "Bearer "+token)
+		rec := httptest.NewRecorder()
+		authHandler.RequireAuth(http.HandlerFunc(h.saveProfile)).ServeHTTP(rec, req)
+		if rec.Code != 200 {
+			t.Fatalf("save: %d %s", rec.Code, rec.Body.String())
+		}
+		var payload struct {
+			Today todayResponse `json:"today"`
+		}
+		if e := json.Unmarshal(rec.Body.Bytes(), &payload); e != nil {
+			t.Fatal(e)
+		}
+		return payload.Today
+	}
+	edited := save(280000)
+	if edited.Result.MorningCents != first.Result.MorningCents || edited.Result.RemainingCents != 19300 || edited.Result.Inputs.Cycle.IncomeCents != 280000 {
+		t.Fatal(edited.Result)
+	}
+	decreased := save(1000)
+	if decreased.Result.MorningCents != first.Result.MorningCents || decreased.Result.RemainingCents != 0 {
+		t.Fatal(decreased.Result)
+	}
+	save(140000)
 	// A snapshot stores the exact original inputs as well as the latest recomputation.
 	var raw json.RawMessage
 	db.QueryRow(ctx, `select morning_inputs from money_daily_snapshots where user_id=$1`, user).Scan(&raw)

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -56,15 +57,17 @@ type MonthOption struct {
 }
 
 type Transaction struct {
-	ID          string  `json:"id"`
-	Merchant    string  `json:"merchant"`
-	Category    string  `json:"category"`
-	CategoryID  string  `json:"categoryId"`
-	Amount      float64 `json:"amount"`
-	Date        string  `json:"date"`
-	IsRecurring bool    `json:"isRecurring"`
-	IsManual    bool    `json:"isManual"`
-	IsFlagged   bool    `json:"isFlagged"`
+	ID                   string  `json:"id"`
+	Merchant             string  `json:"merchant"`
+	Category             string  `json:"category"`
+	CategoryID           string  `json:"categoryId"`
+	Amount               float64 `json:"amount"`
+	Date                 string  `json:"date"`
+	IsRecurring          bool    `json:"isRecurring"`
+	IsManual             bool    `json:"isManual"`
+	IsFlagged            bool    `json:"isFlagged"`
+	IsPending            bool    `json:"isPending"`
+	CountsTowardSpending bool    `json:"countsTowardSpending"`
 }
 
 type Account struct {
@@ -359,8 +362,8 @@ func validCategoryID(categoryID string) bool {
 func (h *Handler) transactions(w http.ResponseWriter, r *http.Request) {
 	userID, _ := auth.UserIDFromContext(r.Context())
 	month := monthParam(r)
-	limit := queryInt(r, "limit", 20)
-	page := queryInt(r, "page", 1)
+	limit := min(200, max(1, queryInt(r, "limit", 20)))
+	page := min(100000, queryInt(r, "page", 1))
 	if page < 1 {
 		page = 1
 	}
@@ -520,51 +523,25 @@ func (h *Handler) availableMonths(r *http.Request, userID string) ([]MonthOption
 	if err != nil {
 		return nil, err
 	}
-	totalBudget := totalBudgetLimit(limits)
-
-	rows, err := h.db.Query(
-		r.Context(),
-		`select to_char(date_trunc('month', date), 'YYYY-MM') as month_id,
-		        sum(case when amount_cents > 0 then amount_cents else 0 end)::bigint as spent_cents
-		   from plaid_transactions
-		  where user_id = $1 and pending = false
-		  group by 1
-		  order by 1 asc`,
-		userID,
-	)
+	entries, err := loadBankTransactions(r.Context(), h.db, userID, "")
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	currentMonth := time.Now().UTC().Format("2006-01")
+	byMonth := map[string][]bankTransaction{time.Now().UTC().Format("2006-01"): {}}
+	for _, entry := range entries {
+		key := entry.Date[:7]
+		byMonth[key] = append(byMonth[key], entry)
+	}
 	months := []MonthOption{}
-	seenCurrent := false
-
-	for rows.Next() {
-		var monthID string
-		var spentCents int64
-		if err := rows.Scan(&monthID, &spentCents); err != nil {
-			return nil, err
+	for key, entries := range byMonth {
+		spending, _ := bankTotals(entries)
+		var total int64
+		for _, amount := range spending {
+			total += amount
 		}
-		months = append(months, MonthOption{
-			ID:          monthID,
-			Label:       monthLabel(monthID),
-			ShortLabel:  shortMonthLabel(monthID),
-			TotalSpent:  centsToDollars(spentCents),
-			TotalBudget: totalBudget,
-			IsCurrent:   monthID == currentMonth,
-		})
-		if monthID == currentMonth {
-			seenCurrent = true
-		}
+		months = append(months, MonthOption{ID: key, Label: monthLabel(key), ShortLabel: shortMonthLabel(key), TotalSpent: centsToDollars(total), TotalBudget: totalBudgetLimit(limits), IsCurrent: key == time.Now().UTC().Format("2006-01")})
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	if !seenCurrent {
-		months = append(months, currentMonthOption(0, totalBudget))
-	}
+	sort.Slice(months, func(i, j int) bool { return months[i].ID < months[j].ID })
 	return months, nil
 }
 
@@ -637,89 +614,35 @@ func (h *Handler) buildOverview(r *http.Request, userID, month string) (Overview
 }
 
 func (h *Handler) categorySpend(r *http.Request, userID, month string) (map[string]int64, int64, error) {
-	rows, err := h.db.Query(
-		r.Context(),
-		`select amount_cents,
-		        coalesce(personal_finance_category_primary, ''),
-		        coalesce(personal_finance_category_detailed, ''),
-		        category
-		   from plaid_transactions
-		  where user_id = $1
-		    and pending = false
-		    and ($2 = '' or to_char(date, 'YYYY-MM') = $2)`,
-		userID,
-		month,
-	)
+	entries, err := loadBankTransactions(r.Context(), h.db, userID, month)
 	if err != nil {
 		return nil, 0, err
 	}
-	defer rows.Close()
-
-	spendByCategory := map[string]int64{}
-	var incomeCents int64
-	for rows.Next() {
-		var amountCents int64
-		var pfcPrimary, pfcDetailed string
-		var legacyCategory []string
-		if err := rows.Scan(&amountCents, &pfcPrimary, &pfcDetailed, &legacyCategory); err != nil {
-			return nil, 0, err
-		}
-		if isDetectedIncome(amountCents, pfcPrimary, pfcDetailed, legacyCategory) {
-			incomeCents += -amountCents
-			continue
-		}
-		if amountCents <= 0 || isTransferCategory(pfcPrimary, pfcDetailed, legacyCategory) {
-			continue
-		}
-		categoryID := categoryForTransaction(pfcPrimary, legacyCategory)
-		spendByCategory[categoryID] += amountCents
-	}
-	return spendByCategory, incomeCents, rows.Err()
+	spending, income := bankTotals(entries)
+	return spending, income, nil
 }
 
 func (h *Handler) loadTransactions(r *http.Request, userID, month string, limit, offset int) ([]Transaction, error) {
-	rows, err := h.db.Query(
-		r.Context(),
-		`select id::text,
-		        coalesce(nullif(merchant_name, ''), name) as merchant,
-		        coalesce(personal_finance_category_primary, ''),
-		        category,
-		        amount_cents,
-		        date::text
-		   from plaid_transactions
-		  where user_id = $1
-		    and pending = false
-		    and amount_cents > 0
-		    and ($2 = '' or to_char(date, 'YYYY-MM') = $2)
-		  order by date desc, created_at desc
-		  limit $3 offset $4`,
-		userID,
-		month,
-		limit,
-		offset,
-	)
+	entries, err := loadBankTransactions(r.Context(), h.db, userID, month)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
+	category := strings.TrimSpace(r.URL.Query().Get("category"))
 	transactions := []Transaction{}
-	for rows.Next() {
-		var tx Transaction
-		var pfcPrimary string
-		var legacyCategory []string
-		var amountCents int64
-		var date string
-		if err := rows.Scan(&tx.ID, &tx.Merchant, &pfcPrimary, &legacyCategory, &amountCents, &date); err != nil {
-			return nil, err
+	for _, entry := range entries {
+		if category != "" && (entry.CategoryID != category || !entry.spending) {
+			continue
 		}
-		tx.CategoryID = categoryForTransaction(pfcPrimary, legacyCategory)
-		tx.Category = categoryNameByID(tx.CategoryID)
-		tx.Amount = centsToDollars(amountCents)
-		tx.Date = fmt.Sprintf("%sT12:00:00Z", strings.TrimSpace(date))
-		transactions = append(transactions, tx)
+		if offset > 0 {
+			offset--
+			continue
+		}
+		transactions = append(transactions, entry.Transaction)
+		if len(transactions) >= limit {
+			break
+		}
 	}
-	return transactions, rows.Err()
+	return transactions, nil
 }
 
 func (h *Handler) loadAccounts(r *http.Request, userID string) ([]Account, error) {

@@ -96,11 +96,18 @@ func (h *Handler) saveProfile(w http.ResponseWriter, r *http.Request) {
 		fail(w, e)
 		return
 	}
+	// Recompute from the same committed plan and ledger; calculate preserves the
+	// immutable morning baseline and immediately applies any lower available funds.
+	updated, e := h.calculate(r.Context(), tx, user)
+	if e != nil {
+		fail(w, e)
+		return
+	}
 	if e = tx.Commit(r.Context()); e != nil {
 		fail(w, e)
 		return
 	}
-	respond.JSON(w, 200, map[string]any{"profile": p, "cycle": c, "suggestedGoalCents": SuggestGoal(c.IncomeCents, c.BillsCents, c.Days)})
+	respond.JSON(w, 200, map[string]any{"profile": p, "cycle": c, "today": updated, "suggestedGoalCents": SuggestGoal(c.IncomeCents, c.BillsCents, c.Days)})
 }
 func (h *Handler) getProfile(w http.ResponseWriter, r *http.Request) {
 	user, _ := auth.UserIDFromContext(r.Context())
@@ -221,7 +228,7 @@ func classify(primary, detailed, merchant string, amount int64) string {
 	if strings.Contains(d, "CREDIT_CARD_PAYMENT") {
 		return "card_payment"
 	}
-	if strings.Contains(d, "ACCOUNT_TRANSFER") || strings.Contains(d, "SAVINGS") {
+	if strings.Contains(d, "ACCOUNT_TRANSFER") || strings.Contains(d, "SAVINGS") || strings.Contains(d, "INVESTMENT_AND_RETIREMENT") {
 		return "own_transfer"
 	}
 	if p == "INCOME" {
@@ -231,18 +238,18 @@ func classify(primary, detailed, merchant string, amount int64) string {
 		if strings.Contains(name, "venmo") || strings.Contains(name, "zelle") {
 			return "reimbursement"
 		}
-		if p != "TRANSFER_IN" && p != "LOAN_DISBURSEMENTS" && p != "BANK_FEES" {
+		if p != "" && p != "OTHER" && p != "TRANSFER_IN" && p != "LOAN_DISBURSEMENTS" && p != "BANK_FEES" {
 			return "refund"
 		}
 		return "income"
 	}
-	if p == "TRANSFER_OUT" || p == "LOAN_PAYMENTS" {
+	if p == "LOAN_PAYMENTS" {
 		return "own_transfer"
 	}
 	return "purchase"
 }
 func loadLedger(ctx context.Context, tx pgx.Tx, user, start, end string) ([]Transaction, error) {
-	rows, e := tx.Query(ctx, `select pt.plaid_transaction_id,coalesce(pt.authorized_date,pt.date)::text,pt.amount_cents,coalesce(pt.merchant_name,pt.name),coalesce(pa.type,''),coalesce(pa.subtype,''),coalesce(pt.iso_currency_code,''),coalesce(pt.personal_finance_category_primary,''),coalesce(pt.personal_finance_category_detailed,''),pt.pending,coalesce(pt.pending_transaction_id,'') from plaid_transactions pt join plaid_accounts pa on pa.id=pt.account_id and pa.user_id=pt.user_id where pt.user_id=$1 and pa.is_active and coalesce(pt.authorized_date,pt.date)>=$2::date-2 and coalesce(pt.authorized_date,pt.date)<=$3::date+2`, user, start, end)
+	rows, e := tx.Query(ctx, `select pt.plaid_transaction_id,coalesce(pt.authorized_date,pt.date)::text,pt.amount_cents,coalesce(nullif(pt.merchant_name,''),pt.name),coalesce(pa.type,''),coalesce(pa.subtype,''),coalesce(pt.iso_currency_code,''),coalesce(pt.personal_finance_category_primary,''),coalesce(pt.personal_finance_category_detailed,''),pt.pending,coalesce(pt.pending_transaction_id,'') from plaid_transactions pt join plaid_accounts pa on pa.id=pt.account_id and pa.user_id=pt.user_id join plaid_items pi on pi.id=pt.item_id and pi.user_id=pt.user_id where pt.user_id=$1 and pa.is_active and pi.archived_at is null and coalesce(pt.authorized_date,pt.date)>=$2::date-2 and coalesce(pt.authorized_date,pt.date)<=$3::date+2`, user, start, end)
 	if e != nil {
 		return nil, e
 	}

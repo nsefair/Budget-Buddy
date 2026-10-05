@@ -171,3 +171,21 @@ func TestValidation(t *testing.T) {
 		t.Fatal("negative income")
 	}
 }
+
+func TestTransferClassification(t *testing.T) {
+	for _, tt := range []struct {
+		primary, detailed, merchant string
+		cents                       int64
+		want                        string
+	}{
+		{"TRANSFER_OUT", "TRANSFER_OUT_OTHER_TRANSFER_OUT", "Zelle", 5000, "purchase"},
+		{"TRANSFER_OUT", "TRANSFER_OUT_ACCOUNT_TRANSFER", "Savings", 5000, "own_transfer"},
+		{"LOAN_PAYMENTS", "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT", "Card", 5000, "card_payment"},
+		{"INCOME", "INCOME_WAGES", "Employer", -5000, "income"},
+		{"", "", "Unknown deposit", -5000, "income"},
+	} {
+		if got := classify(tt.primary, tt.detailed, tt.merchant, tt.cents); got != tt.want {
+			t.Fatalf("%+v: %s", tt, got)
+		}
+	}
+}

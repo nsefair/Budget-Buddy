@@ -9,11 +9,11 @@ type BillDraft = { name: string; amount: string };
 const sourceNames = ["Job", "Parents", "Financial aid", "Other"];
 const cadences = ["weekly", "biweekly", "monthly"] as const;
 
-export function MoneySetup({ onSaved }: { onSaved: () => Promise<unknown> }) {
+export function MoneySetup({ onSaved, initialProfile, onCancel }: { onSaved: () => Promise<unknown>; initialProfile?: MoneyProfile; onCancel?: () => void }) {
   const [step, setStep] = useState(0);
-  const [sources, setSources] = useState<SourceDraft[]>([{ id: "income-1", label: "Job", amount: "", cadence: "biweekly", arrival: "" }]);
-  const [bills, setBills] = useState<BillDraft[]>([]);
-  const [goal, setGoal] = useState("0");
+  const [sources, setSources] = useState<SourceDraft[]>(() => initialProfile?.sources.map(source => ({ id: source.id, label: "Other", amount: String(source.amountCents / 100), cadence: source.monthly ? "monthly" : source.periodDays === 7 ? "weekly" : "biweekly", arrival: source.nextArrival })) ?? [{ id: "income-1", label: "Job", amount: "", cadence: "biweekly", arrival: "" }]);
+  const [bills, setBills] = useState<BillDraft[]>(() => initialProfile?.bills.map(bill => ({ name: bill.name, amount: String(bill.monthlyCents / 100) })) ?? []);
+  const [goal, setGoal] = useState(String((initialProfile?.goalMonthlyCents ?? 0) / 100));
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const busy = useRef(false);
@@ -36,14 +36,15 @@ export function MoneySetup({ onSaved }: { onSaved: () => Promise<unknown> }) {
     if (goalCents === null) { setError("Enter a monthly goal amount. Zero is fine."); return; }
     busy.current = true; setSaving(true);
     const profile: MoneyProfile = {
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      startDate: localDate(),
+      timezone: initialProfile?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+      startDate: initialProfile?.startDate ?? localDate(),
       sources: sources.map(source => ({
+        ...initialProfile?.sources.find(saved => saved.id === source.id),
         id: source.id, amountCents: dollarsToCents(source.amount)!,
         periodDays: source.cadence === "weekly" ? 7 : source.cadence === "biweekly" ? 14 : 0,
         monthly: source.cadence === "monthly", nextArrival: source.arrival.trim(),
       })),
-      bills: bills.map(bill => ({ name: bill.name.trim(), monthlyCents: dollarsToCents(bill.amount)!, merchants: [bill.name.trim()] })),
+      bills: bills.map(bill => ({ name: bill.name.trim(), monthlyCents: dollarsToCents(bill.amount)!, merchants: initialProfile?.bills.find(saved => saved.name === bill.name.trim())?.merchants ?? [bill.name.trim()] })),
       goalMonthlyCents: goalCents,
     };
     try { await moneyService.saveProfile(profile); await onSaved(); }
@@ -54,7 +55,7 @@ export function MoneySetup({ onSaved }: { onSaved: () => Promise<unknown> }) {
   return <View style={styles.panel}>
     <Text style={styles.eyebrow}>YOUR DAILY NUMBER · {step + 1} OF 4</Text>
     <Text style={styles.title}>{["Where does your money come from?", "When does it arrive next?", "What are your fixed bills?", "What can you set aside?"][step]}</Text>
-    <Text style={styles.body}>A bank connection is optional. Start with what you know.</Text>
+    <Text style={styles.body}>{initialProfile ? "Update your income and plan. Today’s morning allowance stays fixed; your remaining money and future days use the updated plan." : "A bank connection is optional. Start with what you know."}</Text>
     {step === 0 && sources.map((source, index) => <View key={source.id} style={styles.group}>
       <Text style={styles.label}>Income {index + 1}</Text>
       <View style={styles.choices}>{sourceNames.map(name => <Choice key={name} label={name} selected={source.label === name} onPress={() => patchSource(index, { label: name })} />)}</View>
@@ -79,7 +80,8 @@ export function MoneySetup({ onSaved }: { onSaved: () => Promise<unknown> }) {
       <Text style={styles.body}>Zero is fine. This reserves part of your plan; it does not move money or add a contribution to a goal. A separate 10% income buffer is always kept aside.</Text>
     </>}
     {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-    <Pressable accessibilityRole="button" disabled={saving} style={[styles.button, saving && { opacity: 0.5 }]} onPress={next}><Text style={styles.buttonText}>{saving ? "Saving…" : step === 3 ? "See my number" : "Continue"}</Text></Pressable>
+    <Pressable accessibilityRole="button" disabled={saving} style={[styles.button, saving && { opacity: 0.5 }]} onPress={next}><Text style={styles.buttonText}>{saving ? "Saving…" : step === 3 ? (initialProfile ? "Save and recalculate" : "See my number") : "Continue"}</Text></Pressable>
+    {onCancel && <TextButton disabled={saving} label="Cancel changes" onPress={onCancel} />}
     {step > 0 && <TextButton disabled={saving} label="Back" onPress={() => { setError(""); setStep(step - 1); }} />}
   </View>;
 }

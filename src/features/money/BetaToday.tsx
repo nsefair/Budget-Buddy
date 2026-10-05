@@ -8,7 +8,7 @@ import Svg, { Circle } from "react-native-svg";
 import { Colors } from "@/constants/colors";
 import { TAB_BAR_HEIGHT } from "@/constants/tokens";
 import { useUser } from "@/hooks/useAuth";
-import { moneyService, type MoneySpending, type MoneyToday } from "@/services/moneyService";
+import { moneyService, type MoneySpending, type MoneyToday, type MoneyProfile } from "@/services/moneyService";
 import { MoneySetup } from "./MoneySetup";
 import { dollarsToCents, money } from "./input";
 
@@ -37,6 +37,29 @@ export function BetaToday() {
   const [spendError, setSpendError] = useState("");
   const pendingSpend = useRef<MoneySpending | null>(null);
   const busy = useRef(false);
+  const refreshBusy = useRef(false);
+  const [recalculating, setRecalculating] = useState(false);
+  const [actionMessage, setActionMessage] = useState("");
+  const [editProfile, setEditProfile] = useState<MoneyProfile | null>(null);
+  const [loadingPlan, setLoadingPlan] = useState(false);
+  const recalculate = async () => {
+    if (refreshBusy.current) return;
+    refreshBusy.current = true; setRecalculating(true); setActionMessage("");
+    try {
+      const updated = await moneyService.recalculate(query.data?.bankState !== "manual");
+      await client.cancelQueries({ queryKey });
+      client.setQueryData(queryKey, updated);
+      await client.invalidateQueries({ queryKey: ["budget"] });
+      setActionMessage("Recalculated from your latest spending. Your morning allowance stays fixed.");
+    } catch (error) { setActionMessage(error instanceof Error ? error.message : "Couldn’t recalculate. Please try again."); }
+    finally { refreshBusy.current = false; setRecalculating(false); }
+  };
+  const editPlan = async () => {
+    setLoadingPlan(true); setActionMessage("");
+    try { setEditProfile((await moneyService.profile()).profile); }
+    catch { setActionMessage("Couldn’t load your plan. Please try again."); }
+    finally { setLoadingPlan(false); }
+  };
 
   // Refresh on foreground, tab return, and local midnight while Today is open.
   useFocusEffect(useCallback(() => {
@@ -74,7 +97,9 @@ export function BetaToday() {
       {query.isPending && <ActivityIndicator accessibilityLabel="Calculating today's number" color={Colors.navy} />}
       {setupRequired(query.error) && <MoneySetup onSaved={async () => { await refetch(); }} />}
       {!!query.error && !setupRequired(query.error) && <View style={styles.card}><Text accessibilityRole="alert" style={styles.body}>{data ? "This is your last loaded number. Couldn't refresh—new spending may be missing." : "Couldn't load your number. Check your connection and try again."}</Text><Button title="Try again" onPress={() => void refetch()} /></View>}
-      {data && result && <>
+      {!!actionMessage && <Text accessibilityRole="alert" style={styles.body}>{actionMessage}</Text>}
+      {editProfile && <MoneySetup initialProfile={editProfile} onCancel={() => setEditProfile(null)} onSaved={async () => { setEditProfile(null); await refetch(); }} />}
+      {data && result && !editProfile && <>
         <Text style={styles.freshness}>{freshness(data)}</Text>
         {data.bankState === "reconnect_required" && <Button title="Reconnect bank" secondary onPress={() => router.push("/(tabs)/budget")} />}
         <Pressable accessibilityRole="button" accessibilityLabel={`${money(result.remainingCents)} remaining today. Show calculation.`} onPress={() => setShowMath(value => !value)} style={styles.hero}>
@@ -85,7 +110,9 @@ export function BetaToday() {
           <View pointerEvents="none" style={styles.heroText}><Text style={styles.heroLabel}>SAFE TO SPEND TODAY</Text><Text style={styles.amount}>${result.displayDollars}</Text><Text style={styles.label}>left today</Text><Text style={styles.morning}>of {money(result.morningCents)} this morning</Text></View>
         </Pressable>
         <Text style={styles.cycle}>{result.waitingForIncome ? "Still waiting on your next income." : `${result.daysLeft} ${result.daysLeft === 1 ? "day" : "days"} until your next income · ${result.inputs.cycle.end}`}</Text>
-        <Button title="I spent" onPress={() => setShowSpending(true)} />
+        <Button title={recalculating ? "Syncing and recalculating…" : "Recalculate safe to spend"} secondary disabled={recalculating} onPress={() => void recalculate()} />
+        <Button title={loadingPlan ? "Loading plan…" : "Edit income & plan"} secondary disabled={loadingPlan || recalculating} onPress={() => void editPlan()} />
+        <Button title="I spent" disabled={recalculating || loadingPlan} onPress={() => setShowSpending(true)} />
         <Button title={showMath ? "Hide calculation" : `Why $${result.displayDollars}?`} secondary onPress={() => setShowMath(value => !value)} />
         {showMath && <View style={styles.card}>
           <Text style={styles.cardTitle}>Your plan, in numbers</Text>
