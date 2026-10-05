@@ -101,6 +101,25 @@ or database dumps. Synthetic tests use no real bank Items.
 
 ## Verification and remaining work
 
+October 5 checks passed: TypeScript, 21/21 Expo Doctor checks, iOS JavaScript
+bundle export, money-input tests, AWS guard tests, Go race tests with the local
+PostgreSQL integration suite, vet, and diff checks. `govulncheck` found no called
+vulnerabilities (three advisories remain in required modules). Npm audit reports
+30 advisories: 19 high, 11 moderate, zero critical.
+
+The API-only update is deployed to the existing host as `beta-20261005-1`, digest
+`sha256:8e4838a312adf03948f0128273571249b64adb97170fca8f9cab54c7c3c8b9a4`.
+HTTPS smoke checks passed for auth, persisted income edits, fixed morning
+snapshots, manual-entry retries, goal allocation, received bank income, pending
+spending, and Uncategorized/category drill-downs. Only disposable synthetic
+records were used and removed. No real Plaid Item or new cloud service was
+created; database and proxy containers were not replaced. The previous image
+configuration is retained on the host for rollback.
+
+These checks establish API behavior and a successful mobile bundle, not a
+fresh physical-iPhone UI acceptance run. The development client needs the latest
+Metro code for the new buttons.
+
 Local regression coverage exercises payroll visibility, refunds, Zelle fallback,
 pending replacement, category pagination, month/card agreement, cross-user
 isolation, archived Items, account import/repair, and fixed morning snapshots
