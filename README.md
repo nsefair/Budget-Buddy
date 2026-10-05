@@ -1,5 +1,9 @@
 # Budget Buddy
 
+A public portfolio of an app in active development. The code is public; user
+accounts, bank connections, and financial records are private. This is not a
+public launch or an invitation to connect a bank.
+
 Budget Buddy is a portfolio-stage personal-finance application for turning
 account activity, budgets, and goals into a focused daily action. The mobile
 client uses Expo and React Native; the API is written in Go and persists data

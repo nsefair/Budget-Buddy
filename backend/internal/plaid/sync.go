@@ -147,6 +147,11 @@ func syncItem(ctx context.Context, db *pgxpool.Pool, client *Client, userID, ite
 	if err != nil {
 		return result, err
 	}
+	// Refresh authorized accounts in the same transaction before linking entries.
+	// /accounts/get uses cached balances; this does not request paid real-time balances.
+	if err = refreshAccountBalances(ctx, tx, client, userID, itemID, accessToken); err != nil {
+		return result, err
+	}
 	for _, entry := range append(response.Added, response.Modified...) {
 		if err = upsertTransaction(ctx, tx, userID, itemID, entry); err != nil {
 			return result, err
@@ -176,8 +181,6 @@ func syncItem(ctx context.Context, db *pgxpool.Pool, client *Client, userID, ite
 	result.AddedCount = len(response.Added)
 	result.ModifiedCount = len(response.Modified)
 	result.RemovedCount = len(response.Removed)
-	// Cached balances are sufficient here; do not charge for a real-time balance pull on each webhook.
-	_ = refreshAccountBalances(ctx, db, client, userID, itemID, accessToken)
 	return result, nil
 }
 
@@ -187,7 +190,7 @@ func upsertTransaction(
 	userID, itemID string,
 	transaction SyncedTransaction,
 ) error {
-	accountID, err := lookupAccountID(ctx, tx, userID, transaction.AccountID)
+	accountID, err := lookupAccountID(ctx, tx, userID, itemID, transaction.AccountID)
 	if err != nil {
 		return err
 	}
@@ -263,18 +266,19 @@ func upsertTransaction(
 	return err
 }
 
-func lookupAccountID(ctx context.Context, tx pgx.Tx, userID, plaidAccountID string) (any, error) {
+func lookupAccountID(ctx context.Context, tx pgx.Tx, userID, itemID, plaidAccountID string) (any, error) {
 	var accountID string
 	err := tx.QueryRow(
 		ctx,
 		`select id::text
 		   from plaid_accounts
-		  where user_id = $1 and plaid_account_id = $2`,
+		  where user_id = $1 and plaid_account_id = $2 and item_id = $3 and is_active`,
 		userID,
 		plaidAccountID,
+		itemID,
 	).Scan(&accountID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
+		return nil, errors.New("transaction account is not authorized for this bank item")
 	}
 	if err != nil {
 		return nil, err
@@ -282,40 +286,40 @@ func lookupAccountID(ctx context.Context, tx pgx.Tx, userID, plaidAccountID stri
 	return accountID, nil
 }
 
-func refreshAccountBalances(
-	ctx context.Context,
-	db *pgxpool.Pool,
-	client *Client,
-	userID, itemID, accessToken string,
-) error {
+func refreshAccountBalances(ctx context.Context, tx pgx.Tx, client *Client, userID, itemID, accessToken string) error {
 	response, err := client.GetAccountsBalance(ctx, accessToken)
 	if err != nil {
 		return err
 	}
-
+	ids := []string{}
 	for _, account := range response.Accounts {
-		currentCents := balanceToCents(account.Balances.Current)
-		availableCents := balanceToCents(account.Balances.Available)
-
-		if _, err := db.Exec(
-			ctx,
-			`update plaid_accounts
-			    set current_balance_cents = $4,
-			        available_balance_cents = $5,
-			        iso_currency_code = coalesce(nullif($6, ''), iso_currency_code),
-			        updated_at = now()
-			  where user_id = $1 and item_id = $2 and plaid_account_id = $3`,
-			userID,
-			itemID,
-			account.AccountID,
-			currentCents,
-			availableCents,
-			strings.TrimSpace(account.Balances.IsoCurrencyCode),
-		); err != nil {
+		if account.AccountID == "" {
+			return errors.New("bank account is missing its identifier")
+		}
+		ids = append(ids, account.AccountID)
+		tag, err := tx.Exec(ctx, `insert into plaid_accounts(user_id,item_id,plaid_account_id,name,mask,type,subtype,current_balance_cents,available_balance_cents,iso_currency_code,is_active)
+   values($1,$2,$3,$4,$5,$6,$7,$8,$9,nullif($10,''),true)
+   on conflict(plaid_account_id) do update set name=excluded.name,mask=excluded.mask,type=excluded.type,subtype=excluded.subtype,
+   current_balance_cents=excluded.current_balance_cents,available_balance_cents=excluded.available_balance_cents,
+   iso_currency_code=excluded.iso_currency_code,is_active=true,updated_at=now()
+   where plaid_accounts.user_id=excluded.user_id and plaid_accounts.item_id=excluded.item_id`,
+			userID, itemID, account.AccountID, account.Name, account.Mask, account.Type, account.Subtype, balanceToCents(account.Balances.Current), balanceToCents(account.Balances.Available), account.Balances.IsoCurrencyCode)
+		if err != nil {
 			return err
 		}
+		if tag.RowsAffected() != 1 {
+			return errors.New("bank account belongs to another item")
+		}
 	}
-	return nil
+	if _, err = tx.Exec(ctx, `update plaid_accounts set is_active=false where user_id=$1 and item_id=$2 and not(plaid_account_id=any($3::text[]))`, userID, itemID, ids); err != nil {
+		return err
+	}
+	// Repair earlier imports whose account was unknown when they first arrived.
+	_, err = tx.Exec(ctx, `update plaid_transactions pt set account_id=pa.id from plaid_accounts pa
+  where pt.user_id=$1 and pt.item_id=$2 and pt.account_id is null
+  and pa.user_id=pt.user_id and pa.item_id=pt.item_id and pa.is_active
+  and pa.plaid_account_id=pt.raw->>'account_id'`, userID, itemID)
+	return err
 }
 
 func balanceToCents(value *float64) any {

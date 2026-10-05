@@ -34,6 +34,12 @@ jobs:
       - name: Type-check
         run: npm run typecheck
 
+      - name: Money input tests
+        run: node --experimental-strip-types --test tests/money-inputs.test.mjs
+
+      - name: AWS guard tests
+        run: python3 -m unittest discover -s infra/aws -p 'test_*.py'
+
       - name: Validate Expo dependencies
         run: npx expo-doctor
 
@@ -44,6 +50,20 @@ jobs:
     name: Go checks
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: budget_buddy_test
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test -d budget_buddy_test"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://test:test@localhost:5432/budget_buddy_test?sslmode=disable
     defaults:
       run:
         working-directory: backend
@@ -57,7 +77,13 @@ jobs:
           go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
 
-      - name: Unit tests
+      - name: Apply test database migrations
+        run: >-
+          docker run --rm --network host
+          -v "$GITHUB_WORKSPACE/backend/migrations:/migrations:ro"
+          migrate/migrate:v4.17.1 -path=/migrations -database="$TEST_DATABASE_URL" up
+
+      - name: Unit and database integration tests
         run: go test ./...
 
       - name: Race detector

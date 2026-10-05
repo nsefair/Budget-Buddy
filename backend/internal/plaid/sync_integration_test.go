@@ -38,13 +38,13 @@ func TestSyncAtomicRollbackAndRetry(t *testing.T) {
 	fail.Store(true)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/accounts/get" {
-			json.NewEncoder(w).Encode(map[string]any{"accounts": []any{}})
+			json.NewEncoder(w).Encode(AccountsBalanceResponse{Accounts: []AccountBalance{{AccountID: "account-" + user, Type: "depository", Subtype: "checking", Name: "Test checking", Balances: Balances{IsoCurrencyCode: "USD"}}}})
 			return
 		}
 		var req map[string]any
 		json.NewDecoder(r.Body).Decode(&req)
 		if req["cursor"] == "original" {
-			json.NewEncoder(w).Encode(SyncTransactionsResponse{Added: []SyncedTransaction{{TransactionID: "purchase-" + user, Date: "2026-10-03", Name: "Shop", Amount: 10, Pending: true}}, HasMore: true, NextCursor: "next"})
+			json.NewEncoder(w).Encode(SyncTransactionsResponse{Added: []SyncedTransaction{{TransactionID: "purchase-" + user, AccountID: "account-" + user, IsoCurrencyCode: "USD", Date: "2026-10-03", Name: "Shop", Amount: 10, Pending: true}}, HasMore: true, NextCursor: "next"})
 			return
 		}
 		if fail.Load() {
@@ -75,4 +75,20 @@ func TestSyncAtomicRollbackAndRetry(t *testing.T) {
 	if cursor != "done" {
 		t.Fatal(cursor)
 	}
+	var linked int
+	if e = db.QueryRow(ctx, `select count(*) from plaid_transactions pt join plaid_accounts pa on pa.id=pt.account_id where pt.user_id=$1 and pa.is_active and pa.type='depository' and pa.subtype='checking'`, user).Scan(&linked); e != nil || linked != 1 {
+		t.Fatal("synced transaction did not link to its account", e, linked)
+	}
+	// Existing orphaned rows are repaired even when a later sync has no new page.
+	_, e = db.Exec(ctx, `update plaid_transactions set account_id=null where user_id=$1`, user)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = syncItem(ctx, db, client, user, item, "token", ""); e != nil {
+		t.Fatal(e)
+	}
+	if e = db.QueryRow(ctx, `select count(*) from plaid_transactions where user_id=$1 and account_id is not null`, user).Scan(&linked); e != nil || linked != 1 {
+		t.Fatal("orphan repair failed", e, linked)
+	}
+
 }
