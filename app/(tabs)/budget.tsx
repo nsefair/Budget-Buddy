@@ -178,11 +178,13 @@ export default function BudgetScreen() {
     } finally { if (generation === loadGeneration.current) setLoading(false); }
   }, [selectedMonthId]);
 
-  const connection = usePlaidConnection({ source: "budget", autoLoadStatus: !IS_MOCK, onConnected: () => { void loadBudget(); void client.invalidateQueries({ queryKey: ["money"] }); } });
+  const connection = usePlaidConnection({ source: "budget", autoLoadStatus: false, onConnected: () => { void loadBudget(); void client.invalidateQueries({ queryKey: ["money"] }); } });
+  const { refreshStatus } = connection;
   useFocusEffect(useCallback(() => {
     void loadBudget();
+    if (!IS_MOCK) void refreshStatus();
     return () => { loadGeneration.current++; };
-  }, [loadBudget]));
+  }, [loadBudget, refreshStatus]));
 
   const syncBank = async () => {
     if (actionBusy.current) return;
@@ -337,6 +339,7 @@ export default function BudgetScreen() {
         <View style={styles.statGrid}>
           <StatTile
             label="Received income"
+            sub="posted bank deposits"
             value={formatCurrency(overview.income, { compact: true })}
             icon="banknote"
             tint={Colors.emerald}
