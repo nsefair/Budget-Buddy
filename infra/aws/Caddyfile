@@ -1,0 +1,21 @@
+{
+	servers {
+		protocols h1 h2
+		timeouts {
+			read_header 5s
+			read_body 15s
+			write 30s
+			idle 30s
+		}
+	}
+}
+
+{$API_HOSTNAME} {
+	request_body {
+		max_size 9MB
+	}
+	reverse_proxy api:8080 {
+		# Overwrite untrusted client input; Go trusts only this container's IP.
+		header_up X-Real-IP {remote_host}
+	}
+}

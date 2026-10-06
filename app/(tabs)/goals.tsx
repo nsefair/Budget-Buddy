@@ -766,12 +766,13 @@ function GoalCreationSheet({
                       >
                         <MotiView
                           animate={{
-                            backgroundColor: active ? Colors.greenSurface : Colors.card,
-                            borderColor: active ? Colors.accentAlpha45 : Colors.border,
                             scale: active ? 1 : 0.98,
                           }}
                           transition={{ type: "timing", duration: 200 }}
-                          style={styles.planChip}
+                          style={[styles.planChip, {
+                            backgroundColor: active ? Colors.greenSurface : Colors.card,
+                            borderColor: active ? Colors.accentAlpha45 : Colors.border,
+                          }]}
                         >
                           <Text
                             style={[
@@ -1349,7 +1350,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   modalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0,0,0,0.46)",
   },
   goalSheet: {

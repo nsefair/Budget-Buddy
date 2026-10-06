@@ -14,10 +14,11 @@
  * Everything else stays Lucide/icon-system based.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -26,6 +27,9 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, useFocusEffect } from "expo-router";
+import { useQueryClient } from "@tanstack/react-query";
+import { moneyService } from "@/services/moneyService";
+import { usePlaidConnection } from "@/hooks/usePlaidConnection";
 import { MotiView } from "moti";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
@@ -99,15 +103,6 @@ function suggestionDraftsFrom(suggestions: BudgetSuggestionSet) {
   );
 }
 
-function isPlaidRelinkRequired(error: unknown) {
-  const responseError = (error as { response?: { data?: { error?: { code?: string; message?: string } } } })
-    ?.response?.data?.error;
-  return (
-    responseError?.code === "plaid_sync_failed" &&
-    /login|required|credentials|update mode/i.test(responseError.message ?? "")
-  );
-}
-
 /**
  * Predict upcoming bills from synced recurring transactions: the latest
  * charge per merchant, projected one month forward. Keeps the Upcoming tab
@@ -144,9 +139,10 @@ function upcomingBillsFrom(transactions: Transaction[]): UpcomingBill[] {
 
 export default function BudgetScreen() {
   const insets = useSafeAreaInsets();
+  const client = useQueryClient();
   const [txnTab, setTxnTab] = useState<"recent" | "upcoming">("recent");
   const [months, setMonths] = useState<BudgetMonthOption[]>([]);
-  const [selectedMonthId, setSelectedMonthId] = useState("");
+  const [selectedMonthId, setSelectedMonthId] = useState(() => { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`; });
   const [overview, setOverview] = useState<BudgetOverview | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<AccountSummary[]>([]);
@@ -157,98 +153,60 @@ export default function BudgetScreen() {
   const [suggestionMessage, setSuggestionMessage] = useState("");
   const [syncing, setSyncing] = useState(false);
 
-  useEffect(() => {
-    let alive = true;
-
-    (async () => {
-      try {
-        if (!IS_MOCK) {
-          setSyncing(true);
-          try {
-            await plaidService.sync();
-          } catch (error) {
-            if (!isPlaidRelinkRequired(error)) {
-              secureLog.warn("budget.sync failed", error);
-            }
-          }
-        }
-
-        const [availableMonths, nextAccounts, nextSuggestions] = await Promise.all([
-          budgetService.getAvailableMonths(),
-          budgetService.getAccounts().catch((error) => {
-            secureLog.warn("budget.accounts failed", error);
-            return [];
-          }),
-          budgetService.getSuggestions().catch((error) => {
-            secureLog.warn(
-              "budget.suggestions unavailable",
-              error instanceof Error ? error.message : error
-            );
-            return null;
-          }),
-        ]);
-        if (!alive) return;
-
-        const currentMonth =
-          availableMonths.find((month) => month.isCurrent) ??
-          availableMonths[availableMonths.length - 1];
-        setAccounts(nextAccounts);
-        if (nextSuggestions) {
-          setSuggestions(nextSuggestions);
-          setSuggestionDrafts(suggestionDraftsFrom(nextSuggestions));
-        }
-        setMonths(availableMonths);
-        setSelectedMonthId((existing) => existing || currentMonth?.id || "");
-      } catch (error) {
-        secureLog.error("budget.load failed", error);
-      } finally {
-        if (alive) setSyncing(false);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      let alive = true;
-      goalsService
-        .list()
-        .then((result) => {
-          if (alive) setGoalsSummary(result.summary);
-        })
-        .catch((error) => secureLog.warn("budget.goals-summary failed", error));
-
-      return () => {
-        alive = false;
-      };
-    }, [])
-  );
-
-  useEffect(() => {
-    if (!selectedMonthId) return;
-    let alive = true;
-
-    (async () => {
-      try {
-        const [nextOverview, nextTransactions] = await Promise.all([
-          budgetService.getOverview(selectedMonthId),
-          budgetService.getTransactions({ month: selectedMonthId, limit: 200 }),
-        ]);
-        if (!alive) return;
-        setOverview(nextOverview);
-        setTransactions(nextTransactions);
-      } catch (error) {
-        secureLog.error("budget.overview failed", error);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
+  const [loadError, setLoadError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [bankMessage, setBankMessage] = useState("");
+  const [recalculating, setRecalculating] = useState(false);
+  const actionBusy = useRef(false);
+  const loadGeneration = useRef(0);
+  const loadBudget = useCallback(async () => {
+    const generation = ++loadGeneration.current;
+    setLoading(true); setLoadError("");
+    try {
+      const [nextMonths, nextAccounts, nextOverview, nextTransactions, nextSuggestions, nextGoals] = await Promise.all([
+        budgetService.getAvailableMonths(), budgetService.getAccounts(),
+        budgetService.getOverview(selectedMonthId), budgetService.getAllTransactions(selectedMonthId),
+        budgetService.getSuggestions().catch(() => null), goalsService.list().catch(() => null),
+      ]);
+      if (generation !== loadGeneration.current) return;
+      setMonths(nextMonths); setAccounts(nextAccounts); setOverview(nextOverview); setTransactions(nextTransactions);
+      setSuggestions(nextSuggestions); setGoalsSummary(nextGoals?.summary ?? null);
+      if (nextSuggestions) setSuggestionDrafts(suggestionDraftsFrom(nextSuggestions));
+    } catch (error) {
+      if (generation === loadGeneration.current) setLoadError("Couldn’t refresh your budget. Please try again.");
+      secureLog.warn("budget.load failed", error);
+    } finally { if (generation === loadGeneration.current) setLoading(false); }
   }, [selectedMonthId]);
+
+  const connection = usePlaidConnection({ source: "budget", autoLoadStatus: false, onConnected: () => { void loadBudget(); void client.invalidateQueries({ queryKey: ["money"] }); } });
+  const { refreshStatus } = connection;
+  useFocusEffect(useCallback(() => {
+    void loadBudget();
+    if (!IS_MOCK) void refreshStatus();
+    return () => { loadGeneration.current++; };
+  }, [loadBudget, refreshStatus]));
+
+  const syncBank = async () => {
+    if (actionBusy.current) return;
+    actionBusy.current = true; setSyncing(true); setBankMessage("");
+    try {
+      const result = await plaidService.sync();
+      setBankMessage(result.relinkRequired ? "Reconnect your bank to resume updates." : result.synced ? "Bank synced. Recalculate your daily number below." : result.message ?? "No bank transactions synced yet.");
+      await Promise.all([loadBudget(), connection.refreshStatus(), client.invalidateQueries({ queryKey: ["money"] })]);
+    } catch { setBankMessage("Bank sync failed. Your last loaded data is shown."); }
+    finally { actionBusy.current = false; setSyncing(false); }
+  };
+  const recalculate = async () => {
+    if (actionBusy.current) return;
+    actionBusy.current = true; setRecalculating(true); setBankMessage("");
+    try {
+      await moneyService.today();
+      await client.invalidateQueries({ queryKey: ["money"] });
+      setBankMessage("Safe to spend recalculated from your synced data. Your morning allowance stays fixed.");
+      router.push("/(tabs)/today");
+    } catch { setBankMessage("Couldn’t recalculate. Complete your income plan on Today, then try again."); }
+    finally { actionBusy.current = false; setRecalculating(false); }
+  };
 
   const selectedMonthIndex = months.findIndex((month) => month.id === selectedMonthId);
   const selectedMonth = selectedMonthIndex >= 0 ? months[selectedMonthIndex] : null;
@@ -301,7 +259,8 @@ export default function BudgetScreen() {
       <View style={styles.container}>
         <View style={[styles.loadingState, { paddingTop: insets.top + 24 }]}>
           <BrandHeader style={styles.brandHeader} />
-          <Text style={styles.loadingText}>Loading budget...</Text>
+          <Text accessibilityRole={loadError ? "alert" : undefined} style={styles.loadingText}>{loadError || "Loading budget..."}</Text>
+          {!!loadError && <Pressable accessibilityRole="button" onPress={() => void loadBudget()} style={styles.viewAllButton}><Text style={styles.viewAllText}>Try again</Text></Pressable>}
         </View>
       </View>
     );
@@ -318,6 +277,7 @@ export default function BudgetScreen() {
           styles.scroll,
           { paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 24 },
         ]}
+        refreshControl={<RefreshControl refreshing={loading && !syncing} onRefresh={() => void loadBudget()} />}
         showsVerticalScrollIndicator={false}
       >
         <GradientHeader
@@ -332,13 +292,24 @@ export default function BudgetScreen() {
                 strokeWidth={2.4}
               />
               <Text style={styles.syncBadgeText}>
-                {syncing ? "Syncing" : accounts.length ? "Synced" : "No bank yet"}
+                {syncing ? "Syncing" : connection.status?.connections.some(item => item.status !== "active") ? "Needs attention" : accounts.length ? "Linked" : "No bank yet"}
               </Text>
             </View>
           }
         />
 
         <View style={styles.body}>
+        {!!loadError && <Text accessibilityRole="alert" style={styles.emptyTransactions}>{loadError} Showing the last loaded budget.</Text>}
+        {!IS_MOCK && <Card>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 16 }}>
+            <Pressable accessibilityRole="button" disabled={syncing || recalculating || connection.linking} onPress={() => {
+              if (!connection.hasConnections || connection.status?.connections.some(item => item.status !== "active")) void connection.startLink();
+              else void syncBank();
+            }} style={styles.viewAllButton}><Text style={styles.viewAllText}>{syncing ? "Syncing…" : connection.linking ? "Connecting…" : !connection.hasConnections ? "Connect bank" : connection.status?.connections.some(item => item.status !== "active") ? "Reconnect bank" : "Sync bank"}</Text></Pressable>
+            <Pressable accessibilityRole="button" disabled={syncing || recalculating || connection.linking} onPress={() => void recalculate()} style={styles.viewAllButton}><Text style={styles.viewAllText}>{recalculating ? "Recalculating…" : "Recalculate safe to spend"}</Text></Pressable>
+          </View>
+          {!!bankMessage && <Text accessibilityRole="alert" style={styles.emptyTransactions}>{bankMessage}</Text>}
+        </Card>}
         {/* Net worth + accounts — the Rocket Money-style money truth, top of tab */}
         <NetWorthHero accounts={accounts} transactions={transactions} />
 
@@ -367,7 +338,8 @@ export default function BudgetScreen() {
         {/* 4 stat tiles */}
         <View style={styles.statGrid}>
           <StatTile
-            label="Monthly income"
+            label="Received income"
+            sub="posted bank deposits"
             value={formatCurrency(overview.income, { compact: true })}
             icon="banknote"
             tint={Colors.emerald}
@@ -389,7 +361,7 @@ export default function BudgetScreen() {
           <StatTile
             label="Avg daily spend"
             value={formatCurrency(overview.avgDailySpend)}
-            sub="this week"
+            sub="per day this month"
             icon="line-chart"
             tint={Colors.greenDark}
           />
@@ -445,7 +417,7 @@ export default function BudgetScreen() {
           <CardHeader title="Budget detail" hint="Per category" />
           <View style={{ gap: 12 }}>
             {overview.categories.map((c) => (
-              <CategoryRow key={c.id} category={c} />
+              <CategoryRow key={c.id} category={c} month={selectedMonthId} />
             ))}
           </View>
         </Card>
@@ -488,7 +460,7 @@ export default function BudgetScreen() {
                 <React.Fragment key={t.id}>
                   <TransactionRow
                     merchant={t.merchant}
-                    sub={`${t.category}${t.isRecurring ? " · Recurring" : ""}`}
+                    sub={`${t.category}${t.isPending ? " · Pending" : ""}${t.isRecurring ? " · Recurring" : ""}`}
                     amount={-t.amount}
                     emoji={emojiForCategory(t.categoryId)}
                   />
@@ -725,12 +697,13 @@ function MonthNavigator({
             >
               <MotiView
                 animate={{
-                  backgroundColor: active ? Colors.gold : Colors.surface,
-                  borderColor: active ? Colors.gold : Colors.border,
                   scale: active ? 1 : 0.97,
                 }}
                 transition={{ type: "timing", duration: 220 }}
-                style={styles.monthChip}
+                style={[styles.monthChip, {
+                  backgroundColor: active ? Colors.gold : Colors.surface,
+                  borderColor: active ? Colors.gold : Colors.border,
+                }]}
               >
                 <Text style={[styles.monthChipText, active && styles.monthChipTextActive]}>
                   {month.shortLabel}
@@ -972,7 +945,7 @@ function RuleCell({ label, value }: { label: string; value: number }) {
   );
 }
 
-function CategoryRow({ category }: { category: BudgetCategory }) {
+function CategoryRow({ category, month }: { category: BudgetCategory; month: string }) {
   const pct = useMemo(() => {
     if (category.budgetLimit === 0) return 0;
     return Math.min(1.2, category.spent / category.budgetLimit);
@@ -987,7 +960,7 @@ function CategoryRow({ category }: { category: BudgetCategory }) {
   const emoji = emojiForCategory(category.id);
 
   return (
-    <View>
+    <Pressable accessibilityRole="button" accessibilityLabel={`View ${category.name} transactions`} onPress={() => router.push({ pathname: "/transactions", params: { month, category: category.id } })}>
       <View style={styles.catRow}>
         <View style={styles.catLeft}>
           <View style={[styles.catIcon, { borderColor: `${category.color}55`, backgroundColor: `${category.color}15` }]}>
@@ -1025,7 +998,7 @@ function CategoryRow({ category }: { category: BudgetCategory }) {
           ]}
         />
       </View>
-    </View>
+    </Pressable>
   );
 }
 

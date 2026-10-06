@@ -56,48 +56,17 @@ func RefreshRecommendations(ctx context.Context, db *pgxpool.Pool, userID string
 
 	lookbackEnd := time.Now().UTC()
 	lookbackStart := lookbackEnd.AddDate(0, -recommendationLookbackMonths, 0)
-	rows, err := db.Query(
-		ctx,
-		`select amount_cents,
-		        coalesce(personal_finance_category_primary, ''),
-		        coalesce(personal_finance_category_detailed, ''),
-		        category
-		   from plaid_transactions
-		  where user_id = $1
-		    and pending = false
-		    and date >= $2::date
-		    and date <= $3::date`,
-		userID,
-		lookbackStart.Format("2006-01-02"),
-		lookbackEnd.Format("2006-01-02"),
-	)
+	entries, err := loadBankTransactions(ctx, db, userID, "")
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
-
-	spendByCategory := map[string]int64{}
-	var incomeCents int64
-	for rows.Next() {
-		var amountCents int64
-		var primary, detailed string
-		var legacy []string
-		if err := rows.Scan(&amountCents, &primary, &detailed, &legacy); err != nil {
-			return err
+	history := []bankTransaction{}
+	for _, entry := range entries {
+		if !entry.IsPending && entry.Date[:10] >= lookbackStart.Format("2006-01-02") && entry.Date[:10] <= lookbackEnd.Format("2006-01-02") {
+			history = append(history, entry)
 		}
-
-		if isDetectedIncome(amountCents, primary, detailed, legacy) {
-			incomeCents += -amountCents
-			continue
-		}
-		if amountCents <= 0 || isTransferCategory(primary, detailed, legacy) {
-			continue
-		}
-		spendByCategory[categoryForTransaction(primary, legacy)] += amountCents
 	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
+	spendByCategory, incomeCents := bankTotals(history)
 
 	monthlyIncomeCents := int64(math.Round(float64(incomeCents) / recommendationLookbackMonths))
 	if monthlyIncomeCents <= 0 {
@@ -286,17 +255,23 @@ func budgetBucket(categoryID string) string {
 	}
 }
 
+// A bank transfer is not necessarily income. Explicit payroll evidence wins over
+// a generic legacy "Transfer" label, but own-account moves never become income.
 func isDetectedIncome(amountCents int64, primary, detailed string, legacy []string) bool {
-	if amountCents >= 0 || isTransferCategory(primary, detailed, legacy) {
+	if amountCents >= 0 || isInternalTransfer(primary, detailed, legacy) {
 		return false
 	}
-	combined := strings.ToUpper(strings.TrimSpace(primary + " " + detailed + " " + strings.Join(legacy, " ")))
-	return strings.Contains(combined, "INCOME") ||
-		strings.Contains(combined, "PAYROLL") ||
-		strings.Contains(combined, "DIRECT DEPOSIT")
+	combined := strings.ToUpper(primary + " " + detailed + " " + strings.Join(legacy, " "))
+	return strings.EqualFold(primary, "INCOME") || strings.HasPrefix(strings.ToUpper(detailed), "INCOME_") || strings.Contains(combined, "PAYROLL") || strings.Contains(combined, "DIRECT DEPOSIT")
 }
 
+func isInternalTransfer(primary, detailed string, legacy []string) bool {
+	combined := strings.ToUpper(detailed + " " + strings.Join(legacy, " "))
+	return strings.Contains(combined, "ACCOUNT_TRANSFER") || strings.Contains(combined, "ACCOUNT TRANSFER") || strings.Contains(combined, "CREDIT_CARD_PAYMENT") || strings.Contains(combined, "CREDIT CARD PAYMENT") || strings.Contains(combined, "SAVINGS") || strings.Contains(combined, "INVESTMENT_AND_RETIREMENT")
+}
+
+// Ambiguous outgoing person-to-person payments remain visible as Uncategorized.
+// Only identified internal transfers and loan repayments are excluded from spend.
 func isTransferCategory(primary, detailed string, legacy []string) bool {
-	combined := strings.ToUpper(strings.TrimSpace(primary + " " + detailed + " " + strings.Join(legacy, " ")))
-	return strings.Contains(combined, "TRANSFER")
+	return isInternalTransfer(primary, detailed, legacy) || strings.EqualFold(primary, "LOAN_PAYMENTS")
 }

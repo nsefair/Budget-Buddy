@@ -13,7 +13,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { requireOptionalNativeModule } from "expo-modules-core";
+import { requireOptionalNativeModule } from "expo";
 import { useQuery } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
@@ -435,7 +435,7 @@ function typeForAchievement(kind: AchievementKind): FeedPost["type"] {
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: "flex-end" },
-  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.66)" },
+  scrim: { ...StyleSheet.absoluteFill, backgroundColor: "rgba(0,0,0,0.66)" },
   sheet: {
     height: "94%",
     backgroundColor: Colors.card,

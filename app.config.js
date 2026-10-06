@@ -28,12 +28,18 @@ module.exports = ({ config }) => {
 
   return {
     ...base,
-    icon: assets.icon,
-    splash: {
-      ...base.splash,
-      image: assets.splashIcon,
-      backgroundColor: assets.splashBackground,
+    ios: {
+      ...base.ios,
+      // A Personal Team needs its own identifier; production keeps app.json's ID.
+      bundleIdentifier: process.env.BUDGET_BUDDY_IOS_BUNDLE_ID || base.ios.bundleIdentifier,
+      appleTeamId: process.env.BUDGET_BUDDY_IOS_TEAM || base.ios.appleTeamId,
     },
+    icon: assets.icon,
+    plugins: base.plugins.map((plugin) =>
+      Array.isArray(plugin) && plugin[0] === "expo-splash-screen"
+        ? [plugin[0], { ...plugin[1], image: assets.splashIcon, backgroundColor: assets.splashBackground }]
+        : plugin,
+    ),
     android: {
       ...base.android,
       adaptiveIcon: {

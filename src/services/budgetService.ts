@@ -63,6 +63,7 @@ const CATEGORY_DEFAULTS: Omit<BudgetCategory, "spent">[] = [
   { id: "entertainment", name: "Entertainment", icon: "star", budgetLimit: 100, color: "#8B5CF6" },
   { id: "health", name: "Health & Wellness", icon: "shield", budgetLimit: 80, color: "#10B981" },
   { id: "personal", name: "Personal Care", icon: "user", budgetLimit: 60, color: "#13D845" },
+  { id: "uncategorized", name: "Uncategorized", icon: "receipt", budgetLimit: 0, color: "#8B9CB8" },
   { id: "education", name: "Education", icon: "layers", budgetLimit: 50, color: "#00B4A6" },
 ];
 
@@ -256,31 +257,40 @@ export const budgetService = {
         )
       );
     }
-    const transactions = await api.get<Transaction[]>(ENDPOINTS.BUDGET.TRANSACTIONS, {
-      month,
-      limit: 100,
-    });
-    return sortTransactionsNewestFirst(
-      transactions.filter((transaction) => transaction.categoryId === categoryId)
-    );
+    return budgetService.getAllTransactions(month, categoryId);
+  },
+
+  // Category filtering happens before pagination on the API. Traverse pages so
+  // calendars and category details also work for busy bank accounts.
+  getAllTransactions: async (month: string, category?: string): Promise<Transaction[]> => {
+    if (IS_MOCK) return sortTransactionsNewestFirst(MOCK_TRANSACTIONS.filter(t =>
+      isTransactionInMonth(t, month) && (!category || t.categoryId === category)));
+    const transactions: Transaction[] = [];
+    for (let page = 1; ; page++) {
+      const batch = await api.get<Transaction[]>(ENDPOINTS.BUDGET.TRANSACTIONS, { month, category, page, limit: 200 });
+      transactions.push(...batch);
+      if (batch.length < 200) return transactions;
+    }
   },
 
   getTransactions: async ({
     page = 1,
     limit = 20,
     month,
+    category,
   }: {
     page?: number;
     limit?: number;
     month?: string;
+    category?: string;
   } = {}): Promise<Transaction[]> => {
     if (IS_MOCK) {
       const scoped = month
         ? MOCK_TRANSACTIONS.filter((t) => isTransactionInMonth(t, month))
         : MOCK_TRANSACTIONS;
-      return sortTransactionsNewestFirst(scoped).slice((page - 1) * limit, page * limit);
+      return sortTransactionsNewestFirst(category ? scoped.filter(t => t.categoryId === category) : scoped).slice((page - 1) * limit, page * limit);
     }
-    return api.get<Transaction[]>(ENDPOINTS.BUDGET.TRANSACTIONS, { page, limit, month });
+    return api.get<Transaction[]>(ENDPOINTS.BUDGET.TRANSACTIONS, { page, limit, month, category });
   },
 
   addManualTransaction: async (

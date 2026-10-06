@@ -21,6 +21,8 @@ export interface Transaction {
   isRecurring: boolean;
   isManual: boolean;
   isFlagged: boolean;
+  isPending?: boolean;
+  countsTowardSpending?: boolean;
   note?: string;
 }
 

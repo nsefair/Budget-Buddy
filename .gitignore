@@ -50,6 +50,9 @@ gitleaks*.json
 *.bak
 *.swp
 .cache/
+runtime.env
+aws-state.json
+*.dump
 
 # typescript
 *.tsbuildinfo

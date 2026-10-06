@@ -146,15 +146,15 @@ function dayKey(year: number, monthIndex: number, day: number) {
   return `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
-function isIncome(transaction: Transaction) {
+function isIncoming(transaction: Transaction) {
   const category = `${transaction.categoryId} ${transaction.category}`.toLowerCase();
   return transaction.amount < 0 || category.includes("income") || category.includes("paycheck");
 }
 
 function activityLabel(items: Transaction[]) {
   if (items.length === 0) return "No transactions";
-  const outgoing = items.filter((item) => !isIncome(item)).length;
-  const incoming = items.filter(isIncome).length;
+  const outgoing = items.filter((item) => !isIncoming(item)).length;
+  const incoming = items.filter(isIncoming).length;
   const recurring = items.filter((item) => item.isRecurring).length;
   return [
     outgoing ? `${outgoing} outgoing` : "",
@@ -237,7 +237,7 @@ export function TransactionCalendar({
       <View style={styles.calendarLegend}>
         <CalendarLegend color={Colors.coral} label="Spent" />
         <CalendarLegend color={Colors.gold} label="Recurring" ring />
-        <CalendarLegend color={Colors.emerald} label="Income" />
+        <CalendarLegend color={Colors.emerald} label="Money in" />
       </View>
 
       <View style={styles.weekdayRow}>
@@ -257,8 +257,8 @@ export function TransactionCalendar({
           const key = dayKey(year, monthIndex, day);
           const items = transactionsByDay.get(key) ?? [];
           const selected = key === selectedKey;
-          const hasSpending = items.some((item) => !isIncome(item));
-          const hasIncoming = items.some(isIncome);
+          const hasSpending = items.some((item) => !isIncoming(item));
+          const hasIncoming = items.some(isIncoming);
           const hasRecurring = items.some((item) => item.isRecurring);
 
           return (
@@ -315,7 +315,7 @@ export function TransactionCalendar({
         ) : (
           <View style={styles.dayTransactionList}>
             {selectedTransactions.map((transaction) => {
-              const incoming = isIncome(transaction);
+              const incoming = isIncoming(transaction);
               return (
                 <View key={transaction.id} style={styles.dayTransactionRow}>
                   <View
@@ -392,7 +392,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   donutCenter: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 34,

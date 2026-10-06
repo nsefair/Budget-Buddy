@@ -1,13 +1,23 @@
 # Budget Buddy
 
+A public portfolio of an app in active development. The code is public; user
+accounts, bank connections, and financial records are private. This is not a
+public launch or an invitation to connect a bank.
+
 Budget Buddy is a portfolio-stage personal-finance application for turning
 account activity, budgets, and goals into a focused daily action. The mobile
 client uses Expo and React Native; the API is written in Go and persists data
 in PostgreSQL.
 
-> This repository demonstrates product and engineering work. It is not a bank,
-> investment adviser, or production financial service. Use sandbox credentials
-> and fictional data only.
+For the October 2026 Mac setup, verified AWS status, and the new beta plan, see
+[Local setup and beta readiness](docs/local-setup-and-beta-readiness.md).
+On this Mac, start Docker Desktop and double-click `Start Budget Buddy.command`
+to start the backend, open Xcode, and run Metro for phone development.
+
+The private AWS pilot now serves `https://api.budgetbudd.com`. Local backend
+development uses Plaid sandbox; the configured phone build targets the hosted
+API. Real-bank beta distribution remains gated on Apple enrollment and
+end-to-end bank-link verification. See the readiness report before testing.
 
 ## What is implemented
 
@@ -15,8 +25,12 @@ in PostgreSQL.
   reset, profile updates, onboarding, and account deletion foundations.
 - A 1–500 financial score, budget views, transaction history, goals,
   contributions, quests, wealth leagues, and action-focused daily insights.
-- Plaid Sandbox link-token exchange, encrypted access-token storage,
-  transaction synchronization, and durable webhook ingestion.
+- Plaid link-token exchange, encrypted access-token storage, atomic paginated
+  transaction synchronization, reconnect handling, and durable webhook ingestion.
+- A tested beta money-engine API with income-cycle calculations, frozen daily
+  snapshots, manual spending, and idempotent underspend allocation. The beta
+  Today screen now reads this API; Bud and the remaining beta surfaces still
+  need their final integration.
 - A social prototype for sharing selected achievements without automatically
   exposing balances, transactions, or exact amounts.
 - Notification preferences, inbox/device registration, and a signed entitlement
@@ -44,7 +58,7 @@ ordered PostgreSQL migrations live in `backend/migrations/`.
 
 ## Technology
 
-- Expo SDK 54, Expo Router, React Native, TypeScript
+- Expo SDK 57 with scene lifecycle support, Expo Router, React Native, TypeScript
 - React Query, Zustand, Axios, NativeWind
 - Go 1.26 with `net/http`
 - PostgreSQL with `pgx`

@@ -186,7 +186,7 @@ function relativeCommentTime(timestamp: string) {
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: "flex-end" },
-  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.58)" },
+  scrim: { ...StyleSheet.absoluteFill, backgroundColor: "rgba(0,0,0,0.58)" },
   sheet: {
     height: "78%",
     backgroundColor: Colors.card,

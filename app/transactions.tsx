@@ -52,8 +52,9 @@ function labelForMonth(month?: string) {
 
 export default function TransactionsScreen() {
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ month?: string | string[] }>();
+  const params = useLocalSearchParams<{ month?: string | string[]; category?: string | string[] }>();
   const month = Array.isArray(params.month) ? params.month[0] : params.month;
+  const category = Array.isArray(params.category) ? params.category[0] : params.category;
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -65,19 +66,20 @@ export default function TransactionsScreen() {
   const loadFirstPage = useCallback(async () => {
     const next = await budgetService.getTransactions({
       month,
+      category,
       page: 1,
       limit: PAGE_SIZE,
     });
     setTransactions(next);
     setPage(1);
     setHasMore(next.length === PAGE_SIZE);
-  }, [month]);
+  }, [month, category]);
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
     budgetService
-      .getTransactions({ month, page: 1, limit: PAGE_SIZE })
+      .getTransactions({ month, category, page: 1, limit: PAGE_SIZE })
       .then((next) => {
         if (!alive) return;
         setTransactions(next);
@@ -92,7 +94,7 @@ export default function TransactionsScreen() {
     return () => {
       alive = false;
     };
-  }, [month]);
+  }, [month, category]);
 
   const refresh = async () => {
     setRefreshing(true);
@@ -112,6 +114,7 @@ export default function TransactionsScreen() {
     try {
       const next = await budgetService.getTransactions({
         month,
+        category,
         page: nextPage,
         limit: PAGE_SIZE,
       });
@@ -235,7 +238,7 @@ export default function TransactionsScreen() {
 }
 
 function TransactionHistoryRow({ transaction }: { transaction: Transaction }) {
-  const date = new Date(`${transaction.date}T12:00:00`).toLocaleDateString("en-US", {
+  const date = new Date(`${transaction.date.slice(0, 10)}T12:00:00`).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
   });
@@ -251,6 +254,7 @@ function TransactionHistoryRow({ transaction }: { transaction: Transaction }) {
         </Text>
         <Text style={styles.rowMeta} numberOfLines={1}>
           {transaction.category} · {date}
+          {transaction.isPending ? " · Pending" : ""}
           {transaction.isRecurring ? " · Recurring" : ""}
         </Text>
       </View>

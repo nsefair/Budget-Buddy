@@ -26,7 +26,7 @@ import * as SecureStore from "expo-secure-store";
 // Set EXPO_PUBLIC_API_URL in your .env or app.config.js to point at any backend.
 // Changing this one value is all that's needed to switch servers.
 const CONFIGURED_API_URL =
-  process.env.EXPO_PUBLIC_API_URL ?? "https://api.budgetbuddy.app/v1";
+  process.env.EXPO_PUBLIC_API_URL ?? "https://api.budgetbudd.com/v1";
 
 function resolveDevelopmentApiUrl(url: string): string {
   if (!__DEV__ || !url.startsWith("http://")) return url;

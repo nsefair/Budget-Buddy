@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
   },
   slide: { height: "100%", backgroundColor: Colors.navy50 },
   placeholder: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: "center",
     justifyContent: "center",
     gap: 8,

@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Platform } from "react-native";
 import Constants from "expo-constants";
-import { requireOptionalNativeModule } from "expo-modules-core";
+import { requireOptionalNativeModule } from "expo";
 import { router } from "expo-router";
 
 import { api, IS_MOCK } from "@/api/client";

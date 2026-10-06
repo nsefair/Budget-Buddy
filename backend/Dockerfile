@@ -1,4 +1,6 @@
-FROM golang:1.26.6-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.6-alpine AS build
+ARG TARGETOS
+ARG TARGETARCH
 
 WORKDIR /src
 
@@ -8,9 +10,9 @@ RUN go mod download
 COPY cmd ./cmd
 COPY internal ./internal
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o /out/budget-buddy-api ./cmd/api
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /out/budget-buddy-api ./cmd/api
 
-FROM alpine:3.20
+FROM alpine:3.23
 
 RUN addgroup -S app && adduser -S app -G app \
     && mkdir -p /var/lib/budget-buddy/media \

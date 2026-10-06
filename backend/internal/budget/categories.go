@@ -19,31 +19,38 @@ var defaultCategories = []CategoryDef{
 	{ID: "health", Name: "Health & Wellness", Icon: "shield", BudgetLimit: 80, Color: "#10B981"},
 	{ID: "personal", Name: "Personal Care", Icon: "user", BudgetLimit: 60, Color: "#13D845"},
 	{ID: "education", Name: "Education", Icon: "layers", BudgetLimit: 50, Color: "#00B4A6"},
+	{ID: "uncategorized", Name: "Uncategorized", Icon: "receipt", BudgetLimit: 0, Color: "#8B9CB8"},
 }
 
 var pfcToCategory = map[string]string{
-	"FOOD_AND_DRINK":              "food",
-	"TRANSPORTATION":              "transport",
-	"GENERAL_MERCHANDISE":         "shopping",
-	"HOME_IMPROVEMENT":             "housing",
-	"RENT_AND_UTILITIES":          "housing",
-	"ENTERTAINMENT":               "entertainment",
-	"MEDICAL":                     "health",
-	"PERSONAL_CARE":               "personal",
-	"EDUCATION":                   "education",
-	"GOVERNMENT_AND_NON_PROFIT":   "education",
-	"LOAN_PAYMENTS":               "housing",
-	"BANK_FEES":                   "shopping",
-	"TRAVEL":                      "transport",
-	"GAS_STATIONS":                "transport",
-	"GROCERIES":                   "food",
-	"TRANSFER_OUT":                "shopping",
-	"TRANSFER_IN":                 "shopping",
-	"INCOME":                      "shopping",
-	"OTHER":                       "shopping",
+	"FOOD_AND_DRINK":            "food",
+	"TRANSPORTATION":            "transport",
+	"GENERAL_MERCHANDISE":       "shopping",
+	"HOME_IMPROVEMENT":          "housing",
+	"RENT_AND_UTILITIES":        "housing",
+	"ENTERTAINMENT":             "entertainment",
+	"MEDICAL":                   "health",
+	"PERSONAL_CARE":             "personal",
+	"EDUCATION":                 "education",
+	"GOVERNMENT_AND_NON_PROFIT": "uncategorized",
+	"LOAN_PAYMENTS":             "uncategorized",
+	"BANK_FEES":                 "uncategorized",
+	"TRAVEL":                    "transport",
+	"GAS_STATIONS":              "transport",
+	"GROCERIES":                 "food",
+	"TRANSFER_OUT":              "uncategorized",
+	"TRANSFER_IN":               "uncategorized",
+	"INCOME":                    "uncategorized",
+	"OTHER":                     "uncategorized",
 }
 
-func categoryForTransaction(pfcPrimary string, legacyCategory []string) string {
+func categoryForTransaction(pfcPrimary, pfcDetailed string, legacyCategory []string) string {
+	switch strings.ToUpper(strings.TrimSpace(pfcDetailed)) {
+	case "GENERAL_SERVICES_EDUCATION":
+		return "education"
+	case "GENERAL_SERVICES_AUTOMOTIVE":
+		return "transport"
+	}
 	primary := strings.ToUpper(strings.TrimSpace(pfcPrimary))
 	if mapped, ok := pfcToCategory[primary]; ok {
 		return mapped
@@ -67,16 +74,19 @@ func categoryForTransaction(pfcPrimary string, legacyCategory []string) string {
 			return "education"
 		}
 	}
-	return "shopping"
+	return "uncategorized"
 }
 
 func categoryNameByID(id string) string {
+	if id == "income" {
+		return "Income"
+	}
 	for _, category := range defaultCategories {
 		if category.ID == id {
 			return category.Name
 		}
 	}
-	return "Other"
+	return "Uncategorized"
 }
 
 func categoryMetaByID(id string) CategoryDef {
@@ -85,5 +95,5 @@ func categoryMetaByID(id string) CategoryDef {
 			return category
 		}
 	}
-	return CategoryDef{ID: id, Name: "Other", Icon: "wallet", BudgetLimit: 100, Color: "#8B9CB8"}
+	return CategoryDef{ID: id, Name: "Uncategorized", Icon: "wallet", BudgetLimit: 100, Color: "#8B9CB8"}
 }
