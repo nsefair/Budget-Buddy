@@ -237,7 +237,7 @@ function openGoalAction(
 function NumberCell({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.numCell}>
-      <Text style={styles.numValue} numberOfLines={1}>{value}</Text>
+      <Text style={styles.numValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{value}</Text>
       <Text style={styles.numLabel}>{label}</Text>
     </View>
   );

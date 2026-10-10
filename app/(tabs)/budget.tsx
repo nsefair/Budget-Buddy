@@ -35,6 +35,7 @@ import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Polyline } from "react-native-svg";
 
+import { CountUp, GrowBar, useFocusReplay } from "@/animations";
 import { Colors } from "@/constants/colors";
 import { TAB_BAR_HEIGHT } from "@/constants/tokens";
 import { BrandHeader } from "@/components/BrandLogo";
@@ -139,6 +140,8 @@ function upcomingBillsFrom(transactions: Transaction[]): UpcomingBill[] {
 
 export default function BudgetScreen() {
   const insets = useSafeAreaInsets();
+  // Numbers and bars re-enter each time Budget regains focus.
+  const replay = useFocusReplay();
   const client = useQueryClient();
   const [txnTab, setTxnTab] = useState<"recent" | "upcoming">("recent");
   const [months, setMonths] = useState<BudgetMonthOption[]>([]);
@@ -311,7 +314,7 @@ export default function BudgetScreen() {
           {!!bankMessage && <Text accessibilityRole="alert" style={styles.emptyTransactions}>{bankMessage}</Text>}
         </Card>}
         {/* Net worth + accounts — the Rocket Money-style money truth, top of tab */}
-        <NetWorthHero accounts={accounts} transactions={transactions} />
+        <NetWorthHero accounts={accounts} transactions={transactions} replayKey={replay} />
 
         <Card>
           <CardHeader title="Accounts" />
@@ -416,8 +419,8 @@ export default function BudgetScreen() {
         <Card>
           <CardHeader title="Budget detail" hint="Per category" />
           <View style={{ gap: 12 }}>
-            {overview.categories.map((c) => (
-              <CategoryRow key={c.id} category={c} month={selectedMonthId} />
+            {overview.categories.map((c, index) => (
+              <CategoryRow key={c.id} category={c} month={selectedMonthId} index={index} replayKey={replay} />
             ))}
           </View>
         </Card>
@@ -533,9 +536,11 @@ const SPARK_HEIGHT = 34;
 function NetWorthHero({
   accounts,
   transactions,
+  replayKey,
 }: {
   accounts: AccountSummary[];
   transactions: Transaction[];
+  replayKey: number;
 }) {
   const netWorth = linkedAccountNetWorth(accounts);
 
@@ -577,7 +582,14 @@ function NetWorthHero({
     >
       <Text style={styles.netWorthEyebrow}>NET WORTH</Text>
       <View style={styles.netWorthRow}>
-        <Text style={styles.netWorthValue}>{formatCurrency(netWorth)}</Text>
+        <CountUp
+          value={netWorth}
+          from={netWorth * 0.9}
+          replayKey={replayKey}
+          format={formatCurrency}
+          fit
+          style={styles.netWorthValue}
+        />
         {sparkPoints ? (
           <Svg width={SPARK_WIDTH} height={SPARK_HEIGHT}>
             <Polyline
@@ -781,7 +793,9 @@ function StatTile({
       <View style={[styles.statIcon, { backgroundColor: `${tint}1A`, borderColor: `${tint}55` }]}>
         <Icon name={icon} size={14} color={tint} strokeWidth={2.4} />
       </View>
-      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+        {value}
+      </Text>
       <Text style={styles.statLabel}>{label}</Text>
       {sub && <Text style={styles.statSub}>{sub}</Text>}
     </View>
@@ -940,12 +954,24 @@ function RuleCell({ label, value }: { label: string; value: number }) {
   return (
     <View style={styles.ruleCell}>
       <Text style={styles.ruleLabel}>{label}</Text>
-      <Text style={styles.ruleValue}>{formatCurrency(value, { compact: true })}</Text>
+      <Text style={styles.ruleValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+        {formatCurrency(value, { compact: true })}
+      </Text>
     </View>
   );
 }
 
-function CategoryRow({ category, month }: { category: BudgetCategory; month: string }) {
+function CategoryRow({
+  category,
+  month,
+  index,
+  replayKey,
+}: {
+  category: BudgetCategory;
+  month: string;
+  index: number;
+  replayKey: number;
+}) {
   const pct = useMemo(() => {
     if (category.budgetLimit === 0) return 0;
     return Math.min(1.2, category.spent / category.budgetLimit);
@@ -967,7 +993,7 @@ function CategoryRow({ category, month }: { category: BudgetCategory; month: str
             <Text style={styles.catEmoji}>{emoji}</Text>
           </View>
           <View style={styles.catNameWrap}>
-            <Text style={styles.catName}>{category.name}</Text>
+            <Text style={styles.catName} numberOfLines={1}>{category.name}</Text>
             {category.source && category.source !== "default" ? (
               <Text
                 style={[
@@ -987,17 +1013,14 @@ function CategoryRow({ category, month }: { category: BudgetCategory; month: str
           </Text>
         </Text>
       </View>
-      <View style={styles.catTrack}>
-        <View
-          style={[
-            styles.catFill,
-            {
-              width: `${Math.min(100, pct * 100)}%`,
-              backgroundColor: fillColor,
-            },
-          ]}
-        />
-      </View>
+      <GrowBar
+        progress={pct}
+        color={fillColor}
+        trackColor={Colors.border}
+        height={5}
+        delay={index * 45}
+        replayKey={replayKey}
+      />
     </Pressable>
   );
 }
@@ -1049,9 +1072,9 @@ function TransactionRow({
             />
           )}
         </View>
-        <View>
-          <Text style={styles.txnMerchant}>{merchant}</Text>
-          <Text style={styles.txnSub}>{sub}</Text>
+        <View style={styles.rowCopy}>
+          <Text style={styles.txnMerchant} numberOfLines={1}>{merchant}</Text>
+          <Text style={styles.txnSub} numberOfLines={1}>{sub}</Text>
         </View>
       </View>
       <Text
@@ -1092,9 +1115,9 @@ function AccountsBlock({ accounts }: { accounts: AccountSummary[] }) {
             <View style={styles.accountIconBox}>
               <Icon name={iconForKind[a.kind]} size={13} color={Colors.navyMuted} strokeWidth={2.2} />
             </View>
-            <View>
-              <Text style={styles.accountName}>{a.name}</Text>
-              {a.institution && <Text style={styles.accountInst}>{a.institution}</Text>}
+            <View style={styles.rowCopy}>
+              <Text style={styles.accountName} numberOfLines={1}>{a.name}</Text>
+              {a.institution && <Text style={styles.accountInst} numberOfLines={1}>{a.institution}</Text>}
             </View>
           </View>
           <Text
@@ -1116,7 +1139,9 @@ function AccountsBlock({ accounts }: { accounts: AccountSummary[] }) {
           </View>
           <Text style={styles.netCashLabel}>Net cash</Text>
         </View>
-        <Text style={styles.netCashAmount}>{formatCurrency(netCash)}</Text>
+        <Text style={styles.netCashAmount} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+          {formatCurrency(netCash)}
+        </Text>
       </View>
     </View>
   );
@@ -1167,6 +1192,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   netWorthValue: {
+    flex: 1,
     fontSize: 32,
     fontWeight: "900",
     color: Colors.brandOnDark,
@@ -1580,7 +1606,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 6,
   },
-  catLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
+  catLeft: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 10, marginRight: 12 },
   catIcon: {
     width: 26,
     height: 26,
@@ -1590,7 +1616,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   catEmoji: { fontSize: 15, lineHeight: 18 },
-  catNameWrap: { gap: 2 },
+  catNameWrap: { flexShrink: 1, gap: 2 },
   catName: { fontSize: 13, fontWeight: "700", color: Colors.navy },
   catSource: {
     alignSelf: "flex-start",
@@ -1601,15 +1627,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   catSourceAdjusted: { color: Colors.gold },
-  catNumbers: { fontSize: 13, fontWeight: "700", color: Colors.navy },
+  catNumbers: { flexShrink: 0, fontSize: 13, fontWeight: "700", color: Colors.navy },
   catBudget: { color: Colors.muted, fontWeight: "600" },
-  catTrack: {
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: Colors.border,
-    overflow: "hidden",
-  },
-  catFill: { height: 5, borderRadius: 3 },
 
   // Tabs
   txnTabs: {
@@ -1643,7 +1662,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 10,
   },
-  txnLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
+  txnLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1, minWidth: 0, marginRight: 12 },
+  rowCopy: { flex: 1, minWidth: 0 },
   txnIconBox: {
     width: 30,
     height: 30,
@@ -1655,7 +1675,7 @@ const styles = StyleSheet.create({
   txnEmoji: { fontSize: 16, lineHeight: 20 },
   txnMerchant: { fontSize: 13, fontWeight: "700", color: Colors.navy },
   txnSub: { fontSize: 11, color: Colors.muted, marginTop: 1 },
-  txnAmount: { fontSize: 14, fontWeight: "700" },
+  txnAmount: { flexShrink: 0, fontSize: 14, fontWeight: "700" },
   txnDivider: { height: 1, backgroundColor: Colors.border },
 
   // Investments
@@ -1690,7 +1710,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 8,
   },
-  accountLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
+  accountLeft: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 12, marginRight: 12 },
   accountIconBox: {
     width: 30,
     height: 30,
@@ -1703,7 +1723,7 @@ const styles = StyleSheet.create({
   },
   accountName: { fontSize: 13, fontWeight: "700", color: Colors.navy },
   accountInst: { fontSize: 11, color: Colors.muted, marginTop: 1 },
-  accountAmount: { fontSize: 14, fontWeight: "700", color: Colors.navy },
+  accountAmount: { flexShrink: 0, fontSize: 14, fontWeight: "700", color: Colors.navy },
 
   netCashRow: {
     marginTop: 6,
@@ -1724,6 +1744,8 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   netCashAmount: {
+    maxWidth: "65%",
+    marginLeft: 12,
     fontSize: 18,
     fontWeight: "800",
     color: Colors.navy,

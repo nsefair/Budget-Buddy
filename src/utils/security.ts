@@ -51,7 +51,11 @@ export function formatCurrency(
   const abs = Math.abs(amount);
   let body: string;
   if (compact && abs >= 1000) {
-    body = `$${(abs / 1000).toFixed(abs >= 10000 ? 0 : 1)}K`;
+    // Step up a unit just before rounding would print "1000K" or "1000M".
+    const [divisor, unit] =
+      abs >= 999_500_000 ? [1e9, "B"] : abs >= 999_500 ? [1e6, "M"] : [1e3, "K"];
+    const scaled = abs / divisor;
+    body = `$${scaled.toFixed(scaled >= 9.95 ? 0 : 1)}${unit}`;
   } else {
     body = `$${abs.toLocaleString("en-US", {
       minimumFractionDigits: abs % 1 === 0 ? 0 : 2,

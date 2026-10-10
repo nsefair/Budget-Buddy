@@ -1,16 +1,22 @@
 import React, { useCallback, useRef, useState } from "react";
-import { ActivityIndicator, AppState, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Animated, AppState, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { useFocusEffect, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { isAxiosError } from "axios";
 import Svg, { Circle } from "react-native-svg";
+import { CountUp, useEntranceProgress, useFocusReplay } from "@/animations";
 import { Colors } from "@/constants/colors";
 import { TAB_BAR_HEIGHT } from "@/constants/tokens";
 import { useUser } from "@/hooks/useAuth";
 import { moneyService, type MoneySpending, type MoneyToday, type MoneyProfile } from "@/services/moneyService";
 import { MoneySetup } from "./MoneySetup";
 import { dollarsToCents, money } from "./input";
+
+const RING_RADIUS = 116;
+const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+const wholeDollars = (value: number) => `$${Math.round(value).toLocaleString("en-US")}`;
 
 function setupRequired(error: unknown) {
   return isAxiosError(error) && error.response?.data?.error?.code === "money_setup_required";
@@ -88,6 +94,10 @@ export function BetaToday() {
   const data = query.data;
   const result = data?.result;
   const ratio = result && result.morningCents > 0 ? Math.min(1, Math.max(0, result.remainingCents / result.morningCents)) : 0;
+  // Ring and number re-enter each time Today regains focus (static under Reduce Motion).
+  const replay = useFocusReplay();
+  const ring = useEntranceProgress(ratio, { replayKey: replay, duration: 700 });
+  const ringOffset = ring.interpolate({ inputRange: [0, 1], outputRange: [RING_LENGTH, 0] });
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   return <KeyboardAvoidingView style={styles.page} behavior={Platform.OS === "ios" ? "padding" : undefined}>
@@ -104,16 +114,16 @@ export function BetaToday() {
         {data.bankState === "reconnect_required" && <Button title="Reconnect bank" secondary onPress={() => router.push("/(tabs)/budget")} />}
         <Pressable accessibilityRole="button" accessibilityLabel={`${money(result.remainingCents)} remaining today. Show calculation.`} onPress={() => setShowMath(value => !value)} style={styles.hero}>
           <Svg width={260} height={260} viewBox="0 0 260 260" accessible={false}>
-            <Circle cx={130} cy={130} r={116} stroke={Colors.accentAlpha12} strokeWidth={10} fill="none" />
-            <Circle cx={130} cy={130} r={116} stroke={Colors.gold} strokeWidth={10} fill="none" strokeDasharray={`${2 * Math.PI * 116}`} strokeDashoffset={2 * Math.PI * 116 * (1 - ratio)} strokeLinecap="round" rotation={-90} origin="130,130" />
+            <Circle cx={130} cy={130} r={RING_RADIUS} stroke={Colors.accentAlpha12} strokeWidth={10} fill="none" />
+            <AnimatedCircle cx={130} cy={130} r={RING_RADIUS} stroke={Colors.gold} strokeWidth={10} fill="none" strokeDasharray={`${RING_LENGTH}`} strokeDashoffset={ringOffset} strokeLinecap="round" rotation={-90} origin="130,130" />
           </Svg>
-          <View pointerEvents="none" style={styles.heroText}><Text style={styles.heroLabel}>SAFE TO SPEND TODAY</Text><Text style={styles.amount}>${result.displayDollars}</Text><Text style={styles.label}>left today</Text><Text style={styles.morning}>of {money(result.morningCents)} this morning</Text></View>
+          <View pointerEvents="none" style={styles.heroText}><Text style={styles.heroLabel}>SAFE TO SPEND TODAY</Text><CountUp value={result.displayDollars} from={Math.floor(result.displayDollars * 0.85)} replayKey={replay} format={wholeDollars} fit style={styles.amount} /><Text style={styles.label}>left today</Text><Text style={styles.morning} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>of {money(result.morningCents)} this morning</Text></View>
         </Pressable>
         <Text style={styles.cycle}>{result.waitingForIncome ? "Still waiting on your next income." : `${result.daysLeft} ${result.daysLeft === 1 ? "day" : "days"} until your next income · ${result.inputs.cycle.end}`}</Text>
         <Button title={recalculating ? "Syncing and recalculating…" : "Recalculate safe to spend"} secondary disabled={recalculating} onPress={() => void recalculate()} />
         <Button title={loadingPlan ? "Loading plan…" : "Edit income & plan"} secondary disabled={loadingPlan || recalculating} onPress={() => void editPlan()} />
         <Button title="I spent" disabled={recalculating || loadingPlan} onPress={() => setShowSpending(true)} />
-        <Button title={showMath ? "Hide calculation" : `Why $${result.displayDollars}?`} secondary onPress={() => setShowMath(value => !value)} />
+        <Button title={showMath ? "Hide calculation" : `Why ${wholeDollars(result.displayDollars)}?`} secondary onPress={() => setShowMath(value => !value)} />
         {showMath && <View style={styles.card}>
           <Text style={styles.cardTitle}>Your plan, in numbers</Text>
           <Text style={styles.body}>Cycle: {result.inputs.cycle.start} to {result.inputs.cycle.end}</Text>
@@ -161,9 +171,9 @@ const styles = StyleSheet.create({
   subtitle: { color: Colors.muted, fontSize: 16, marginBottom: 6 },
   freshness: { color: Colors.navyMuted, fontSize: 13, textAlign: "center", lineHeight: 20 },
   hero: { alignSelf: "center", alignItems: "center", justifyContent: "center", width: 260, height: 260 },
-  heroText: { position: "absolute", alignItems: "center", gap: 6 },
+  heroText: { position: "absolute", width: 196, alignItems: "center", gap: 6 },
   heroLabel: { color: Colors.muted, fontSize: 11, letterSpacing: 1.4, fontWeight: "600" },
-  amount: { color: Colors.navy, fontSize: 64, fontWeight: "700", letterSpacing: -3 },
+  amount: { alignSelf: "stretch", textAlign: "center", color: Colors.navy, fontSize: 64, fontWeight: "700", letterSpacing: -2 },
   label: { color: Colors.navy, fontSize: 15, fontWeight: "600" },
   morning: { color: Colors.muted, fontSize: 12 },
   cycle: { color: Colors.navyMuted, fontSize: 14, textAlign: "center", lineHeight: 20 },

@@ -341,7 +341,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.navy50,
   },
   rowEmoji: { fontSize: 18, lineHeight: 22 },
-  rowCopy: { flex: 1 },
+  rowCopy: { flex: 1, minWidth: 0 },
   rowMerchant: { fontSize: 14, fontWeight: "800", color: Colors.navy },
   rowMeta: {
     marginTop: 3,
@@ -349,7 +349,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Colors.muted,
   },
-  rowAmount: { fontSize: 14, fontWeight: "800", color: Colors.navy },
+  rowAmount: { flexShrink: 0, marginLeft: 10, fontSize: 14, fontWeight: "800", color: Colors.navy },
   divider: { height: 1, backgroundColor: Colors.border },
   stateCard: {
     minHeight: 170,

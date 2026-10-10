@@ -17,3 +17,16 @@ test('arrival validates real calendar dates and rejects passed or distant payday
     assert.equal(isFutureDate(input, '2026-10-04'), false, input);
   }
 });
+test('compact currency steps up to millions and billions without "1000K"', async () => {
+  const { formatCurrency } = await import('../src/utils/security.ts');
+  const compact = (value) => formatCurrency(value, { compact: true });
+  assert.equal(compact(999), '$999');
+  assert.equal(compact(1234), '$1.2K');
+  assert.equal(compact(9999), '$10K');
+  assert.equal(compact(15898), '$16K');
+  assert.equal(compact(999_600), '$1.0M');
+  assert.equal(compact(2_676_000), '$2.7M');
+  assert.equal(compact(48_200_000), '$48M');
+  assert.equal(compact(1_250_000_000), '$1.3B');
+  assert.equal(compact(-21_050), '−$21K');
+});

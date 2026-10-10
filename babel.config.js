@@ -1,5 +1,5 @@
 /**
- * Babel config — Expo SDK 54 + NativeWind v4 + Reanimated 4 (Moti).
+ * Babel config — Expo + Reanimated 4 (Moti).
  *
  * Plugin order matters:
  *   1. babel-preset-expo (presets array)
@@ -15,10 +15,9 @@
 module.exports = function (api) {
   api.cache(true);
   return {
-    presets: [
-      // NativeWind v4: jsxImportSource handles the CSS interop — no separate plugin
-      ["babel-preset-expo", { jsxImportSource: "nativewind" }],
-    ],
+    // No NativeWind JSX interop: the app styles with StyleSheet only, and the
+    // interop silently dropped Pressable style callbacks ({ pressed }) => [...].
+    presets: ["babel-preset-expo"],
     plugins: ["react-native-worklets/plugin"],
   };
 };
