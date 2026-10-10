@@ -1,39 +1,79 @@
-import React, { useEffect, useState } from "react";
+/**
+ * Bud — a calm conversation surface.
+ *
+ * Home: greeting, this week's insight (rule-based from synced spending),
+ * conversation starters, and a composer. Starting a conversation cross-fades
+ * into the thread. While Bud's AI is still being built, replies come from
+ * features/bud/conversation and say where each answer comes from.
+ */
+
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  View,
-  Text,
-  ScrollView,
-  Pressable,
-  StyleSheet,
-  TextInput,
+  AccessibilityInfo,
+  Animated,
+  Easing,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
-import { Colors } from "@/constants/colors";
-import { TAB_BAR_HEIGHT } from "@/constants/tokens";
-import { useUser } from "@/hooks/useAuth";
-import { BrandHeader, BrandLogo } from "@/components/BrandLogo";
-import { MOCK_SESSIONS, MOCK_CHAT_HISTORY, BudMessage, type BudInsight } from "@/mock/bud";
-import { Icon, type IconName } from "@/components/Icon";
-import { todayService } from "@/services/todayService";
-import { goalsService } from "@/services/goalsService";
-import { formatCurrency, secureLog } from "@/utils/security";
-import type { Goal } from "@/mock/goals";
+import { router } from "expo-router";
+import * as Haptics from "expo-haptics";
 
-type BudView = "home" | "ask" | "sessions";
+import { FadeInUp, RevealWords, useFocusReplay, useReducedMotion } from "@/animations";
+import { BrandLogo } from "@/components/BrandLogo";
+import { Icon, type IconName } from "@/components/Icon";
+import { Colors } from "@/constants/colors";
+import { Motion, Radius, Shadow, Spacing, TAB_BAR_HEIGHT, Type } from "@/constants/tokens";
+import {
+  replyTo,
+  startersFor,
+  type BudReply,
+  type Starter,
+  type StarterId,
+} from "@/features/bud/conversation";
+import { BudOrb } from "@/features/onboarding/components/BudOrb";
+import { useUser } from "@/hooks/useAuth";
+import type { BudInsight } from "@/mock/bud";
+import type { Goal } from "@/mock/goals";
+import { goalsService } from "@/services/goalsService";
+import { todayService } from "@/services/todayService";
+import { secureLog } from "@/utils/security";
+
+type Message =
+  | { id: string; role: "user"; text: string }
+  | { id: string; role: "bud"; reply: BudReply };
+
+const COMING_SOON: { icon: IconName; title: string; body: string }[] = [
+  { icon: "layers", title: "Lessons", body: "Short guides like the 50/30/20 rule." },
+  { icon: "bar-chart", title: "Weekly review", body: "A Sunday recap of your week." },
+  { icon: "line-chart", title: "Scenarios", body: "What-if math for bigger decisions." },
+];
 
 export default function BudScreen() {
   const insets = useSafeAreaInsets();
   const user = useUser();
+  const reduced = useReducedMotion();
+  const replay = useFocusReplay();
 
-  const [view, setView] = useState<BudView>("home");
-  const [question, setQuestion] = useState("");
-  const [chatHistory, setChatHistory] = useState<BudMessage[]>(MOCK_CHAT_HISTORY);
-  const [isTyping, setIsTyping] = useState(false);
+  const [mode, setMode] = useState<"home" | "chat">("home");
+  const [draft, setDraft] = useState("");
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [thinking, setThinking] = useState(false);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [insight, setInsight] = useState<BudInsight | null>(null);
-  const [topGoal, setTopGoal] = useState<Goal | null>(null);
+  const [goal, setGoal] = useState<Goal | null>(null);
+
+  const progress = useRef(new Animated.Value(0)).current;
+  const threadRef = useRef<ScrollView>(null);
+  const replyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     todayService
@@ -42,421 +82,516 @@ export default function BudScreen() {
       .catch((error) => secureLog.warn("bud.insight failed", error));
     goalsService
       .list()
-      .then(({ goals }) => setTopGoal(goals[0] ?? null))
+      .then(({ goals }) => setGoal(goals[0] ?? null))
       .catch((error) => secureLog.warn("bud.goals failed", error));
   }, []);
 
-  const handleAsk = () => {
-    if (!question.trim()) return;
-    const userMsg: BudMessage = {
-      id: `m_${Date.now()}`,
-      role: "user",
-      content: question,
-      timestamp: new Date().toISOString(),
+  useEffect(() => {
+    const show = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      () => setKeyboardOpen(true)
+    );
+    const hide = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => setKeyboardOpen(false)
+    );
+    return () => {
+      show.remove();
+      hide.remove();
+      if (replyTimer.current) clearTimeout(replyTimer.current);
     };
-    setChatHistory((prev) => [...prev, userMsg]);
-    setQuestion("");
-    setIsTyping(true);
+  }, []);
 
-    setTimeout(() => {
-      const budResponse: BudMessage = {
-        id: `m_${Date.now() + 1}`,
-        role: "bud",
-        content:
-          "One thing worth knowing is that most people find progress happens in small, consistent steps rather than big swings. Based on your current spending patterns, even shifting $30/week makes a measurable difference over 90 days.",
-        timestamp: new Date().toISOString(),
-      };
-      setChatHistory((prev) => [...prev, budResponse]);
-      setIsTyping(false);
-    }, 1400);
+  const showChat = useCallback(
+    (open: boolean) => {
+      setMode(open ? "chat" : "home");
+      const toValue = open ? 1 : 0;
+      if (reduced) {
+        progress.setValue(toValue);
+        return;
+      }
+      Animated.timing(progress, {
+        toValue,
+        duration: Motion.slow + 60,
+        easing: Easing.bezier(0.22, 1, 0.36, 1),
+        useNativeDriver: true,
+      }).start();
+    },
+    [progress, reduced]
+  );
+
+  const send = (text: string, starterId?: StarterId) => {
+    const trimmed = text.trim();
+    if (!trimmed || thinking) return;
+    Haptics.selectionAsync();
+    showChat(true);
+    setDraft("");
+    setMessages((current) => [...current, { id: `u-${Date.now()}`, role: "user", text: trimmed }]);
+    setThinking(true);
+    replyTimer.current = setTimeout(() => {
+      const reply = replyTo(trimmed, goal, starterId);
+      setMessages((current) => [...current, { id: `b-${Date.now()}`, role: "bud", reply }]);
+      setThinking(false);
+      AccessibilityInfo.announceForAccessibility(reply.text);
+    }, reduced ? 300 : 900);
+  };
+
+  const closeChat = () => {
+    Keyboard.dismiss();
+    showChat(false);
+  };
+
+  const starters = startersFor(goal);
+  const onStarter = (starter: Starter) => send(starter.prompt, starter.id);
+
+  const homeStyle = {
+    opacity: progress.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
+    transform: [
+      { translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [0, -16] }) },
+      { scale: progress.interpolate({ inputRange: [0, 1], outputRange: [1, 0.98] }) },
+    ],
+  };
+  const chatStyle = {
+    opacity: progress,
+    transform: [{ translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }],
   };
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
+    <View style={styles.page}>
       <LinearGradient
-        colors={[Colors.brandGradientStart, Colors.brandGradientMid]}
-        style={[styles.header, { paddingTop: insets.top + 12 }]}
+        pointerEvents="none"
+        colors={[Colors.accentAlpha14, Colors.accentAlpha05, "transparent"]}
+        style={styles.glow}
+      />
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <BrandHeader dark style={styles.brandHeader} />
-        <View style={styles.headerRow}>
-          <View style={styles.budHeaderOrb}>
-            <BrandLogo variant="mark" markSize={48} />
-          </View>
-          <View>
-            <Text style={styles.headerTitle}>Bud</Text>
-            <Text style={styles.headerSub}>Your AI financial guide</Text>
-          </View>
-        </View>
-
-        {/* View switcher */}
-        <View style={styles.viewSwitcher}>
-          {(["home", "ask", "sessions"] as BudView[]).map((v) => (
-            <Pressable
-              key={v}
-              style={[styles.switchTab, view === v && styles.switchTabActive]}
-              onPress={() => setView(v)}
-            >
-              <Text style={[styles.switchTabText, view === v && styles.switchTabTextActive]}>
-                {v === "home" ? "Home" : v === "ask" ? "Ask Bud" : "Sessions"}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      </LinearGradient>
-
-      {/* Content */}
-      {view === "home" && (
-        <ScrollView
-          contentContainerStyle={[
-            styles.scrollContent,
-            { paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 24 },
-          ]}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Today's Insight — same source as the Today tab */}
-          <View style={styles.insightCard}>
-            <View style={styles.insightLabelRow}>
-              <Icon name="sparkles" size={13} color={Colors.gold} strokeWidth={2.4} />
-              <Text style={styles.insightLabel}>Today's insight</Text>
-            </View>
-            <Text style={styles.insightText}>
-              {insight?.message ??
-                "Bud is reading your latest activity — today's insight lands in a moment."}
-            </Text>
-            <Text style={styles.insightTime}>Built from your synced spending</Text>
-          </View>
-
-          {/* Action cards */}
-          <View style={styles.actionCards}>
-            <ActionCard
-              icon="layers"
-              title="Start a Session"
-              sub="3–5 min financial lessons built for your situation"
-              onPress={() => setView("sessions")}
-            />
-            <ActionCard
-              icon="message-circle"
-              title="Ask Bud"
-              sub="Plain-language answers grounded in your real data"
-              onPress={() => setView("ask")}
-            />
-            <ActionCard
-              icon="bar-chart"
-              title="Review My Week"
-              sub="Bud's weekly breakdown — every Sunday"
-              onPress={() => {}}
-              locked={new Date().getDay() !== 0}
-              lockReason="Available on Sundays"
-            />
-          </View>
-
-          {/* Run Scenario — Time Machine */}
-          <View style={styles.scenarioCard}>
-            <LinearGradient colors={[Colors.navy800, Colors.navy600]} style={styles.scenarioGrad}>
-              <View style={styles.scenarioHeader}>
-                <View style={styles.scenarioIconBox}>
-                  <Icon name="line-chart" size={18} color={Colors.gold} strokeWidth={2.2} />
-                </View>
-                <View style={styles.eliteBadge}>
-                  <Text style={styles.eliteBadgeText}>Elite</Text>
-                </View>
-              </View>
-              <Text style={styles.scenarioTitle}>Run Scenario</Text>
-              <Text style={styles.scenarioSub}>
-                "What if I saved $200 more per month for 2 years?" Bud runs the math.
-              </Text>
-              <Pressable style={styles.scenarioCta}>
-                <Text style={styles.scenarioCtaText}>Upgrade to Elite →</Text>
-              </Pressable>
-            </LinearGradient>
-          </View>
-
-          {/* Bud Memory snippet — real account facts, no canned numbers */}
-          <View style={styles.memoryCard}>
-            <View style={styles.memoryTitleRow}>
-              <Icon name="info" size={13} color={Colors.gold} strokeWidth={2.4} />
-              <Text style={styles.memoryTitle}>What Bud knows about you</Text>
-            </View>
-            {user?.why ? (
-              <View style={styles.memoryItem}>
-                <View style={styles.memoryBullet} />
-                <Text style={styles.memoryText}>Your why: “{user.why}”</Text>
-              </View>
-            ) : null}
-            {topGoal ? (
-              <View style={styles.memoryItem}>
-                <View style={styles.memoryBullet} />
-                <Text style={styles.memoryText}>
-                  {topGoal.name} is at{" "}
-                  {topGoal.targetAmount > 0
-                    ? Math.round((topGoal.alreadySaved / topGoal.targetAmount) * 100)
-                    : 0}
-                  % — {formatCurrency(topGoal.alreadySaved)} of{" "}
-                  {formatCurrency(topGoal.targetAmount)}
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.memoryItem}>
-                <View style={styles.memoryBullet} />
-                <Text style={styles.memoryText}>
-                  No active goal yet — create one in Goals and Bud will coach around it
-                </Text>
-              </View>
-            )}
-            <View style={styles.memoryItem}>
-              <View style={styles.memoryBullet} />
-              <Text style={styles.memoryText}>
-                {(user?.streak ?? 0) > 0
-                  ? `${user?.streak}-day streak — best ever was ${Math.max(user?.streakBestEver ?? 0, user?.streak ?? 0)} days`
-                  : "No streak yet — one check-in today starts it"}
-              </Text>
-            </View>
-          </View>
-        </ScrollView>
-      )}
-
-      {view === "ask" && (
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          keyboardVerticalOffset={0}
-        >
-          <ScrollView
-            contentContainerStyle={[
-              styles.chatContent,
-              { paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 80 },
-            ]}
-            showsVerticalScrollIndicator={false}
+        <View style={styles.flex}>
+          <Animated.View
+            pointerEvents={mode === "home" ? "auto" : "none"}
+            accessibilityElementsHidden={mode !== "home"}
+            importantForAccessibility={mode === "home" ? "auto" : "no-hide-descendants"}
+            style={[StyleSheet.absoluteFill, homeStyle]}
           >
-            {/* Disclaimer */}
-            <View style={styles.disclaimer}>
-              <Text style={styles.disclaimerText}>
-                Bud is an educational guide, not a licensed financial advisor. All responses are informational.
-              </Text>
-            </View>
+            <ScrollView
+              contentContainerStyle={[styles.homeContent, { paddingTop: insets.top + 12 }]}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.topBar}>
+                <BrandLogo variant="mark" markSize={30} />
+                <Text style={styles.topTitle}>Bud</Text>
+                <View style={styles.previewChip}>
+                  <Text style={styles.previewText}>Preview</Text>
+                </View>
+              </View>
 
-            {/* Suggested questions */}
-            <Text style={styles.suggestLabel}>Tap a question to ask:</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.suggestions}>
-              {[
-                "How do I build an emergency fund?",
-                "What's the avalanche vs snowball method?",
-                "How does compound interest work?",
-                "How can I improve my credit score?",
-              ].map((q) => (
-                <Pressable key={q} style={styles.suggestionChip} onPress={() => setQuestion(q)}>
-                  <Text style={styles.suggestionText}>{q}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
+              <Text style={styles.hello}>Hi {user?.firstName ?? "there"},</Text>
+              <RevealWords
+                text="What should we look at today?"
+                style={styles.headline}
+                replayKey={replay}
+                delay={120}
+                maxFontSizeMultiplier={1.3}
+              />
+              {user?.why ? (
+                <Text style={styles.why} numberOfLines={2}>
+                  Your why: “{user.why}”
+                </Text>
+              ) : null}
 
-            {/* Chat */}
-            <View style={styles.chatMessages}>
-              {chatHistory.map((msg) => (
-                <View
-                  key={msg.id}
-                  style={[
-                    styles.chatBubble,
-                    msg.role === "user" ? styles.chatBubbleUser : styles.chatBubbleBud,
-                  ]}
-                >
-                  {msg.role === "bud" && (
-                    <View style={styles.budBubbleAvatar}>
-                      <BrandLogo variant="mark" markSize={28} />
+              {insight ? (
+                <FadeInUp delay={280}>
+                  <View style={styles.insight}>
+                    <View style={styles.insightTop}>
+                      <Icon name="sparkles" size={13} color={Colors.gold} strokeWidth={2.4} />
+                      <Text style={styles.eyebrow}>This week</Text>
                     </View>
-                  )}
-                  <View style={[styles.bubbleContent, msg.role === "user" && styles.bubbleContentUser]}>
-                    <Text style={[styles.bubbleText, msg.role === "user" && styles.bubbleTextUser]}>
-                      {msg.content}
-                    </Text>
+                    <Text style={styles.insightText}>{insight.message}</Text>
+                    <Text style={styles.caption}>From your synced spending</Text>
                   </View>
-                </View>
-              ))}
-              {isTyping && (
-                <View style={[styles.chatBubble, styles.chatBubbleBud]}>
-                  <View style={styles.budBubbleAvatar}>
-                    <BrandLogo variant="mark" markSize={28} />
-                  </View>
-                  <View style={styles.bubbleContent}>
-                    <Text style={styles.typingText}>Bud is thinking…</Text>
-                  </View>
-                </View>
-              )}
-            </View>
-          </ScrollView>
+                </FadeInUp>
+              ) : null}
 
-          {/* Input */}
-          <View style={[styles.inputBar, { paddingBottom: insets.bottom + TAB_BAR_HEIGHT + 8 }]}>
+              <Text style={[styles.eyebrow, styles.sectionLabel]}>Start a conversation</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.starterScroller}
+                contentContainerStyle={styles.starterRow}
+              >
+                {starters.map((starter, index) => (
+                  <FadeInUp key={starter.id} delay={340 + index * 70}>
+                    <StarterCard starter={starter} onPress={() => onStarter(starter)} />
+                  </FadeInUp>
+                ))}
+              </ScrollView>
+
+              <View style={styles.comingSoon}>
+                <Text style={styles.eyebrow}>Coming to Bud</Text>
+                {COMING_SOON.map((item) => (
+                  <View key={item.title} style={styles.soonRow}>
+                    <View style={styles.soonIcon}>
+                      <Icon name={item.icon} size={15} color={Colors.navyMuted} strokeWidth={2.2} />
+                    </View>
+                    <View style={styles.flex}>
+                      <Text style={styles.soonTitle}>{item.title}</Text>
+                      <Text style={styles.caption}>{item.body}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+          </Animated.View>
+
+          <Animated.View
+            pointerEvents={mode === "chat" ? "auto" : "none"}
+            accessibilityElementsHidden={mode !== "chat"}
+            importantForAccessibility={mode === "chat" ? "auto" : "no-hide-descendants"}
+            style={[StyleSheet.absoluteFill, chatStyle]}
+          >
+            <View style={[styles.threadTop, { paddingTop: insets.top + 8 }]}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close chat"
+                hitSlop={8}
+                onPress={closeChat}
+                style={({ pressed }) => [styles.closePill, pressed && styles.pressed]}
+              >
+                <Icon name="x" size={14} color={Colors.navyMuted} strokeWidth={2.4} />
+                <Text style={styles.closeText}>Close chat</Text>
+              </Pressable>
+            </View>
+            <ScrollView
+              ref={threadRef}
+              contentContainerStyle={styles.threadContent}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
+              onContentSizeChange={() => threadRef.current?.scrollToEnd({ animated: !reduced })}
+            >
+              <Text style={styles.disclaimer}>
+                Bud is in preview. Answers are general guides, not financial advice.
+              </Text>
+              {messages.length === 0 && !thinking ? (
+                <View style={styles.emptyThread}>
+                  <BrandLogo variant="mark" markSize={36} />
+                  <Text style={styles.emptyTitle}>
+                    Ask about your goal, your budget, or a money basic.
+                  </Text>
+                  <StarterChips starters={starters} onStarter={onStarter} centered />
+                </View>
+              ) : null}
+              {messages.map((message) =>
+                message.role === "user" ? (
+                  <FadeInUp key={message.id} distance={10} duration={Motion.base}>
+                    <View style={styles.userBubble}>
+                      <Text style={styles.userText}>{message.text}</Text>
+                    </View>
+                  </FadeInUp>
+                ) : (
+                  <FadeInUp key={message.id} distance={10}>
+                    <BudReplyView reply={message.reply} starters={starters} onStarter={onStarter} />
+                  </FadeInUp>
+                )
+              )}
+              {thinking ? (
+                <View style={styles.budRow} accessibilityLabel="Bud is thinking">
+                  <BudOrb size={24} glow={false} />
+                  <Text style={styles.thinking}>Bud is thinking…</Text>
+                </View>
+              ) : null}
+            </ScrollView>
+          </Animated.View>
+        </View>
+
+        <View
+          style={[
+            styles.composerWrap,
+            { paddingBottom: keyboardOpen ? Spacing.sm : TAB_BAR_HEIGHT + insets.bottom + 8 },
+          ]}
+        >
+          <View style={styles.composer}>
             <TextInput
-              style={styles.chatInput}
-              value={question}
-              onChangeText={setQuestion}
-              placeholder="Ask Bud anything financial..."
+              accessibilityLabel="Message Bud"
+              placeholder="Ask Bud about your money…"
               placeholderTextColor={Colors.muted}
+              value={draft}
+              onChangeText={setDraft}
+              onFocus={() => showChat(true)}
+              onSubmitEditing={() => send(draft)}
               returnKeyType="send"
-              onSubmitEditing={handleAsk}
-              multiline
+              submitBehavior="submit"
+              maxLength={500}
+              style={styles.input}
             />
-            <Pressable style={styles.sendButton} onPress={handleAsk}>
-              <LinearGradient colors={[Colors.gold, Colors.gold600]} style={styles.sendGrad}>
-                <Text style={styles.sendIcon}>↑</Text>
-              </LinearGradient>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Send message"
+              accessibilityState={{ disabled: !draft.trim() || thinking }}
+              disabled={!draft.trim() || thinking}
+              onPress={() => send(draft)}
+              style={[styles.send, (!draft.trim() || thinking) && styles.sendDisabled]}
+            >
+              <Icon
+                name="arrow-up"
+                size={18}
+                color={draft.trim() && !thinking ? Colors.onAccent : Colors.muted}
+                strokeWidth={2.6}
+              />
             </Pressable>
           </View>
-        </KeyboardAvoidingView>
-      )}
-
-      {view === "sessions" && (
-        <ScrollView
-          contentContainerStyle={[
-            styles.scrollContent,
-            { paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 24 },
-          ]}
-          showsVerticalScrollIndicator={false}
-        >
-          <Text style={styles.sessionsHeader}>
-            {user?.subscriptionTier === "free"
-              ? "1 session available this month"
-              : user?.subscriptionTier === "premium"
-              ? "4 sessions available this month"
-              : "Unlimited sessions"}
-          </Text>
-
-          {MOCK_SESSIONS.map((session) => (
-            <Pressable key={session.id} style={[styles.sessionCard, session.completed && styles.sessionCardDone]}>
-              <View style={styles.sessionCardHeader}>
-                <View style={styles.sessionCategoryBadge}>
-                  <Text style={styles.sessionCategoryText}>{session.category}</Text>
-                </View>
-                <Text style={styles.sessionXP}>+{session.xpReward} XP</Text>
-              </View>
-              <Text style={styles.sessionTitle}>{session.title}</Text>
-              <Text style={styles.sessionWhy}>{session.whyItMattersNow}</Text>
-              <View style={styles.sessionFooter}>
-                <View style={styles.sessionDurationRow}>
-                  <Icon name="calendar" size={11} color={Colors.muted} strokeWidth={2.2} />
-                  <Text style={styles.sessionDuration}>{session.duration}</Text>
-                </View>
-                {session.completed ? (
-                  <View style={styles.sessionDoneBadge}>
-                    <Icon name="check" size={11} color={Colors.emerald} strokeWidth={3} />
-                    <Text style={styles.sessionDoneText}>Completed</Text>
-                  </View>
-                ) : (
-                  <Text style={styles.sessionStart}>Start →</Text>
-                )}
-              </View>
-            </Pressable>
-          ))}
-        </ScrollView>
-      )}
+        </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }
 
-function ActionCard({ icon, title, sub, onPress, locked, lockReason }: {
-  icon: IconName; title: string; sub: string; onPress: () => void; locked?: boolean; lockReason?: string;
-}) {
+function StarterCard({ starter, onPress }: { starter: Starter; onPress: () => void }) {
   return (
     <Pressable
-      style={[styles.actionCard, locked && styles.actionCardLocked]}
-      onPress={!locked ? onPress : undefined}
-      disabled={locked}
+      accessibilityRole="button"
+      accessibilityLabel={`${starter.eyebrow}: ${starter.title}`}
+      onPress={onPress}
+      style={({ pressed }) => [styles.starter, pressed && styles.pressed]}
     >
-      <View style={styles.actionIconBox}>
-        <Icon name={icon} size={18} color={Colors.gold} strokeWidth={2.2} />
+      <View style={styles.starterIcon}>
+        <Icon name={starter.icon} size={16} color={Colors.gold} strokeWidth={2.3} />
       </View>
-      <View style={styles.actionText}>
-        <Text style={styles.actionTitle}>{title}</Text>
-        <Text style={styles.actionSub}>{locked ? lockReason ?? sub : sub}</Text>
+      <View style={styles.starterCopy}>
+        <Text style={styles.eyebrow}>{starter.eyebrow}</Text>
+        <Text style={styles.starterTitle} numberOfLines={2}>
+          {starter.title}
+        </Text>
       </View>
-      {locked ? (
-        <Icon name="lock" size={14} color={Colors.muted} strokeWidth={2} />
-      ) : (
-        <Icon name="chevron-right" size={16} color={Colors.muted} strokeWidth={2.2} />
-      )}
     </Pressable>
   );
 }
 
+function StarterChips({
+  starters,
+  onStarter,
+  centered = false,
+}: {
+  starters: Starter[];
+  onStarter: (starter: Starter) => void;
+  centered?: boolean;
+}) {
+  return (
+    <View style={[styles.chips, centered && styles.chipsCentered]}>
+      {starters.map((starter) => (
+        <Pressable
+          key={starter.id}
+          accessibilityRole="button"
+          onPress={() => onStarter(starter)}
+          style={({ pressed }) => [styles.chip, pressed && styles.pressed]}
+        >
+          <Text style={styles.chipText}>{starter.title}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+function BudReplyView({
+  reply,
+  starters,
+  onStarter,
+}: {
+  reply: BudReply;
+  starters: Starter[];
+  onStarter: (starter: Starter) => void;
+}) {
+  const action = reply.action;
+  return (
+    <View style={styles.budRow}>
+      <BrandLogo variant="mark" markSize={24} />
+      <View style={styles.budBody}>
+        <Text style={styles.budText}>{reply.text}</Text>
+        {reply.source ? <Text style={styles.caption}>{reply.source}</Text> : null}
+        {action ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.navigate(action.route)}
+            style={({ pressed }) => [styles.actionPill, pressed && styles.pressed]}
+          >
+            <Text style={styles.actionText}>{action.label}</Text>
+            <Icon name="chevron-right" size={14} color={Colors.navy} strokeWidth={2.4} />
+          </Pressable>
+        ) : null}
+        {reply.offerStarters ? <StarterChips starters={starters} onStarter={onStarter} /> : null}
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.surface },
-  header: { paddingHorizontal: 20, paddingBottom: 0 },
-  brandHeader: { marginBottom: 12 },
-  headerRow: { flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 16 },
-  budHeaderOrb: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
-  headerTitle: { fontSize: 24, fontWeight: "800", color: Colors.brandOnDark, letterSpacing: 0 },
-  headerSub: { fontSize: 13, color: Colors.brandOnDarkMuted },
-  viewSwitcher: { flexDirection: "row", borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.08)", marginTop: 4 },
-  switchTab: { flex: 1, paddingVertical: 12, alignItems: "center" },
-  switchTabActive: { borderBottomWidth: 2, borderBottomColor: Colors.gold },
-  switchTabText: { fontSize: 13, color: Colors.muted, fontWeight: "500" },
-  switchTabTextActive: { color: Colors.gold, fontWeight: "700" },
-  scrollContent: { padding: 20, gap: 14 },
-  insightCard: { backgroundColor: Colors.accentAlpha08, borderRadius: 16, padding: 18, borderWidth: 1, borderColor: Colors.accentAlpha20 },
-  insightLabelRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
-  insightLabel: { fontSize: 12, color: Colors.gold, fontWeight: "800", letterSpacing: 0.6, textTransform: "uppercase" },
-  insightText: { fontSize: 15, color: Colors.navyMuted, lineHeight: 22, fontWeight: "400" },
-  insightTime: { fontSize: 11, color: Colors.muted, marginTop: 10 },
-  actionCards: { gap: 10 },
-  actionCard: { flexDirection: "row", alignItems: "center", backgroundColor: Colors.card, borderRadius: 14, padding: 16, gap: 14, shadowColor: Colors.navy, shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
-  actionCardLocked: { opacity: 0.55 },
-  actionIconBox: { width: 36, height: 36, borderRadius: 10, backgroundColor: Colors.accentAlpha12, borderWidth: 1, borderColor: Colors.accentAlpha30, alignItems: "center", justifyContent: "center" },
-  actionText: { flex: 1 },
-  actionTitle: { fontSize: 15, fontWeight: "700", color: Colors.navy, marginBottom: 2 },
-  actionSub: { fontSize: 12, color: Colors.muted, lineHeight: 16 },
-  scenarioCard: { borderRadius: 16, overflow: "hidden" },
-  scenarioGrad: { padding: 20 },
-  scenarioHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
-  scenarioIconBox: { width: 36, height: 36, borderRadius: 10, backgroundColor: Colors.accentAlpha12, borderWidth: 1, borderColor: Colors.accentAlpha30, alignItems: "center", justifyContent: "center" },
-  eliteBadge: { backgroundColor: Colors.gold, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, alignSelf: "flex-start" },
-  eliteBadgeText: { fontSize: 11, fontWeight: "700", color: Colors.onGreen },
-  scenarioTitle: { fontSize: 18, fontWeight: "800", color: Colors.brandOnDark, marginBottom: 6 },
-  scenarioSub: { fontSize: 13, color: Colors.brandOnDarkMuted, lineHeight: 18, marginBottom: 16 },
-  scenarioCta: { alignSelf: "flex-start" },
-  scenarioCtaText: { fontSize: 13, color: Colors.gold, fontWeight: "700" },
-  memoryCard: { backgroundColor: Colors.card, borderRadius: 16, padding: 16, gap: 10, shadowColor: Colors.navy, shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
-  memoryTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  memoryTitle: { fontSize: 13, fontWeight: "800", color: Colors.navy, letterSpacing: 0.4, textTransform: "uppercase" },
-  memoryItem: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
-  memoryBullet: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: Colors.gold, marginTop: 7 },
-  memoryText: { fontSize: 13, color: Colors.navyMuted, flex: 1, lineHeight: 18 },
-  chatContent: { padding: 20 },
-  disclaimer: { backgroundColor: Colors.accentAlpha07, borderRadius: 10, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: Colors.accentAlpha15 },
-  disclaimerText: { fontSize: 12, color: Colors.muted, lineHeight: 17 },
-  suggestLabel: { fontSize: 12, color: Colors.muted, fontWeight: "500", marginBottom: 10, letterSpacing: 0.3 },
-  suggestions: { gap: 8, paddingBottom: 16 },
-  suggestionChip: { backgroundColor: Colors.card, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: Colors.border },
-  suggestionText: { fontSize: 13, color: Colors.navyMuted, fontWeight: "500" },
-  chatMessages: { gap: 14 },
-  chatBubble: { flexDirection: "row", gap: 10, alignItems: "flex-end" },
-  chatBubbleUser: { flexDirection: "row-reverse" },
-  chatBubbleBud: {},
-  budBubbleAvatar: { width: 28, height: 28, alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  bubbleContent: { maxWidth: "78%", backgroundColor: Colors.card, borderRadius: 16, borderBottomLeftRadius: 4, padding: 14, shadowColor: Colors.navy, shadowOpacity: 0.05, shadowRadius: 4, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
-  bubbleContentUser: { backgroundColor: Colors.gold, borderBottomLeftRadius: 16, borderBottomRightRadius: 4 },
-  bubbleText: { fontSize: 14, color: Colors.navyMuted, lineHeight: 20 },
-  bubbleTextUser: { color: Colors.onGreen },
-  typingText: { fontSize: 13, color: Colors.muted, fontStyle: "italic" },
-  inputBar: { position: "absolute", bottom: 0, left: 0, right: 0, flexDirection: "row", alignItems: "flex-end", gap: 10, paddingHorizontal: 20, paddingTop: 12, backgroundColor: Colors.surface, borderTopWidth: 1, borderTopColor: Colors.border },
-  chatInput: { flex: 1, backgroundColor: Colors.card, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15, color: Colors.navy, borderWidth: 1, borderColor: Colors.border, maxHeight: 100 },
-  sendButton: { width: 44, height: 44, borderRadius: 22, overflow: "hidden" },
-  sendGrad: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
-  sendIcon: { fontSize: 18, fontWeight: "700", color: Colors.onAccent },
-  sessionsHeader: { fontSize: 13, color: Colors.muted, fontWeight: "500", marginBottom: 4 },
-  sessionCard: { backgroundColor: Colors.card, borderRadius: 16, padding: 16, gap: 10, shadowColor: Colors.navy, shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
-  sessionCardDone: { opacity: 0.65 },
-  sessionCardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  sessionCategoryBadge: { backgroundColor: Colors.navy50, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-  sessionCategoryText: { fontSize: 11, color: Colors.navyMuted, fontWeight: "600" },
-  sessionXP: { fontSize: 12, color: Colors.gold, fontWeight: "700" },
-  sessionTitle: { fontSize: 15, fontWeight: "700", color: Colors.navy, lineHeight: 20 },
-  sessionWhy: { fontSize: 12, color: Colors.muted, lineHeight: 17 },
-  sessionFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  sessionDurationRow: { flexDirection: "row", alignItems: "center", gap: 5 },
-  sessionDuration: { fontSize: 12, color: Colors.muted },
-  sessionDoneBadge: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "rgba(16,185,129,0.12)", borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-  sessionDoneText: { fontSize: 12, color: Colors.emerald, fontWeight: "600" },
-  sessionStart: { fontSize: 13, color: Colors.gold, fontWeight: "700" },
+  page: { flex: 1, backgroundColor: Colors.surface },
+  flex: { flex: 1 },
+  glow: { position: "absolute", top: 0, left: 0, right: 0, height: 420 },
+  pressed: { opacity: 0.7 },
+
+  // Home
+  homeContent: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.xl },
+  topBar: { flexDirection: "row", alignItems: "center", gap: 10 },
+  topTitle: { ...Type.h2, color: Colors.navy },
+  previewChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
+    backgroundColor: Colors.card,
+  },
+  previewText: { ...Type.micro, color: Colors.muted, letterSpacing: 0.4 },
+  hello: { marginTop: 32, fontSize: 17, fontWeight: "600", color: Colors.muted },
+  headline: {
+    fontSize: 34,
+    lineHeight: 40,
+    fontWeight: "800",
+    letterSpacing: -0.8,
+    color: Colors.navy,
+  },
+  why: { ...Type.body, marginTop: 10, color: Colors.navyMuted, fontStyle: "italic" },
+  insight: {
+    marginTop: Spacing.xl,
+    padding: Spacing.md,
+    gap: 8,
+    borderRadius: Radius.xl,
+    backgroundColor: Colors.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
+    ...Shadow.sm,
+  },
+  insightTop: { flexDirection: "row", alignItems: "center", gap: 6 },
+  insightText: { fontSize: 15, lineHeight: 22, color: Colors.navy },
+  eyebrow: { ...Type.eyebrow, fontSize: 10, color: Colors.muted },
+  caption: { ...Type.caption, fontWeight: "500", color: Colors.muted },
+  sectionLabel: { marginTop: 28, marginBottom: 12 },
+  starterScroller: { marginHorizontal: -Spacing.lg },
+  starterRow: { paddingHorizontal: Spacing.lg, gap: 12 },
+  starter: {
+    width: 168,
+    minHeight: 132,
+    padding: Spacing.md,
+    justifyContent: "space-between",
+    borderRadius: Radius.xl,
+    backgroundColor: Colors.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
+    ...Shadow.sm,
+  },
+  starterIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.accentAlpha12,
+  },
+  starterCopy: { gap: 4, marginTop: Spacing.sm },
+  starterTitle: { fontSize: 15, lineHeight: 20, fontWeight: "700", color: Colors.navy },
+  comingSoon: {
+    marginTop: 28,
+    padding: Spacing.md,
+    gap: Spacing.sm,
+    borderRadius: Radius.xl,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
+  },
+  soonRow: { flexDirection: "row", alignItems: "center", gap: Spacing.sm },
+  soonIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.navy50,
+  },
+  soonTitle: { ...Type.bodyStrong, color: Colors.navy },
+
+  // Thread
+  threadTop: { alignItems: "center", paddingBottom: Spacing.sm },
+  closePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    minHeight: 36,
+    paddingHorizontal: 14,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
+    ...Shadow.sm,
+  },
+  closeText: { ...Type.caption, color: Colors.navy },
+  threadContent: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.md, gap: 18 },
+  disclaimer: { ...Type.caption, fontWeight: "500", color: Colors.muted, textAlign: "center" },
+  emptyThread: { alignItems: "center", gap: Spacing.sm, marginTop: Spacing.xl },
+  emptyTitle: { ...Type.h3, color: Colors.navy, textAlign: "center", maxWidth: 260 },
+  userBubble: {
+    alignSelf: "flex-end",
+    maxWidth: "82%",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderBottomRightRadius: 6,
+    backgroundColor: Colors.greenSurfaceStrong,
+  },
+  userText: { fontSize: 15, lineHeight: 21, color: Colors.navy },
+  budRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  budBody: { flex: 1, gap: 8 },
+  budText: { fontSize: 15, lineHeight: 22, color: Colors.navy },
+  thinking: { ...Type.body, color: Colors.muted, alignSelf: "center" },
+  actionPill: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    minHeight: 36,
+    paddingHorizontal: 12,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.greenSurface,
+    borderWidth: 1,
+    borderColor: Colors.greenBorder,
+  },
+  actionText: { ...Type.caption, color: Colors.navy },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  chipsCentered: { justifyContent: "center" },
+  chip: {
+    minHeight: 36,
+    justifyContent: "center",
+    paddingHorizontal: 12,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
+  },
+  chipText: { ...Type.caption, color: Colors.navy },
+
+  // Composer
+  composerWrap: { paddingHorizontal: Spacing.md, paddingTop: Spacing.xs },
+  composer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minHeight: 52,
+    paddingLeft: 18,
+    paddingRight: 6,
+    borderRadius: 26,
+    backgroundColor: Colors.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
+    ...Shadow.md,
+  },
+  input: { flex: 1, minHeight: 44, fontSize: 16, color: Colors.navy },
+  send: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.gold,
+  },
+  sendDisabled: { backgroundColor: Colors.navy50 },
 });

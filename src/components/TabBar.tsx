@@ -111,11 +111,8 @@ function TabItem({ routeName, label, isFocused, onPress, onLongPress, isBudTab }
       >
         <Animated.View style={[styles.budContainer, { transform: [{ scale }] }]}>
           <View style={[styles.budButton, isFocused && styles.budButtonActive]}>
-            <Icon
-              color={isFocused ? Colors.navy : Colors.tabBarInactive}
-              size={24}
-              filled={isFocused}
-            />
+            {/* Outline on the accent fill: the filled face hid its smile in light mode. */}
+            <Icon color={isFocused ? Colors.onAccent : Colors.tabBarInactive} size={24} />
           </View>
           <Animated.Text style={[styles.tabLabel, { color: iconColor, opacity: labelOpacity }]}>
             {config.label}
