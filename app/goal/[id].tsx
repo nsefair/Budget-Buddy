@@ -1,10 +1,10 @@
 /**
- * Goal Detail — full-screen view of a single goal (developer review §Tab 3).
+ * Goal Detail — one goal in the card language of the Goals tab.
  *
- * Shows the large progress, amount saved / remaining, projected completion
- * based on the monthly commitment, milestone badges (25/50/75/100%), and the
- * action buttons the review calls for. Frontend-only: contribute / edit /
- * share / delete are wired to placeholders until the backend lands.
+ * A calm glow header with the goal's kind, name, and reason; the saved
+ * amount rolling in with muted cents over a thin bar that grows; remaining,
+ * monthly, and projected tiles; milestones (25/50/75/100%); Bud's note; and
+ * the same actions as before (contribute, edit, delete).
  */
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -18,12 +18,12 @@ import {
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
-import { MotiView } from "moti";
 
 import { Colors } from "@/constants/colors";
 import { Icon, type IconName } from "@/components/Icon";
-import { FadeInUp } from "@/animations";
+import { CountUp, FadeInUp, GrowBar, useFocusReplay } from "@/animations";
 import { goalsService } from "@/services/goalsService";
 import type { Goal, GoalCategoryKind } from "@/mock/goals";
 import { formatCurrency } from "@/utils/security";
@@ -39,10 +39,13 @@ const KIND_META: Record<GoalCategoryKind, { label: string; icon: IconName; tint:
 };
 
 const MILESTONES = [25, 50, 75, 100];
+const DANGER_TINT = "rgba(239, 68, 68, 0.1)";
 
 export default function GoalDetailScreen() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
+  // The saved amount and bar re-enter whenever this screen regains focus.
+  const replay = useFocusReplay();
   const [goal, setGoal] = useState<Goal | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -69,8 +72,14 @@ export default function GoalDetailScreen() {
   const projected = useMemo(() => {
     if (!goal?.projectedCompletionDate) return null;
     const d = new Date(goal.projectedCompletionDate);
-    return d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+    return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
   }, [goal?.projectedCompletionDate]);
+  const deadline = useMemo(() => {
+    if (!goal?.deadline) return null;
+    const d = new Date(goal.deadline);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  }, [goal?.deadline]);
 
   const back = () => {
     Haptics.selectionAsync();
@@ -80,7 +89,7 @@ export default function GoalDetailScreen() {
   if (loading) {
     return (
       <View style={[styles.container, styles.center]}>
-        <ActivityIndicator color={Colors.gold} />
+        <ActivityIndicator color={Colors.navyMuted} />
       </View>
     );
   }
@@ -89,8 +98,12 @@ export default function GoalDetailScreen() {
     return (
       <View style={[styles.container, styles.center, { paddingTop: insets.top }]}>
         <Text style={styles.missing}>This goal could not be found.</Text>
-        <Pressable onPress={back} style={styles.missingBtn}>
-          <Text style={styles.missingBtnText}>Go back</Text>
+        <Pressable
+          accessibilityRole="button"
+          onPress={back}
+          style={({ pressed }) => [styles.secondaryBtn, pressed && styles.pressed]}
+        >
+          <Text style={styles.secondaryBtnText}>Go back</Text>
         </Pressable>
       </View>
     );
@@ -98,127 +111,167 @@ export default function GoalDetailScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Top bar */}
-      <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
-        <Pressable onPress={back} hitSlop={10} style={styles.iconBtn}>
-          <Icon name="arrow-left" size={18} color={Colors.navy} strokeWidth={2.4} />
-        </Pressable>
-        <Text style={styles.topTitle} numberOfLines={1}>{goal.name}</Text>
-        <Pressable onPress={() => openGoalAction(goal.id, "edit")} hitSlop={10} style={styles.iconBtn}>
-          <Icon name="settings" size={17} color={Colors.navy} strokeWidth={2.2} />
-        </Pressable>
-      </View>
-
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 28 }]}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Hero progress ring-ish header */}
-        <FadeInUp>
-          <View style={[styles.hero, { borderColor: `${meta.tint}40` }]}>
-            <View style={[styles.kindIcon, { backgroundColor: `${meta.tint}1A`, borderColor: `${meta.tint}55` }]}>
-              <Icon name={meta.icon} size={22} color={meta.tint} strokeWidth={2.2} />
+        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+          <LinearGradient
+            pointerEvents="none"
+            colors={[Colors.accentAlpha14, Colors.accentAlpha05, "transparent"]}
+            style={styles.glow}
+          />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back to goals"
+            hitSlop={8}
+            onPress={back}
+            style={({ pressed }) => [styles.backBtn, pressed && styles.pressed]}
+          >
+            <Icon name="arrow-left" size={18} color={Colors.navy} strokeWidth={2.4} />
+          </Pressable>
+
+          <FadeInUp>
+            <View style={styles.kindRow}>
+              <View style={[styles.kindTile, { backgroundColor: `${meta.tint}1F` }]}>
+                <Icon name={meta.icon} size={15} color={meta.tint} strokeWidth={2.3} />
+              </View>
+              <Text style={styles.eyebrow}>
+                {meta.label.toUpperCase()}
+                {goal.linkedAccountId ? " · AUTO TRACKING" : ""}
+              </Text>
             </View>
-            <Text style={[styles.kindLabel, { color: meta.tint }]}>{meta.label.toUpperCase()}</Text>
-
-            <Text style={styles.bigPct}>{pct}%</Text>
-            <Text style={styles.bigAmount}>
-              {formatCurrency(goal.alreadySaved)}{" "}
-              <Text style={styles.bigAmountMuted}>of {formatCurrency(goal.targetAmount)}</Text>
+            <Text style={styles.title} accessibilityRole="header" maxFontSizeMultiplier={1.3}>
+              {goal.name}
             </Text>
+            {goal.reason ? <Text style={styles.reason}>“{goal.reason}”</Text> : null}
+          </FadeInUp>
+        </View>
 
-            <View style={styles.barTrack}>
-              <MotiView
-                from={{ width: "0%" }}
-                animate={{ width: `${pct}%` }}
-                transition={{ type: "timing", duration: 800, delay: 150 }}
-                style={[styles.barFill, { backgroundColor: meta.tint }]}
+        <View style={styles.body}>
+          {/* Saved so far */}
+          <FadeInUp delay={60}>
+            <View
+              style={styles.card}
+              accessible
+              accessibilityLabel={`${formatCurrency(goal.alreadySaved)} saved of ${formatCurrency(goal.targetAmount)}${deadline ? ` by ${deadline}` : ""}, ${pct} percent.`}
+            >
+              <View style={styles.savedTop}>
+                <Text style={styles.cardEyebrow}>SAVED</Text>
+                <Text style={styles.percent}>{pct}%</Text>
+              </View>
+              <CountUp
+                value={goal.alreadySaved}
+                from={goal.alreadySaved * 0.9}
+                replayKey={replay}
+                format={formatCurrency}
+                fit
+                style={styles.saved}
+                centsStyle={styles.savedCents}
               />
+              <Text style={styles.target}>
+                of {formatCurrency(goal.targetAmount)}
+                {deadline ? ` by ${deadline}` : ""}
+              </Text>
+              <GrowBar
+                progress={progress}
+                color={meta.tint}
+                trackColor={Colors.navy50}
+                height={8}
+                delay={120}
+                duration={700}
+                replayKey={replay}
+                style={styles.bar}
+              />
+              <View style={styles.cells}>
+                <Cell label="Remaining" value={formatCurrency(remaining, { compact: true })} />
+                <Cell label="Monthly" value={formatCurrency(goal.monthlyCommit, { compact: true })} />
+                <Cell label="On track for" value={projected ?? "—"} />
+              </View>
             </View>
+          </FadeInUp>
 
-            <Text style={styles.reason}>“{goal.reason}”</Text>
-          </View>
-        </FadeInUp>
-
-        {/* Key numbers */}
-        <FadeInUp delay={80}>
-          <View style={styles.numbersRow}>
-            <NumberCell label="Remaining" value={formatCurrency(remaining, { compact: true })} />
-            <View style={styles.numDivider} />
-            <NumberCell label="Monthly" value={formatCurrency(goal.monthlyCommit, { compact: true })} />
-            <View style={styles.numDivider} />
-            <NumberCell label="On track for" value={projected ?? "—"} />
-          </View>
-        </FadeInUp>
-
-        {/* Milestones */}
-        <FadeInUp delay={140}>
-          <Text style={styles.sectionLabel}>MILESTONES</Text>
-          <View style={styles.milestoneRow}>
-            {MILESTONES.map((m) => {
-              const reached = pct >= m;
-              return (
-                <View
-                  key={m}
-                  style={[
-                    styles.milestone,
-                    reached && { backgroundColor: `${meta.tint}1A`, borderColor: `${meta.tint}80` },
-                  ]}
-                >
-                  <Icon
-                    name={reached ? "badge-check" : "lock"}
-                    size={16}
-                    color={reached ? meta.tint : Colors.muted}
-                    strokeWidth={2.4}
-                  />
-                  <Text style={[styles.milestoneText, reached && { color: meta.tint }]}>{m}%</Text>
-                </View>
-              );
-            })}
-          </View>
-        </FadeInUp>
-
-        {/* Bud note */}
-        <FadeInUp delay={200}>
-          <View style={styles.budNote}>
-            <Icon name="sparkles" size={15} color={Colors.teal} strokeWidth={2.4} />
-            <Text style={styles.budNoteText}>
-              {goal.trailing30DayContribution && projected
-                ? `Your last 30 days added ${formatCurrency(goal.trailing30DayContribution)}. At that pace, you're tracking toward ${projected}.`
-                : goal.linkedAccountId
-                  ? "Automatic tracking is on. New transfers into the linked savings account will build your 30-day pace."
-                  : "Log a contribution to start building your 30-day pace, or link a savings account from Edit goal."}
+          {/* Milestones */}
+          <FadeInUp delay={120}>
+            <Text style={styles.groupTitle} accessibilityRole="header">
+              Milestones
             </Text>
-          </View>
-        </FadeInUp>
+            <View style={[styles.card, styles.milestones]}>
+              {MILESTONES.map((m) => {
+                const reached = pct >= m;
+                return (
+                  <View
+                    key={m}
+                    style={styles.milestone}
+                    accessible
+                    accessibilityLabel={`${m} percent, ${reached ? "reached" : "not reached yet"}`}
+                  >
+                    <View
+                      style={[
+                        styles.milestoneTile,
+                        reached ? { backgroundColor: `${meta.tint}1F` } : styles.milestoneTileOpen,
+                      ]}
+                    >
+                      <Icon
+                        name={reached ? "check" : "lock"}
+                        size={15}
+                        color={reached ? meta.tint : Colors.muted}
+                        strokeWidth={2.6}
+                      />
+                    </View>
+                    <Text style={[styles.milestoneText, reached && styles.milestoneTextReached]}>
+                      {m}%
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          </FadeInUp>
 
-        {/* Actions */}
-        <FadeInUp delay={260}>
-          <View style={styles.actionStack}>
+          {/* Bud note */}
+          <FadeInUp delay={180}>
+            <View style={[styles.card, styles.note]}>
+              <View style={styles.noteTile}>
+                <Icon name="sparkles" size={15} color={Colors.gold} strokeWidth={2.4} />
+              </View>
+              <View style={styles.noteCopy}>
+                <Text style={styles.cardEyebrow}>BUD</Text>
+                <Text style={styles.noteText}>
+                  {goal.trailing30DayContribution && projected
+                    ? `Your last 30 days added ${formatCurrency(goal.trailing30DayContribution)}. At that pace, you're tracking toward ${projected}.`
+                    : goal.linkedAccountId
+                      ? "Automatic tracking is on. New transfers into the linked savings account will build your 30-day pace."
+                      : "Log a contribution to start building your 30-day pace, or link a savings account from Edit goal."}
+                </Text>
+              </View>
+            </View>
+          </FadeInUp>
+
+          {/* Actions */}
+          <FadeInUp delay={240}>
             <Pressable
-              style={({ pressed }) => [styles.primaryBtn, pressed && styles.primaryBtnPressed]}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.primaryBtn, pressed && styles.pressed]}
               onPress={() => openGoalAction(goal.id, "contribute", Haptics.ImpactFeedbackStyle.Medium)}
             >
-              <View style={styles.primaryBtnLeft}>
-                <Text style={styles.primaryBtnText}>Log a contribution</Text>
-              </View>
+              <Text style={styles.primaryBtnText}>Log a contribution</Text>
             </Pressable>
+          </FadeInUp>
 
-            <View style={styles.secondaryRow}>
-              <SecondaryBtn icon="settings" label="Edit" onPress={() => openGoalAction(goal.id, "edit")} />
+          <FadeInUp delay={300}>
+            <View style={styles.actionsCard}>
+              <ActionRow icon="pencil" label="Edit goal" onPress={() => openGoalAction(goal.id, "edit")} />
+              <View style={styles.rowDivider} />
+              <ActionRow
+                icon="trash"
+                label="Delete goal"
+                danger
+                accessibilityHint="Asks you to confirm before deleting"
+                onPress={() => openGoalAction(goal.id, "delete")}
+              />
             </View>
-
-            <Pressable
-              style={({ pressed }) => [styles.deleteBtn, pressed && { opacity: 0.85 }]}
-              onPress={() => openGoalAction(goal.id, "delete")}
-            >
-              <View style={styles.deleteBtnInner}>
-                <Icon name="alert-circle" size={16} color={Colors.coral} strokeWidth={2.4} />
-                <Text style={styles.deleteBtnText}>Delete goal</Text>
-              </View>
-            </Pressable>
-          </View>
-        </FadeInUp>
+          </FadeInUp>
+        </View>
       </ScrollView>
     </View>
   );
@@ -234,232 +287,221 @@ function openGoalAction(
   router.push(`/goal-action?goalId=${encodeURIComponent(goalId)}&action=${action}`);
 }
 
-function NumberCell({ label, value }: { label: string; value: string }) {
+function Cell({ label, value }: { label: string; value: string }) {
   return (
-    <View style={styles.numCell}>
-      <Text style={styles.numValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{value}</Text>
-      <Text style={styles.numLabel}>{label}</Text>
+    <View style={styles.cell}>
+      <Text style={styles.cellLabel}>{label}</Text>
+      <Text style={styles.cellValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+        {value}
+      </Text>
     </View>
   );
 }
 
-function SecondaryBtn({
+function ActionRow({
   icon,
   label,
+  danger = false,
+  accessibilityHint,
   onPress,
 }: {
   icon: IconName;
   label: string;
+  danger?: boolean;
+  accessibilityHint?: string;
   onPress: () => void;
 }) {
   return (
     <Pressable
-      style={({ pressed }) => [styles.secondaryBtn, pressed && styles.secondaryBtnPressed]}
+      accessibilityRole="button"
+      accessibilityHint={accessibilityHint}
       onPress={onPress}
+      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
     >
-      <View style={styles.secondaryBtnInner}>
-        <View style={styles.secondaryBtnIconWrap}>
-          <Icon name={icon} size={17} color={Colors.navy} strokeWidth={2.2} />
-        </View>
-        <Text style={styles.secondaryBtnText} numberOfLines={2}>{label}</Text>
+      <View style={[styles.rowTile, { backgroundColor: danger ? DANGER_TINT : Colors.accentAlpha12 }]}>
+        <Icon name={icon} size={17} color={danger ? Colors.coral : Colors.gold} strokeWidth={2.3} />
       </View>
+      <Text style={[styles.rowLabel, danger && styles.rowLabelDanger]}>{label}</Text>
+      {danger ? null : (
+        <Icon name="chevron-right" size={16} color={Colors.muted} strokeWidth={2.2} />
+      )}
     </Pressable>
   );
 }
 
+const ROW_TILE = 36;
+const ROW_INSET = 16;
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.surface },
   center: { alignItems: "center", justifyContent: "center", gap: 14 },
+  pressed: { opacity: 0.8 },
   missing: { fontSize: 15, fontWeight: "700", color: Colors.navyMuted },
-  missingBtn: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: Colors.gold,
-  },
-  missingBtnText: { fontSize: 14, fontWeight: "800", color: Colors.onGreen },
 
-  topBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-  },
-  iconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 999,
+  // Header — the tabs' calm glow with back, kind, name, and reason.
+  header: { paddingHorizontal: 20 },
+  glow: { position: "absolute", top: 0, left: 0, right: 0, height: 360 },
+  backBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: "center",
     justifyContent: "center",
+    marginBottom: 20,
+    backgroundColor: Colors.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
+  },
+  kindRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  kindTile: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  eyebrow: { flexShrink: 1, fontSize: 10, fontWeight: "800", letterSpacing: 1.6, color: Colors.muted },
+  title: {
+    marginTop: 10,
+    fontSize: 34,
+    lineHeight: 40,
+    fontWeight: "800",
+    letterSpacing: -0.8,
+    color: Colors.navy,
+  },
+  reason: {
+    marginTop: 6,
+    fontSize: 14,
+    lineHeight: 20,
+    fontStyle: "italic",
+    color: Colors.muted,
+  },
+
+  body: { paddingHorizontal: 18, paddingTop: 22, gap: 12 },
+  card: {
+    padding: 18,
+    borderRadius: 22,
+    backgroundColor: Colors.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
+  },
+  cardEyebrow: { fontSize: 10, fontWeight: "800", letterSpacing: 1.6, color: Colors.muted },
+
+  // Saved card (matches the Goals card's amount, bar, and soft tiles)
+  savedTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  percent: { fontSize: 14, fontWeight: "800", color: Colors.navy, fontVariant: ["tabular-nums"] },
+  saved: {
+    marginTop: 6,
+    fontSize: 34,
+    fontWeight: "800",
+    letterSpacing: -1,
+    color: Colors.navy,
+  },
+  // Cents sit quieter than dollars.
+  savedCents: { color: Colors.muted, fontWeight: "700" },
+  target: { marginTop: 2, fontSize: 13, fontWeight: "600", color: Colors.muted },
+  bar: { marginTop: 16 },
+  cells: { flexDirection: "row", gap: 8, marginTop: 16 },
+  cell: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 14,
     backgroundColor: Colors.navy50,
   },
-  topTitle: { flex: 1, fontSize: 17, fontWeight: "800", color: Colors.navy, textAlign: "center" },
+  cellLabel: { fontSize: 11, fontWeight: "600", color: Colors.muted },
+  cellValue: { fontSize: 15, fontWeight: "800", color: Colors.navy, fontVariant: ["tabular-nums"] },
 
-  scroll: { paddingHorizontal: 20, paddingTop: 6 },
-
-  hero: {
-    alignItems: "center",
-    backgroundColor: Colors.card,
-    borderRadius: 22,
-    borderWidth: 1,
-    paddingVertical: 26,
-    paddingHorizontal: 20,
-    marginBottom: 16,
-    shadowColor: Colors.navy,
-    shadowOpacity: 0.05,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 3,
-  },
-  kindIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-  },
-  kindLabel: { marginTop: 10, fontSize: 11, fontWeight: "800", letterSpacing: 1.4 },
-  bigPct: { marginTop: 10, fontSize: 52, fontWeight: "800", color: Colors.navy, letterSpacing: -1.5 },
-  bigAmount: { marginTop: 2, fontSize: 16, fontWeight: "800", color: Colors.navy },
-  bigAmountMuted: { color: Colors.muted, fontWeight: "600" },
-  barTrack: {
-    alignSelf: "stretch",
-    height: 10,
-    borderRadius: 6,
-    backgroundColor: Colors.border,
-    overflow: "hidden",
-    marginTop: 18,
-  },
-  barFill: { height: 10, borderRadius: 6 },
-  reason: {
-    marginTop: 16,
-    fontSize: 14,
-    fontStyle: "italic",
-    color: Colors.navyMuted,
-    textAlign: "center",
-    lineHeight: 20,
-  },
-
-  numbersRow: {
-    flexDirection: "row",
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 18,
-    paddingVertical: 16,
-    marginBottom: 22,
-  },
-  numCell: { flex: 1, alignItems: "center", gap: 5, paddingHorizontal: 4 },
-  numDivider: { width: 1, backgroundColor: Colors.border, marginVertical: 4 },
-  numValue: { fontSize: 16, fontWeight: "800", color: Colors.navy, letterSpacing: -0.2 },
-  numLabel: { fontSize: 11, fontWeight: "600", color: Colors.muted },
-
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: Colors.muted,
-    letterSpacing: 1.2,
-    marginBottom: 12,
-    marginLeft: 4,
-  },
-  milestoneRow: { flexDirection: "row", gap: 10, marginBottom: 22 },
-  milestone: {
-    flex: 1,
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 14,
-    borderRadius: 14,
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  milestoneText: { fontSize: 13, fontWeight: "800", color: Colors.muted },
-
-  budNote: {
-    flexDirection: "row",
-    gap: 10,
-    alignItems: "flex-start",
-    backgroundColor: Colors.accentAlpha08,
-    borderWidth: 1,
-    borderColor: Colors.accentAlpha15,
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 24,
-  },
-  budNoteText: { flex: 1, fontSize: 13, fontWeight: "600", color: Colors.navy, lineHeight: 19 },
-
-  actionStack: {
-    gap: 12,
+  // Milestones
+  groupTitle: {
+    marginTop: 12,
     marginBottom: 8,
+    marginLeft: 4,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1.4,
+    textTransform: "uppercase",
+    color: Colors.muted,
   },
-  primaryBtn: {
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 56,
-    backgroundColor: Colors.accent,
-    borderRadius: 18,
-    paddingVertical: 16,
-    paddingHorizontal: 18,
-    shadowColor: Colors.accent,
-    shadowOpacity: 0.28,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
-  },
-  primaryBtnPressed: {
-    opacity: 0.9,
-    transform: [{ scale: 0.99 }],
-  },
-  primaryBtnLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  primaryBtnText: {
-    fontSize: 16,
-    fontWeight: "900",
-    color: Colors.onAccent,
-    letterSpacing: 0,
-  },
-
-  secondaryRow: { flexDirection: "row", gap: 10 },
-  secondaryBtn: {
-    flex: 1,
-    minHeight: 76,
-    paddingVertical: 14,
-    paddingHorizontal: 10,
-    borderRadius: 18,
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  secondaryBtnInner: { alignItems: "center", gap: 8 },
-  secondaryBtnIconWrap: {
+  milestones: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 22 },
+  milestone: { alignItems: "center", gap: 6 },
+  milestoneTile: {
     width: 36,
     height: 36,
-    borderRadius: 11,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Colors.greenSurface,
-    borderWidth: 1,
-    borderColor: Colors.greenBorder,
   },
-  secondaryBtnPressed: { backgroundColor: Colors.navy50 },
-  secondaryBtnText: { fontSize: 13, fontWeight: "800", color: Colors.navy, textAlign: "center" },
+  milestoneTileOpen: { backgroundColor: Colors.navy50 },
+  milestoneText: { fontSize: 12, fontWeight: "700", color: Colors.muted, fontVariant: ["tabular-nums"] },
+  milestoneTextReached: { color: Colors.navy },
 
-  deleteBtn: {
-    minHeight: 50,
-    borderRadius: 14,
-    backgroundColor: "rgba(239, 68, 68, 0.07)",
-    borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.18)",
+  // Bud note
+  note: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  noteTile: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.accentAlpha12,
+  },
+  noteCopy: { flex: 1, minWidth: 0, gap: 4 },
+  noteText: { fontSize: 14, lineHeight: 21, fontWeight: "500", color: Colors.navy },
+
+  // Actions — Today's primary button, then quiet rows like Profile's menu.
+  primaryBtn: {
+    minHeight: 52,
+    marginTop: 8,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.gold,
+  },
+  primaryBtnText: { fontSize: 16, fontWeight: "700", color: Colors.onAccent },
+  secondaryBtn: {
+    minHeight: 48,
+    paddingHorizontal: 20,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
+  },
+  secondaryBtnText: { fontSize: 15, fontWeight: "700", color: Colors.navy },
+  actionsCard: {
+    overflow: "hidden",
+    borderRadius: 22,
+    backgroundColor: Colors.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    minHeight: 60,
+    paddingHorizontal: ROW_INSET,
+    paddingVertical: 10,
+  },
+  rowPressed: { backgroundColor: Colors.navy50 },
+  rowTile: {
+    width: ROW_TILE,
+    height: ROW_TILE,
+    borderRadius: ROW_TILE / 2,
     alignItems: "center",
     justifyContent: "center",
   },
-  deleteBtnInner: { flexDirection: "row", alignItems: "center", gap: 8 },
-  deleteBtnText: { fontSize: 14, fontWeight: "800", color: Colors.coral },
+  rowLabel: { flex: 1, fontSize: 15, fontWeight: "700", color: Colors.navy },
+  rowLabelDanger: { color: Colors.coral },
+  // Hairlines start under the text, like grouped iOS lists.
+  rowDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: ROW_INSET + ROW_TILE + 12,
+    backgroundColor: Colors.border,
+  },
 });
