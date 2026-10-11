@@ -1,5 +1,5 @@
 /**
- * PrimaryButton — gold gradient pill, pressable feedback, optional spinner.
+ * PrimaryButton — calm solid accent pill, pressable feedback, optional spinner.
  *
  * Single CTA per screen. Avoid stacking primaries.
  * When `loading` is true the label is hidden and a small activity indicator shows.
@@ -15,7 +15,6 @@ import {
   View,
   ViewStyle,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "@/constants/colors";
 
 interface Props {
@@ -59,16 +58,7 @@ export function PrimaryButton({ label, onPress, disabled, loading, style }: Prop
         disabled={isInert}
         style={[styles.wrapper, isInert && styles.disabled]}
       >
-        <LinearGradient
-          colors={
-            showDisabledSurface
-              ? [Colors.navy100, Colors.navy100]
-              : [Colors.gold400, Colors.gold600]
-          }
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={styles.gradient}
-        >
+        <View style={[styles.fill, showDisabledSurface && styles.fillDisabled]}>
           {loading ? (
             <ActivityIndicator color={Colors.onGreen} />
           ) : (
@@ -76,7 +66,7 @@ export function PrimaryButton({ label, onPress, disabled, loading, style }: Prop
               {label}
             </Text>
           )}
-        </LinearGradient>
+        </View>
       </Pressable>
     </Animated.View>
   );
@@ -107,21 +97,16 @@ export function SecondaryButton({ label, onPress, disabled, style }: SecondaryPr
 }
 
 const styles = StyleSheet.create({
-  wrapper: {
-    borderRadius: 16,
-    overflow: "hidden",
-    shadowColor: Colors.gold,
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
-  },
-  disabled: { shadowOpacity: 0, elevation: 0 },
-  gradient: {
-    paddingVertical: 17,
+  wrapper: { borderRadius: 18, overflow: "hidden" },
+  disabled: {},
+  fill: {
+    minHeight: 54,
+    paddingVertical: 16,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: Colors.gold,
   },
+  fillDisabled: { backgroundColor: Colors.navy100 },
   label: {
     fontSize: 16,
     fontWeight: "700",

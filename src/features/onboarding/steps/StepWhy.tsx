@@ -33,9 +33,10 @@ export function StepWhy({ selectedId, customText, onSelect, onChangeCustom }: Pr
       </Subheadline>
 
       <View style={{ gap: 10 }}>
-        {WHY_OPTIONS.map((w) => (
+        {WHY_OPTIONS.map((w, index) => (
           <OptionCard
             key={w.id}
+            index={index}
             icon={w.icon}
             label={w.label}
             sub={w.sub}
