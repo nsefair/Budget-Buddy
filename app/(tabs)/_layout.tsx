@@ -6,14 +6,33 @@
  * Custom tab bar comes from src/components/TabBar.tsx
  */
 
+import { useEffect, useRef } from "react";
+import { AppState } from "react-native";
 import { Tabs, Redirect } from "expo-router";
 import type { BottomTabBarProps } from "expo-router/js-tabs";
 import { useIsAuthenticated, useHasOnboarded } from "@/hooks/useAuth";
 import { CustomTabBar } from "@/components/TabBar";
+import { eventsService } from "@/services/eventsService";
+
+// Beta metric: every open, on launch and on each return from the background
+// (not when Control Center or a notification briefly covers the app).
+function useAppOpenEvent(enabled: boolean) {
+  const lastState = useRef(AppState.currentState);
+  useEffect(() => {
+    if (!enabled) return;
+    eventsService.log("app_open");
+    const subscription = AppState.addEventListener("change", (next) => {
+      if (lastState.current === "background" && next === "active") eventsService.log("app_open");
+      lastState.current = next;
+    });
+    return () => subscription.remove();
+  }, [enabled]);
+}
 
 export default function TabsLayout() {
   const isAuthenticated = useIsAuthenticated();
   const hasOnboarded = useHasOnboarded();
+  useAppOpenEvent(isAuthenticated && hasOnboarded);
 
   if (!isAuthenticated) return <Redirect href="/(auth)/welcome" />;
   if (!hasOnboarded) return <Redirect href="/(auth)/onboarding" />;

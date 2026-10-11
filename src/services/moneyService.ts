@@ -26,6 +26,18 @@ export interface MoneyToday {
   };
   bankState: "manual" | "current" | "stale" | "reconnect_required";
   lastSyncAt: string | null;
+  // Finished days with a stored morning number, oldest first. Optional so the
+  // app keeps working against a server that does not send them yet.
+  recentDays?: MoneyDayResult[];
+  yesterday?: MoneyYesterday | null;
+}
+export interface MoneyDayResult {
+  date: string; morningCents: number; spentCents: number;
+  status: "under" | "even" | "over";
+}
+export interface MoneyYesterday extends MoneyDayResult {
+  // What move-to-goal sets aside now (0 once moved or nothing is left).
+  movableCents: number; allocatedCents: number; goalId?: string;
 }
 export interface MoneySpending {
   clientId: string; amountCents: number; cash: boolean;

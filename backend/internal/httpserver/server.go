@@ -13,6 +13,7 @@ import (
 	"budget-buddy/backend/internal/budget"
 	"budget-buddy/backend/internal/buds"
 	"budget-buddy/backend/internal/config"
+	"budget-buddy/backend/internal/events"
 	"budget-buddy/backend/internal/goals"
 	"budget-buddy/backend/internal/money"
 	"budget-buddy/backend/internal/notifications"
@@ -32,6 +33,7 @@ func New(cfg config.Config, logger *slog.Logger, db *pgxpool.Pool) *http.Server 
 	auth.RegisterRoutes(mux, cfg.APIBasePath, authHandler)
 	billing.RegisterRoutes(mux, cfg.APIBasePath, db, cfg, authHandler.RequireAuth)
 	buds.RegisterRoutes(mux, cfg.APIBasePath, db, cfg.BudsMediaDir, authHandler.RequireAuth)
+	events.RegisterRoutes(mux, cfg.APIBasePath, db, authHandler.RequireAuth)
 	goals.RegisterRoutes(mux, cfg.APIBasePath, db, authHandler.RequireAuth)
 	notifications.RegisterRoutes(mux, cfg.APIBasePath, db, cfg, authHandler.RequireAuth)
 	budget.RegisterRoutes(mux, cfg.APIBasePath, db, authHandler.RequireAuth)
