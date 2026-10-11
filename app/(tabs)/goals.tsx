@@ -1204,7 +1204,7 @@ const styles = StyleSheet.create({
   addBtnText: {
     fontSize: 13,
     fontWeight: "800",
-    color: Colors.gold,
+    color: Colors.navy,
     letterSpacing: 0.2,
     marginLeft: 5,
   },

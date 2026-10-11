@@ -1,9 +1,9 @@
 /**
- * GradientHeader — the shared dark brand header for top-level tabs.
+ * GradientHeader — the shared calm header for top-level tabs.
  *
- * Today, Bud, and Buds established the pattern (brand gradient, centered
- * wordmark, on-dark title row). Budget and Quests use this component so all
- * five tabs read as one design language.
+ * Matches Bud: the page surface with a soft brand glow, a small mark +
+ * eyebrow, and a large title. Budget, Goals, and Quests use it so the tabs
+ * read as one design language.
  */
 
 import React from "react";
@@ -11,7 +11,7 @@ import { StyleProp, StyleSheet, Text, View, ViewStyle } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { BrandHeader } from "@/components/BrandLogo";
+import { BrandLogo } from "@/components/BrandLogo";
 import { Colors } from "@/constants/colors";
 import { Spacing, Type } from "@/constants/tokens";
 
@@ -31,33 +31,41 @@ export function GradientHeader({
   style,
 }: GradientHeaderProps) {
   const insets = useSafeAreaInsets();
+  // Skip an eyebrow that only repeats the title ("GOALS" above "Goals").
+  const showEyebrow = Boolean(eyebrow) && eyebrow!.toLowerCase() !== title.toLowerCase();
 
   return (
-    <LinearGradient
-      colors={[Colors.brandGradientStart, Colors.brandGradientMid]}
-      style={[styles.header, { paddingTop: insets.top + 12 }, style]}
-    >
-      <BrandHeader dark style={styles.brand} />
+    <View style={[styles.header, { paddingTop: insets.top + 12 }, style]}>
+      <LinearGradient
+        pointerEvents="none"
+        colors={[Colors.accentAlpha14, Colors.accentAlpha05, "transparent"]}
+        style={styles.glow}
+      />
+      <View style={styles.brandRow}>
+        <BrandLogo variant="mark" markSize={26} />
+        {showEyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
+      </View>
       <View style={styles.row}>
         <View style={styles.left}>
-          {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
-          <Text style={styles.title} accessibilityRole="header" maxFontSizeMultiplier={1.4}>
+          <Text style={styles.title} accessibilityRole="header" maxFontSizeMultiplier={1.3}>
             {title}
           </Text>
           {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
         </View>
         {right ? <View style={styles.right}>{right}</View> : null}
       </View>
-    </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   header: {
     paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
+    paddingBottom: Spacing.sm,
   },
-  brand: { marginBottom: Spacing.sm },
+  glow: { position: "absolute", top: 0, left: 0, right: 0, height: 360 },
+  brandRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 22 },
+  eyebrow: { ...Type.eyebrow, fontSize: 10, color: Colors.muted },
   row: {
     flexDirection: "row",
     alignItems: "flex-end",
@@ -65,19 +73,13 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   left: { flex: 1 },
-  right: { paddingBottom: 2 },
-  eyebrow: {
-    ...Type.eyebrow,
-    color: Colors.gold,
-    marginBottom: 5,
-  },
+  right: { paddingBottom: 4 },
   title: {
-    ...Type.h1,
-    color: Colors.brandOnDark,
+    fontSize: 34,
+    lineHeight: 40,
+    fontWeight: "800",
+    letterSpacing: -0.8,
+    color: Colors.navy,
   },
-  subtitle: {
-    ...Type.caption,
-    color: Colors.brandOnDarkMuted,
-    marginTop: 4,
-  },
+  subtitle: { ...Type.body, marginTop: 4, color: Colors.muted },
 });

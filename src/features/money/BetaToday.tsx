@@ -1,10 +1,11 @@
 import React, { useCallback, useRef, useState } from "react";
-import { ActivityIndicator, Animated, AppState, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Animated, AppState, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleProp, StyleSheet, Switch, Text, TextInput, View, ViewStyle } from "react-native";
 import { useFocusEffect, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { isAxiosError } from "axios";
 import Svg, { Circle } from "react-native-svg";
+import { LinearGradient } from "expo-linear-gradient";
 import { CountUp, useEntranceProgress, useFocusReplay } from "@/animations";
 import { Colors } from "@/constants/colors";
 import { TAB_BAR_HEIGHT } from "@/constants/tokens";
@@ -17,6 +18,8 @@ const RING_RADIUS = 116;
 const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 const wholeDollars = (value: number) => `$${Math.round(value).toLocaleString("en-US")}`;
+// "2026-11-01" → "Nov 1" (parsed at local noon so the day never shifts).
+const shortDate = (isoDay: string) => new Date(`${isoDay}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
 function setupRequired(error: unknown) {
   return isAxiosError(error) && error.response?.data?.error?.code === "money_setup_required";
@@ -101,8 +104,9 @@ export function BetaToday() {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   return <KeyboardAvoidingView style={styles.page} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <LinearGradient pointerEvents="none" colors={[Colors.accentAlpha14, Colors.accentAlpha05, "transparent"]} style={styles.glow} />
     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.content, { paddingTop: insets.top + 20, paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 24 }]} refreshControl={<RefreshControl refreshing={query.isRefetching} onRefresh={() => void refetch()} tintColor={Colors.navy} />}>
-      <View style={styles.header}><Text style={styles.greeting}>{greeting}, {user?.firstName ?? "there"}.</Text><Pressable accessibilityRole="button" onPress={() => router.push("/profile")} style={styles.profile}><Text style={styles.link}>Profile</Text></Pressable></View>
+      <View style={styles.header}><Text style={styles.greeting}>{greeting}, {user?.firstName ?? "there"}.</Text><Pressable accessibilityRole="button" accessibilityLabel="Open profile" hitSlop={6} onPress={() => router.push("/profile")} style={({ pressed }) => [styles.avatar, pressed && { opacity: 0.7 }]}><Text style={styles.avatarText}>{(user?.firstName ?? "?").slice(0, 1).toUpperCase()}</Text></Pressable></View>
       <Text style={styles.subtitle}>{new Date().toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })} · A little clarity for today.</Text>
       {query.isPending && <ActivityIndicator accessibilityLabel="Calculating today's number" color={Colors.navy} />}
       {setupRequired(query.error) && <MoneySetup onSaved={async () => { await refetch(); }} />}
@@ -119,11 +123,13 @@ export function BetaToday() {
           </Svg>
           <View pointerEvents="none" style={styles.heroText}><Text style={styles.heroLabel}>SAFE TO SPEND TODAY</Text><CountUp value={result.displayDollars} from={Math.floor(result.displayDollars * 0.85)} replayKey={replay} format={wholeDollars} fit style={styles.amount} /><Text style={styles.label}>left today</Text><Text style={styles.morning} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>of {money(result.morningCents)} this morning</Text></View>
         </Pressable>
-        <Text style={styles.cycle}>{result.waitingForIncome ? "Still waiting on your next income." : `${result.daysLeft} ${result.daysLeft === 1 ? "day" : "days"} until your next income · ${result.inputs.cycle.end}`}</Text>
-        <Button title={recalculating ? "Syncing and recalculating…" : "Recalculate safe to spend"} secondary disabled={recalculating} onPress={() => void recalculate()} />
-        <Button title={loadingPlan ? "Loading plan…" : "Edit income & plan"} secondary disabled={loadingPlan || recalculating} onPress={() => void editPlan()} />
+        <Text style={styles.cycle}>{result.waitingForIncome ? "Still waiting on your next income." : `${result.daysLeft} ${result.daysLeft === 1 ? "day" : "days"} until your next income · ${shortDate(result.inputs.cycle.end)}`}</Text>
+        <Pressable accessibilityRole="button" onPress={() => setShowMath(value => !value)} hitSlop={8} style={({ pressed }) => [styles.whyLink, pressed && { opacity: 0.6 }]}><Text style={styles.whyText}>{showMath ? "Hide calculation" : `Why ${wholeDollars(result.displayDollars)}?`}</Text></Pressable>
         <Button title="I spent" disabled={recalculating || loadingPlan} onPress={() => setShowSpending(true)} />
-        <Button title={showMath ? "Hide calculation" : `Why ${wholeDollars(result.displayDollars)}?`} secondary onPress={() => setShowMath(value => !value)} />
+        <View style={styles.actionsRow}>
+          <Button title={recalculating ? "Recalculating…" : "Recalculate"} accessibilityLabel="Recalculate safe to spend" secondary disabled={recalculating} onPress={() => void recalculate()} style={styles.half} />
+          <Button title={loadingPlan ? "Loading…" : "Edit plan"} accessibilityLabel="Edit income and plan" secondary disabled={loadingPlan || recalculating} onPress={() => void editPlan()} style={styles.half} />
+        </View>
         {showMath && <View style={styles.card}>
           <Text style={styles.cardTitle}>Your plan, in numbers</Text>
           <Text style={styles.body}>Cycle: {result.inputs.cycle.start} to {result.inputs.cycle.end}</Text>
@@ -159,16 +165,18 @@ export function BetaToday() {
 function Line({ label, cents }: { label: string; cents: number }) {
   return <View style={styles.row}><Text style={[styles.body, { flex: 1 }]}>{label}</Text><Text style={styles.label}>{money(cents)}</Text></View>;
 }
-function Button({ title, onPress, secondary, disabled }: { title: string; onPress: () => void; secondary?: boolean; disabled?: boolean }) {
-  return <Pressable accessibilityRole="button" accessibilityState={{ disabled: Boolean(disabled) }} disabled={disabled} onPress={onPress} style={[styles.button, secondary && styles.secondary, disabled && { opacity: 0.5 }]}><Text style={[styles.buttonText, secondary && { color: Colors.navy }]}>{title}</Text></Pressable>;
+function Button({ title, onPress, secondary, disabled, accessibilityLabel, style }: { title: string; onPress: () => void; secondary?: boolean; disabled?: boolean; accessibilityLabel?: string; style?: StyleProp<ViewStyle> }) {
+  return <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} accessibilityState={{ disabled: Boolean(disabled) }} disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.button, secondary && styles.secondary, style, disabled && { opacity: 0.5 }, pressed && !disabled && { opacity: 0.8 }]}><Text style={[styles.buttonText, secondary && styles.secondaryText]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{title}</Text></Pressable>;
 }
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: Colors.surface },
+  glow: { position: "absolute", top: 0, left: 0, right: 0, height: 420 },
   content: { paddingHorizontal: 22, gap: 16 },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  greeting: { color: Colors.navy, fontSize: 22, fontWeight: "700", flex: 1 },
-  profile: { padding: 12, minHeight: 44 }, link: { color: Colors.navy, fontWeight: "600" },
-  subtitle: { color: Colors.muted, fontSize: 16, marginBottom: 6 },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  greeting: { color: Colors.navy, fontSize: 26, lineHeight: 32, fontWeight: "800", letterSpacing: -0.4, flex: 1 },
+  avatar: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: Colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: Colors.border },
+  avatarText: { color: Colors.navy, fontSize: 16, fontWeight: "800" },
+  subtitle: { color: Colors.muted, fontSize: 15, marginTop: -8, marginBottom: 6 },
   freshness: { color: Colors.navyMuted, fontSize: 13, textAlign: "center", lineHeight: 20 },
   hero: { alignSelf: "center", alignItems: "center", justifyContent: "center", width: 260, height: 260 },
   heroText: { position: "absolute", width: 196, alignItems: "center", gap: 6 },
@@ -177,10 +185,15 @@ const styles = StyleSheet.create({
   label: { color: Colors.navy, fontSize: 15, fontWeight: "600" },
   morning: { color: Colors.muted, fontSize: 12 },
   cycle: { color: Colors.navyMuted, fontSize: 14, textAlign: "center", lineHeight: 20 },
-  button: { minHeight: 50, padding: 16, borderRadius: 16, alignItems: "center", backgroundColor: Colors.gold },
-  secondary: { backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border },
+  whyLink: { alignSelf: "center", minHeight: 32, justifyContent: "center", paddingHorizontal: 12, marginTop: -6 },
+  whyText: { color: Colors.navy, fontSize: 14, fontWeight: "700", textDecorationLine: "underline" },
+  button: { minHeight: 52, paddingHorizontal: 16, justifyContent: "center", borderRadius: 18, alignItems: "center", backgroundColor: Colors.gold },
+  secondary: { backgroundColor: Colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: Colors.border },
   buttonText: { color: Colors.onAccent, fontSize: 16, fontWeight: "700" },
-  card: { padding: 22, backgroundColor: Colors.card, borderRadius: 22, gap: 14 },
+  secondaryText: { color: Colors.navy, fontSize: 15 },
+  actionsRow: { flexDirection: "row", gap: 10, marginTop: -6 },
+  half: { flex: 1 },
+  card: { padding: 22, backgroundColor: Colors.card, borderRadius: 22, gap: 14, borderWidth: StyleSheet.hairlineWidth, borderColor: Colors.border },
   cardTitle: { color: Colors.navy, fontSize: 20, fontWeight: "700" },
   body: { color: Colors.navyMuted, fontSize: 14, lineHeight: 21 },
   row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 16 },

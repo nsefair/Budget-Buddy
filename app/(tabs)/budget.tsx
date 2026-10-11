@@ -30,9 +30,7 @@ import { router, useFocusEffect } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { moneyService } from "@/services/moneyService";
 import { usePlaidConnection } from "@/hooks/usePlaidConnection";
-import { MotiView } from "moti";
 import * as Haptics from "expo-haptics";
-import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Polyline } from "react-native-svg";
 
 import { CountUp, GrowBar, useFocusReplay } from "@/animations";
@@ -60,6 +58,7 @@ import { goalsService } from "@/services/goalsService";
 import type { GoalsSummary } from "@/mock/goals";
 import { formatCurrency, secureLog } from "@/utils/security";
 import {
+  MonthSpendBars,
   SpendingDonutChart,
   TransactionCalendar,
 } from "@/features/budget/BudgetVisuals";
@@ -215,13 +214,6 @@ export default function BudgetScreen() {
   const selectedMonth = selectedMonthIndex >= 0 ? months[selectedMonthIndex] : null;
   const previousMonth = selectedMonthIndex > 0 ? months[selectedMonthIndex - 1] : null;
 
-  const setMonthByStep = (step: -1 | 1) => {
-    const next = months[selectedMonthIndex + step];
-    if (!next) return;
-    Haptics.selectionAsync();
-    setSelectedMonthId(next.id);
-  };
-
   const saveSuggestedBudget = async () => {
     if (!suggestions?.ready || savingSuggestions) return;
 
@@ -321,22 +313,19 @@ export default function BudgetScreen() {
           <AccountsBlock accounts={accounts} />
         </Card>
 
-        <MonthNavigator
-          months={months}
-          selectedMonthId={selectedMonthId}
-          onSelect={(monthId) => {
-            Haptics.selectionAsync();
-            setSelectedMonthId(monthId);
-          }}
-          onPrevious={() => setMonthByStep(-1)}
-          onNext={() => setMonthByStep(1)}
-          canPrevious={selectedMonthIndex > 0}
-          canNext={selectedMonthIndex >= 0 && selectedMonthIndex < months.length - 1}
-        />
-
-        {selectedMonth && (
-          <MonthInsight current={selectedMonth} previous={previousMonth} />
-        )}
+        <Card>
+          <CardHeader title="Spending by month" hint={selectedMonth?.label ?? "This month"} />
+          <MonthSpendBars
+            months={months}
+            selectedMonthId={selectedMonthId}
+            onSelect={(monthId) => {
+              Haptics.selectionAsync();
+              setSelectedMonthId(monthId);
+            }}
+            replayKey={replay}
+          />
+          {selectedMonth && <MonthInsight current={selectedMonth} previous={previousMonth} />}
+        </Card>
 
         {/* 4 stat tiles */}
         <View style={styles.statGrid}>
@@ -376,6 +365,7 @@ export default function BudgetScreen() {
           <SpendingDonutChart
             categories={overview.categories}
             totalSpent={overview.totalSpent}
+            replayKey={replay}
           />
         </Card>
 
@@ -575,11 +565,7 @@ function NetWorthHero({
   );
 
   return (
-    <LinearGradient
-      colors={[Colors.brandGradientStart, Colors.brandGradientMid, Colors.brandGradientEnd]}
-      style={styles.netWorthHero}
-      accessibilityLabel={`Net worth ${formatCurrency(netWorth)}`}
-    >
+    <View style={styles.netWorthHero} accessibilityLabel={`Net worth ${formatCurrency(netWorth)}`}>
       <Text style={styles.netWorthEyebrow}>NET WORTH</Text>
       <View style={styles.netWorthRow}>
         <CountUp
@@ -589,6 +575,7 @@ function NetWorthHero({
           format={formatCurrency}
           fit
           style={styles.netWorthValue}
+          centsStyle={styles.netWorthCents}
         />
         {sparkPoints ? (
           <Svg width={SPARK_WIDTH} height={SPARK_HEIGHT}>
@@ -608,7 +595,7 @@ function NetWorthHero({
           ? `${monthFlow >= 0 ? "+" : "−"}${formatCurrency(Math.abs(monthFlow), { compact: true })} this month · ${accounts.length} linked ${accounts.length === 1 ? "account" : "accounts"}`
           : "Connect a bank in Profile to track your balances here."}
       </Text>
-    </LinearGradient>
+    </View>
   );
 }
 
@@ -634,97 +621,6 @@ function CardHeader({
         {hint && <Text style={styles.cardHint}>{hint}</Text>}
       </View>
       {right}
-    </View>
-  );
-}
-
-function MonthNavigator({
-  months,
-  selectedMonthId,
-  canPrevious,
-  canNext,
-  onPrevious,
-  onNext,
-  onSelect,
-}: {
-  months: BudgetMonthOption[];
-  selectedMonthId: string;
-  canPrevious: boolean;
-  canNext: boolean;
-  onPrevious: () => void;
-  onNext: () => void;
-  onSelect: (monthId: string) => void;
-}) {
-  const selectedMonth = months.find((month) => month.id === selectedMonthId);
-
-  return (
-    <View style={styles.monthPanel}>
-      {/* Big month label flanked by airy circular arrows */}
-      <View style={styles.monthPanelTop}>
-        <Pressable
-          disabled={!canPrevious}
-          onPress={onPrevious}
-          hitSlop={8}
-          style={({ pressed }) => [
-            styles.monthArrow,
-            !canPrevious && styles.monthArrowDisabled,
-            pressed && canPrevious && styles.monthArrowPressed,
-          ]}
-        >
-          <Icon name="arrow-left" size={17} color={canPrevious ? Colors.navy : Colors.muted} strokeWidth={2.4} />
-        </Pressable>
-
-        <View style={styles.monthTitleWrap}>
-          <Text style={styles.monthEyebrow}>VIEWING</Text>
-          <Text style={styles.monthTitle}>{selectedMonth?.label ?? "This month"}</Text>
-        </View>
-
-        <Pressable
-          disabled={!canNext}
-          onPress={onNext}
-          hitSlop={8}
-          style={({ pressed }) => [
-            styles.monthArrow,
-            !canNext && styles.monthArrowDisabled,
-            pressed && canNext && styles.monthArrowPressed,
-          ]}
-        >
-          <Icon name="chevron-right" size={18} color={canNext ? Colors.navy : Colors.muted} strokeWidth={2.4} />
-        </Pressable>
-      </View>
-
-      {/* Segmented month picker with an animated active pill */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.monthChips}
-      >
-        {months.map((month) => {
-          const active = month.id === selectedMonthId;
-          return (
-            <Pressable
-              key={month.id}
-              onPress={() => onSelect(month.id)}
-              style={styles.monthChipWrap}
-            >
-              <MotiView
-                animate={{
-                  scale: active ? 1 : 0.97,
-                }}
-                transition={{ type: "timing", duration: 220 }}
-                style={[styles.monthChip, {
-                  backgroundColor: active ? Colors.gold : Colors.surface,
-                  borderColor: active ? Colors.gold : Colors.border,
-                }]}
-              >
-                <Text style={[styles.monthChipText, active && styles.monthChipTextActive]}>
-                  {month.shortLabel}
-                </Text>
-              </MotiView>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
     </View>
   );
 }
@@ -1167,21 +1063,17 @@ const styles = StyleSheet.create({
 
   brandHeader: { marginBottom: 18 },
   netWorthHero: {
-    borderRadius: 20,
-    paddingHorizontal: 18,
-    paddingVertical: 18,
-    overflow: "hidden",
+    borderRadius: 22,
+    padding: 18,
     marginBottom: 12,
-    shadowColor: Colors.navy,
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
+    backgroundColor: Colors.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
   },
   netWorthEyebrow: {
     fontSize: 10,
     fontWeight: "800",
-    color: Colors.gold,
+    color: Colors.muted,
     letterSpacing: 1.6,
     marginBottom: 6,
   },
@@ -1193,16 +1085,18 @@ const styles = StyleSheet.create({
   },
   netWorthValue: {
     flex: 1,
-    fontSize: 32,
-    fontWeight: "900",
-    color: Colors.brandOnDark,
-    letterSpacing: -0.8,
+    fontSize: 36,
+    fontWeight: "800",
+    color: Colors.navy,
+    letterSpacing: -1,
   },
+  // Reference: cents sit quieter than dollars.
+  netWorthCents: { color: Colors.muted, fontWeight: "700" },
   netWorthSub: {
     marginTop: 6,
     fontSize: 12,
-    fontWeight: "700",
-    color: Colors.brandOnDarkMuted,
+    fontWeight: "600",
+    color: Colors.muted,
   },
   header: {
     marginBottom: 14,
@@ -1238,93 +1132,17 @@ const styles = StyleSheet.create({
   syncBadgeText: {
     fontSize: 11,
     fontWeight: "800",
-    color: Colors.teal,
+    color: Colors.navy,
   },
 
-  monthPanel: {
-    backgroundColor: Colors.card,
-    borderRadius: 20,
-    paddingVertical: 18,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginBottom: 12,
-    shadowColor: Colors.navy,
-    shadowOpacity: 0.04,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
-  },
-  monthPanelTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 16,
-  },
-  monthArrow: {
-    width: 40,
-    height: 40,
-    borderRadius: 999,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Colors.navy50,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  monthArrowPressed: {
-    backgroundColor: Colors.accentAlpha10,
-    transform: [{ scale: 0.94 }],
-  },
-  monthArrowDisabled: {
-    opacity: 0.35,
-  },
-  monthTitleWrap: { flex: 1, alignItems: "center" },
-  monthEyebrow: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: Colors.muted,
-    letterSpacing: 1.6,
-    marginBottom: 3,
-  },
-  monthTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: Colors.navy,
-    letterSpacing: -0.3,
-  },
-  monthChips: {
-    gap: 10,
-    paddingHorizontal: 2,
-  },
-  monthChipWrap: {},
-  monthChip: {
-    minWidth: 72,
-    alignItems: "center",
-    paddingVertical: 11,
-    paddingHorizontal: 16,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  monthChipText: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: Colors.navyMuted,
-    letterSpacing: 0.3,
-  },
-  monthChipTextActive: {
-    color: Colors.onGreen,
-  },
   monthInsight: {
     flexDirection: "row",
     alignItems: "center",
     gap: 9,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 14,
-    backgroundColor: Colors.accentAlpha08,
-    borderWidth: 1,
-    borderColor: Colors.accentAlpha15,
-    marginBottom: 12,
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.border,
   },
   monthInsightText: {
     flex: 1,
