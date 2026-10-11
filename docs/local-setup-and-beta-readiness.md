@@ -61,6 +61,12 @@ This report replaces the older handoffs; their history remains in Git.
   There are no per-day totals, because raw rows would not match Budget's
   spending rules. Goal detail rolls in the saved amount, shows milestones, and
   keeps edit and delete as quiet rows.
+- Today keeps the ring and adds today's spending, a next-income and bank
+  strip, and a "This cycle" card. Its bar splits income into bills, goals, the
+  10% buffer, spending so far, and what is left, using only engine numbers
+  that add back up to income (unit-tested). The "I spent" sheet notes that cash
+  entries are never matched to bank transactions. Moving yesterday's leftover
+  to a goal stays off Today: the API moves money before showing the amount.
 - `babel.config.js` no longer routes JSX through NativeWind. The app styles
   with `StyleSheet` only, and that interop silently dropped `Pressable` style
   callbacks. NativeWind's Metro watcher can still crash Metro when files are

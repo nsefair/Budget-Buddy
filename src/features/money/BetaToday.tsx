@@ -1,34 +1,85 @@
+/**
+ * Today — the safe-to-spend home in the tabs' card language.
+ *
+ * The ring and rolling number show what is left today, with today's spending
+ * beneath. A quiet strip shows the next income and the bank's freshness.
+ * "This cycle" breaks income into bills, goals, buffer, spending, and what is
+ * left, using only the money engine's numbers: all arithmetic stays on the
+ * backend. "I spent" logs a purchase with the same retry protection as before.
+ */
+
 import React, { useCallback, useRef, useState } from "react";
-import { ActivityIndicator, Animated, AppState, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleProp, StyleSheet, Switch, Text, TextInput, View, ViewStyle } from "react-native";
+import {
+  Animated,
+  AppState,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleProp,
+  StyleSheet,
+  Text,
+  TextInput,
+  TextStyle,
+  View,
+  ViewStyle,
+} from "react-native";
 import { useFocusEffect, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { isAxiosError } from "axios";
 import Svg, { Circle } from "react-native-svg";
 import { LinearGradient } from "expo-linear-gradient";
-import { CountUp, useEntranceProgress, useFocusReplay } from "@/animations";
+import * as Haptics from "expo-haptics";
+
+import { CountUp, FadeInUp, Shimmer, useEntranceProgress, useFocusReplay } from "@/animations";
+import { Icon, type IconName } from "@/components/Icon";
 import { Colors } from "@/constants/colors";
 import { TAB_BAR_HEIGHT } from "@/constants/tokens";
 import { useUser } from "@/hooks/useAuth";
 import { moneyService, type MoneySpending, type MoneyToday, type MoneyProfile } from "@/services/moneyService";
 import { MoneySetup } from "./MoneySetup";
+import { cycleBreakdown, type BreakdownPart } from "./breakdown";
 import { dollarsToCents, money } from "./input";
 
+type TodayResult = MoneyToday["result"];
+
+const RING_SIZE = 260;
 const RING_RADIUS = 116;
 const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 const wholeDollars = (value: number) => `$${Math.round(value).toLocaleString("en-US")}`;
+// Whole-dollar amounts (the morning number always is) drop the ".00".
+const dollars = (cents: number) => (cents % 100 === 0 ? wholeDollars(cents / 100) : money(cents));
 // "2026-11-01" → "Nov 1" (parsed at local noon so the day never shifts).
 const shortDate = (isoDay: string) => new Date(`${isoDay}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+// Static colors only: the bar's size animates, never its colors.
+const PARTS: Record<BreakdownPart["key"], { label: string; color: string }> = {
+  bills: { label: "Bills set aside", color: Colors.navy300 },
+  goals: { label: "Goals", color: "#00B4A6" },
+  buffer: { label: "10% buffer", color: Colors.accentAlpha35 },
+  spent: { label: "Spent so far", color: Colors.amber },
+  left: { label: "Left this cycle", color: Colors.gold },
+};
 
 function setupRequired(error: unknown) {
   return isAxiosError(error) && error.response?.data?.error?.code === "money_setup_required";
 }
-function freshness(data: MoneyToday) {
-  if (data.bankState === "manual") return "Based on your plan and logged spending";
-  if (data.bankState === "reconnect_required") return "Reconnect your bank · some spending may be missing";
-  if (data.bankState === "stale") return "Bank update delayed · some spending may be missing";
-  return data.lastSyncAt ? `Bank updated ${new Date(data.lastSyncAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}` : "Waiting for the first bank update";
+
+function bankStatus(data: MoneyToday): { value: string; sub: string; attention: boolean } {
+  if (data.bankState === "manual") return { value: "Manual", sub: "Plan and logged spending", attention: false };
+  if (data.bankState === "reconnect_required") return { value: "Reconnect", sub: "Some spending may be missing", attention: true };
+  if (data.bankState === "stale") return { value: "Delayed", sub: "Some spending may be missing", attention: true };
+  if (!data.lastSyncAt) return { value: "Waiting", sub: "First bank update pending", attention: false };
+  const synced = new Date(data.lastSyncAt);
+  const sameDay = synced.toDateString() === new Date().toDateString();
+  const time = synced.toLocaleString(undefined, sameDay
+    ? { hour: "numeric", minute: "2-digit" }
+    : { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  return { value: "Up to date", sub: `Updated ${time}`, attention: false };
 }
 
 export function BetaToday() {
@@ -38,7 +89,6 @@ export function BetaToday() {
   const queryKey = ["money", user?.id, "today"];
   const query = useQuery({ queryKey, queryFn: moneyService.today, enabled: Boolean(user), retry: (count, error) => !setupRequired(error) && count < 1, staleTime: 15_000 });
   const { refetch } = query;
-  const [showMath, setShowMath] = useState(false);
   const [showSpending, setShowSpending] = useState(false);
   const [amount, setAmount] = useState("");
   const [cash, setCash] = useState(false);
@@ -51,6 +101,7 @@ export function BetaToday() {
   const [actionMessage, setActionMessage] = useState("");
   const [editProfile, setEditProfile] = useState<MoneyProfile | null>(null);
   const [loadingPlan, setLoadingPlan] = useState(false);
+
   const recalculate = async () => {
     if (refreshBusy.current) return;
     refreshBusy.current = true; setRecalculating(true); setActionMessage("");
@@ -97,107 +148,467 @@ export function BetaToday() {
   const data = query.data;
   const result = data?.result;
   const ratio = result && result.morningCents > 0 ? Math.min(1, Math.max(0, result.remainingCents / result.morningCents)) : 0;
-  // Ring and number re-enter each time Today regains focus (static under Reduce Motion).
+  // Ring, number, and bar re-enter each time Today regains focus (static under Reduce Motion).
   const replay = useFocusReplay();
   const ring = useEntranceProgress(ratio, { replayKey: replay, duration: 700 });
   const ringOffset = ring.interpolate({ inputRange: [0, 1], outputRange: [RING_LENGTH, 0] });
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-  return <KeyboardAvoidingView style={styles.page} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-    <LinearGradient pointerEvents="none" colors={[Colors.accentAlpha14, Colors.accentAlpha05, "transparent"]} style={styles.glow} />
-    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.content, { paddingTop: insets.top + 20, paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 24 }]} refreshControl={<RefreshControl refreshing={query.isRefetching} onRefresh={() => void refetch()} tintColor={Colors.navy} />}>
-      <View style={styles.header}><Text style={styles.greeting}>{greeting}, {user?.firstName ?? "there"}.</Text><Pressable accessibilityRole="button" accessibilityLabel="Open profile" hitSlop={6} onPress={() => router.push("/profile")} style={({ pressed }) => [styles.avatar, pressed && { opacity: 0.7 }]}><Text style={styles.avatarText}>{(user?.firstName ?? "?").slice(0, 1).toUpperCase()}</Text></Pressable></View>
-      <Text style={styles.subtitle}>{new Date().toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })} · A little clarity for today.</Text>
-      {query.isPending && <ActivityIndicator accessibilityLabel="Calculating today's number" color={Colors.navy} />}
-      {setupRequired(query.error) && <MoneySetup onSaved={async () => { await refetch(); }} />}
-      {!!query.error && !setupRequired(query.error) && <View style={styles.card}><Text accessibilityRole="alert" style={styles.body}>{data ? "This is your last loaded number. Couldn't refresh—new spending may be missing." : "Couldn't load your number. Check your connection and try again."}</Text><Button title="Try again" onPress={() => void refetch()} /></View>}
-      {!!actionMessage && <Text accessibilityRole="alert" style={styles.body}>{actionMessage}</Text>}
-      {editProfile && <MoneySetup initialProfile={editProfile} onCancel={() => setEditProfile(null)} onSaved={async () => { setEditProfile(null); await refetch(); }} />}
-      {data && result && !editProfile && <>
-        <Text style={styles.freshness}>{freshness(data)}</Text>
-        {data.bankState === "reconnect_required" && <Button title="Reconnect bank" secondary onPress={() => router.push("/(tabs)/budget")} />}
-        <Pressable accessibilityRole="button" accessibilityLabel={`${money(result.remainingCents)} remaining today. Show calculation.`} onPress={() => setShowMath(value => !value)} style={styles.hero}>
-          <Svg width={260} height={260} viewBox="0 0 260 260" accessible={false}>
-            <Circle cx={130} cy={130} r={RING_RADIUS} stroke={Colors.accentAlpha12} strokeWidth={10} fill="none" />
-            <AnimatedCircle cx={130} cy={130} r={RING_RADIUS} stroke={Colors.gold} strokeWidth={10} fill="none" strokeDasharray={`${RING_LENGTH}`} strokeDashoffset={ringOffset} strokeLinecap="round" rotation={-90} origin="130,130" />
-          </Svg>
-          <View pointerEvents="none" style={styles.heroText}><Text style={styles.heroLabel}>SAFE TO SPEND TODAY</Text><CountUp value={result.displayDollars} from={Math.floor(result.displayDollars * 0.85)} replayKey={replay} format={wholeDollars} fit style={styles.amount} /><Text style={styles.label}>left today</Text><Text style={styles.morning} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>of {money(result.morningCents)} this morning</Text></View>
-        </Pressable>
-        <Text style={styles.cycle}>{result.waitingForIncome ? "Still waiting on your next income." : `${result.daysLeft} ${result.daysLeft === 1 ? "day" : "days"} until your next income · ${shortDate(result.inputs.cycle.end)}`}</Text>
-        <Pressable accessibilityRole="button" onPress={() => setShowMath(value => !value)} hitSlop={8} style={({ pressed }) => [styles.whyLink, pressed && { opacity: 0.6 }]}><Text style={styles.whyText}>{showMath ? "Hide calculation" : `Why ${wholeDollars(result.displayDollars)}?`}</Text></Pressable>
-        <Button title="I spent" disabled={recalculating || loadingPlan} onPress={() => setShowSpending(true)} />
-        <View style={styles.actionsRow}>
-          <Button title={recalculating ? "Recalculating…" : "Recalculate"} accessibilityLabel="Recalculate safe to spend" secondary disabled={recalculating} onPress={() => void recalculate()} style={styles.half} />
-          <Button title={loadingPlan ? "Loading…" : "Edit plan"} accessibilityLabel="Edit income and plan" secondary disabled={loadingPlan || recalculating} onPress={() => void editPlan()} style={styles.half} />
+  const showContent = Boolean(data && result && !editProfile);
+
+  return (
+    <KeyboardAvoidingView style={styles.page} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <LinearGradient pointerEvents="none" colors={[Colors.accentAlpha14, Colors.accentAlpha05, "transparent"]} style={styles.glow} />
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + 20, paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 24 }]}
+        refreshControl={<RefreshControl refreshing={query.isRefetching} onRefresh={() => void refetch()} tintColor={Colors.navy} />}
+      >
+        <View style={styles.header}>
+          <Text style={styles.greeting} accessibilityRole="header" maxFontSizeMultiplier={1.3}>
+            {greeting}, {user?.firstName ?? "there"}.
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open profile"
+            hitSlop={6}
+            onPress={() => router.push("/profile")}
+            style={({ pressed }) => [styles.avatar, pressed && styles.pressed]}
+          >
+            <Text style={styles.avatarText}>{(user?.firstName ?? "?").slice(0, 1).toUpperCase()}</Text>
+          </Pressable>
         </View>
-        {showMath && <View style={styles.card}>
-          <Text style={styles.cardTitle}>Your plan, in numbers</Text>
-          <Text style={styles.body}>Cycle: {result.inputs.cycle.start} to {result.inputs.cycle.end}</Text>
-          <Line label="Income for this cycle" cents={result.inputs.cycle.incomeCents} />
-          <Line label="Bills set aside" cents={result.inputs.cycle.billsCents} />
-          <Line label="Planned goal contribution" cents={result.inputs.cycle.plannedGoalCents} />
-          <Line label="10% buffer" cents={result.bufferCents} />
-          <Line label="Spending before today" cents={result.inputs.spentBeforeTodayCents} />
-          <Line label="Moved to goals this cycle" cents={result.inputs.allocatedGoalCents} />
-          <Line label="Today's spending, after paybacks" cents={result.inputs.spentTodayCents} />
-          <Line label="Remaining flexible money" cents={Math.max(0, result.flexibleBalanceCents)} />
-          <Text style={styles.body}>Your morning starting point stays fixed. New purchases reduce what is left today; refunds and paybacks can restore it. The displayed daily number rounds down to whole dollars.</Text>
-        </View>}
-        <View style={styles.card}><Text style={styles.cardTitle}>Room for real life</Text><Text style={styles.body}>{result.overCents > 0 ? "Today ran over its starting number. Tomorrow adjusts across the days left in your cycle." : "Your plan keeps bills, your goal contribution, and a 10% buffer aside before calculating today's number."}</Text></View>
-      </>}
-    </ScrollView>
-    <Modal visible={showSpending} animationType="slide" transparent onRequestClose={() => { if (!saving) setShowSpending(false); }}>
-      <KeyboardAvoidingView style={styles.scrim} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <View style={[styles.sheet, { paddingBottom: insets.bottom + 24 }]}>
-          <Text style={styles.cardTitle}>I spent</Text>
-          <Text style={styles.body}>Log a purchase now. Matching bank transactions replace this entry automatically.</Text>
-          <TextInput accessibilityLabel="Amount spent in dollars" placeholder="0.00" placeholderTextColor={Colors.muted} value={amount} onChangeText={setAmount} keyboardType="decimal-pad" autoFocus maxLength={12} editable={!saving && !pendingSpend.current} style={styles.input} />
-          <View style={styles.row}><Text style={styles.body}>Paid with physical cash</Text><Switch accessibilityLabel="Paid with physical cash" value={cash} onValueChange={setCash} disabled={saving || Boolean(pendingSpend.current)} /></View>
-          {!!spendError && <Text accessibilityRole="alert" style={styles.body}>{spendError}</Text>}
-          <Button title={saving ? "Saving…" : pendingSpend.current ? "Retry this entry" : "Save spending"} disabled={saving} onPress={() => void spend()} />
-          <Button title="Close" secondary disabled={saving} onPress={() => setShowSpending(false)} />
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
-  </KeyboardAvoidingView>;
+        <Text style={styles.subtitle}>
+          {new Date().toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })} · A little clarity for today.
+        </Text>
+
+        {query.isPending && <LoadingHero />}
+        {setupRequired(query.error) && <MoneySetup onSaved={async () => { await refetch(); }} />}
+        {!!query.error && !setupRequired(query.error) && (
+          <View style={styles.card}>
+            <View style={styles.noticeTop}>
+              <View style={styles.noticeTile}>
+                <Icon name="alert-circle" size={16} color={Colors.navyMuted} strokeWidth={2.4} />
+              </View>
+              <Text style={styles.noticeTitle}>{data ? "Showing your last number" : "Couldn't load today"}</Text>
+            </View>
+            <Text accessibilityRole="alert" style={styles.body}>
+              {data ? "Couldn't refresh, so new spending may be missing." : "Check your connection and try again."}
+            </Text>
+            <Button title="Try again" secondary onPress={() => void refetch()} />
+          </View>
+        )}
+        {!showContent && !!actionMessage && <Text accessibilityRole="alert" style={styles.note}>{actionMessage}</Text>}
+        {editProfile && <MoneySetup initialProfile={editProfile} onCancel={() => setEditProfile(null)} onSaved={async () => { setEditProfile(null); await refetch(); }} />}
+
+        {showContent && data && result && (
+          <>
+            <FadeInUp>
+              <Hero result={result} replay={replay} ringOffset={ringOffset} />
+            </FadeInUp>
+
+            <FadeInUp delay={60}>
+              <StatusStrip data={data} result={result} />
+            </FadeInUp>
+
+            <FadeInUp delay={120} style={styles.actions}>
+              {data.bankState === "reconnect_required" && (
+                <Button title="Reconnect bank" secondary onPress={() => router.push("/(tabs)/budget")} />
+              )}
+              <Button
+                title="I spent"
+                disabled={recalculating || loadingPlan}
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  setShowSpending(true);
+                }}
+              />
+              <View style={styles.actionsRow}>
+                <Button
+                  title={recalculating ? "Recalculating…" : "Recalculate"}
+                  accessibilityLabel="Recalculate safe to spend"
+                  secondary
+                  disabled={recalculating}
+                  onPress={() => void recalculate()}
+                  style={styles.half}
+                />
+                <Button
+                  title={loadingPlan ? "Loading…" : "Edit plan"}
+                  accessibilityLabel="Edit income and plan"
+                  secondary
+                  disabled={loadingPlan || recalculating}
+                  onPress={() => void editPlan()}
+                  style={styles.half}
+                />
+              </View>
+              {!!actionMessage && <Text accessibilityRole="alert" style={styles.note}>{actionMessage}</Text>}
+            </FadeInUp>
+
+            <FadeInUp delay={180}>
+              <CycleCard result={result} replay={replay} />
+            </FadeInUp>
+          </>
+        )}
+      </ScrollView>
+
+      <Modal visible={showSpending} animationType="slide" transparent onRequestClose={() => { if (!saving) setShowSpending(false); }}>
+        <KeyboardAvoidingView style={styles.scrim} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <View style={[styles.sheet, { paddingBottom: insets.bottom + 24 }]}>
+            <Text style={styles.sheetTitle} accessibilityRole="header">I spent</Text>
+            <Text style={styles.body}>
+              {cash
+                ? "Cash stays logged as you enter it. Bank transactions never replace it."
+                : "Log a purchase now. Matching bank transactions replace this entry automatically."}
+            </Text>
+            <View style={styles.amountRow}>
+              <Text style={styles.amountPrefix}>$</Text>
+              <TextInput
+                accessibilityLabel="Amount spent in dollars"
+                placeholder="0.00"
+                placeholderTextColor={Colors.muted}
+                value={amount}
+                onChangeText={setAmount}
+                keyboardType="decimal-pad"
+                autoFocus
+                maxLength={12}
+                editable={!saving && !pendingSpend.current}
+                style={styles.amountInput}
+              />
+            </View>
+            <View style={styles.segment} accessibilityRole="radiogroup">
+              <SegmentOption label="Card or bank" selected={!cash} disabled={saving || Boolean(pendingSpend.current)} onPress={() => setCash(false)} />
+              <SegmentOption label="Cash" selected={cash} disabled={saving || Boolean(pendingSpend.current)} onPress={() => setCash(true)} />
+            </View>
+            {!!spendError && <Text accessibilityRole="alert" style={styles.sheetError}>{spendError}</Text>}
+            <Button title={saving ? "Saving…" : pendingSpend.current ? "Retry this entry" : "Save spending"} disabled={saving} onPress={() => void spend()} />
+            <Button title="Close" secondary disabled={saving} onPress={() => setShowSpending(false)} />
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+    </KeyboardAvoidingView>
+  );
 }
 
-function Line({ label, cents }: { label: string; cents: number }) {
-  return <View style={styles.row}><Text style={[styles.body, { flex: 1 }]}>{label}</Text><Text style={styles.label}>{money(cents)}</Text></View>;
+// ─── Hero ───────────────────────────────────────────────────────────────────
+
+function Hero({ result, replay, ringOffset }: { result: TodayResult; replay: number; ringOffset: Animated.AnimatedInterpolation<number> }) {
+  const spentToday = result.inputs.spentTodayCents;
+  const over = result.overCents;
+  const pill: { icon: IconName; text: string } = over > 0
+    ? { icon: "alert-circle", text: `${money(over)} over today's number` }
+    : spentToday > 0
+      ? { icon: "receipt", text: `${money(spentToday)} spent today` }
+      : spentToday < 0
+        ? { icon: "arrow-down-right", text: `${money(-spentToday)} back from refunds today` }
+        : { icon: "check-circle", text: "Nothing spent yet today" };
+
+  return (
+    <View style={styles.heroWrap}>
+      <View
+        style={styles.hero}
+        accessible
+        accessibilityLabel={`${money(result.remainingCents)} safe to spend today, of ${dollars(result.morningCents)} this morning.`}
+      >
+        <Svg width={RING_SIZE} height={RING_SIZE} viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`} accessible={false}>
+          <Circle cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={RING_RADIUS} stroke={Colors.accentAlpha12} strokeWidth={10} fill="none" />
+          <AnimatedCircle
+            cx={RING_SIZE / 2}
+            cy={RING_SIZE / 2}
+            r={RING_RADIUS}
+            stroke={Colors.gold}
+            strokeWidth={10}
+            fill="none"
+            strokeDasharray={`${RING_LENGTH}`}
+            strokeDashoffset={ringOffset}
+            strokeLinecap="round"
+            rotation={-90}
+            origin={`${RING_SIZE / 2},${RING_SIZE / 2}`}
+          />
+        </Svg>
+        {/* Text inside the fixed ring grows only so far; VoiceOver reads the full label above. */}
+        <View pointerEvents="none" style={styles.heroText}>
+          <Text style={styles.heroLabel} numberOfLines={1} adjustsFontSizeToFit maxFontSizeMultiplier={1.2}>
+            SAFE TO SPEND TODAY
+          </Text>
+          <CountUp
+            value={result.displayDollars}
+            from={Math.floor(result.displayDollars * 0.85)}
+            replayKey={replay}
+            format={wholeDollars}
+            fit
+            maxFontSizeMultiplier={1.2}
+            style={styles.amount}
+          />
+          <Text style={styles.heroLeft} maxFontSizeMultiplier={1.2}>left today</Text>
+          <Text style={styles.heroMorning} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} maxFontSizeMultiplier={1.2}>
+            of {dollars(result.morningCents)} this morning
+          </Text>
+        </View>
+      </View>
+      <View style={[styles.todayPill, over > 0 && styles.todayPillOver]}>
+        <Icon name={pill.icon} size={13} color={over > 0 ? Colors.coral : Colors.navyMuted} strokeWidth={2.4} />
+        <Text style={[styles.todayPillText, over > 0 && styles.todayPillTextOver]}>{pill.text}</Text>
+      </View>
+    </View>
+  );
 }
+
+function LoadingHero() {
+  return (
+    <View style={styles.heroWrap} accessible accessibilityLabel="Calculating today's number">
+      <Shimmer style={styles.ringSkeleton} radius={RING_SIZE / 2} />
+      <Shimmer style={styles.pillSkeleton} radius={14} />
+    </View>
+  );
+}
+
+// ─── Next income + bank ─────────────────────────────────────────────────────
+
+function StatusStrip({ data, result }: { data: MoneyToday; result: TodayResult }) {
+  const bank = bankStatus(data);
+  const reconnect = data.bankState === "reconnect_required";
+  const income = result.waitingForIncome
+    ? { value: "Due now", sub: "Waiting on your income" }
+    : { value: shortDate(result.inputs.cycle.end), sub: `in ${result.daysLeft} ${result.daysLeft === 1 ? "day" : "days"}` };
+
+  return (
+    <View style={styles.strip}>
+      <View style={styles.stripCell} accessible accessibilityLabel={`Next income ${income.value}, ${income.sub}`}>
+        <Text style={styles.stripLabel}>Next income</Text>
+        <Text style={styles.stripValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{income.value}</Text>
+        <Text style={styles.stripSub}>{income.sub}</Text>
+      </View>
+      <View style={styles.stripDivider} />
+      <Pressable
+        disabled={!reconnect}
+        accessibilityRole={reconnect ? "button" : undefined}
+        accessibilityLabel={`Bank ${bank.value}, ${bank.sub}${reconnect ? ". Opens Budget to reconnect." : ""}`}
+        onPress={() => router.push("/(tabs)/budget")}
+        style={({ pressed }) => [styles.stripCell, pressed && styles.pressed]}
+      >
+        <Text style={styles.stripLabel}>Bank</Text>
+        <Text style={[styles.stripValue, bank.attention && styles.stripValueAttention]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+          {bank.value}
+        </Text>
+        <Text style={styles.stripSub}>{bank.sub}</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+// ─── This cycle ─────────────────────────────────────────────────────────────
+
+function CycleCard({ result, replay }: { result: TodayResult; replay: number }) {
+  const breakdown = cycleBreakdown(result);
+  const { cycle } = result.inputs;
+  // The whole bar grows in from the left; its segments keep exact proportions.
+  const grow = useEntranceProgress(1, { replayKey: replay, delay: 150, duration: 800 });
+  const width = grow.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] });
+  const visible = breakdown.parts.filter((part) => part.cents > 0);
+  const spokenParts = breakdown.parts.map((part) => `${PARTS[part.key].label} ${money(part.cents)}`).join(", ");
+
+  const explanation = result.overCents > 0
+    ? "Today ran over its starting number. Tomorrow adjusts across the days left in your cycle."
+    : breakdown.overCents > 0
+      ? `Spending is ${money(breakdown.overCents)} past this cycle's flexible money, so there's nothing safe to spend until your next income.`
+      : `Each morning, what's left is spread over the days until your next income and rounded down to whole dollars. This morning that was ${dollars(result.morningCents)}.`;
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardTop}>
+        <Text style={styles.cardEyebrow}>THIS CYCLE</Text>
+        <Text style={styles.cardMeta}>{shortDate(cycle.start)} – {shortDate(cycle.end)}</Text>
+      </View>
+      <Text style={styles.cycleIncome}>
+        {dollars(cycle.incomeCents)} <Text style={styles.cycleIncomeLabel}>income</Text>
+      </Text>
+
+      {breakdown.totalCents > 0 ? (
+        <View style={styles.barTrack} accessible accessibilityRole="image" accessibilityLabel={`This cycle: ${spokenParts}.`}>
+          <Animated.View style={[styles.barFill, { width }]}>
+            {visible.map((part) => (
+              <View
+                key={part.key}
+                style={[styles.barPart, { flex: part.cents / breakdown.totalCents, backgroundColor: PARTS[part.key].color }]}
+              />
+            ))}
+          </Animated.View>
+        </View>
+      ) : null}
+
+      <View style={styles.legend}>
+        {breakdown.parts.map((part) => {
+          const strong = part.key === "left";
+          return (
+            <View key={part.key} style={styles.legendRow}>
+              <View style={[styles.legendDot, { backgroundColor: PARTS[part.key].color }]} />
+              <Text style={[styles.legendLabel, strong && styles.legendStrong]}>{PARTS[part.key].label}</Text>
+              <MutedCents cents={part.cents} style={[styles.legendValue, strong && styles.legendStrong]} />
+            </View>
+          );
+        })}
+      </View>
+
+      <Text style={[styles.body, (result.overCents > 0 || breakdown.overCents > 0) && styles.bodyAttention]}>
+        {explanation}
+      </Text>
+    </View>
+  );
+}
+
+// Cents sit quieter than dollars, as in Budget and Transactions.
+function MutedCents({ cents, style }: { cents: number; style: StyleProp<TextStyle> }) {
+  const text = money(cents);
+  const match = /^(.*)(\.\d{2})$/.exec(text);
+  return (
+    <Text style={style}>
+      {match ? match[1] : text}
+      {match ? <Text style={styles.cents}>{match[2]}</Text> : null}
+    </Text>
+  );
+}
+
+// ─── Controls ───────────────────────────────────────────────────────────────
+
+function SegmentOption({ label, selected, disabled, onPress }: { label: string; selected: boolean; disabled: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityState={{ selected, disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={[styles.segmentOption, selected && styles.segmentOptionActive]}
+    >
+      <Text style={[styles.segmentText, selected && styles.segmentTextActive]}>{label}</Text>
+    </Pressable>
+  );
+}
+
 function Button({ title, onPress, secondary, disabled, accessibilityLabel, style }: { title: string; onPress: () => void; secondary?: boolean; disabled?: boolean; accessibilityLabel?: string; style?: StyleProp<ViewStyle> }) {
-  return <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} accessibilityState={{ disabled: Boolean(disabled) }} disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.button, secondary && styles.secondary, style, disabled && { opacity: 0.5 }, pressed && !disabled && { opacity: 0.8 }]}><Text style={[styles.buttonText, secondary && styles.secondaryText]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{title}</Text></Pressable>;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ disabled: Boolean(disabled) }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [styles.button, secondary && styles.secondary, style, disabled && { opacity: 0.5 }, pressed && !disabled && { opacity: 0.8 }]}
+    >
+      <Text style={[styles.buttonText, secondary && styles.secondaryText]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+        {title}
+      </Text>
+    </Pressable>
+  );
 }
+
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: Colors.surface },
   glow: { position: "absolute", top: 0, left: 0, right: 0, height: 420 },
-  content: { paddingHorizontal: 22, gap: 16 },
+  content: { paddingHorizontal: 20, gap: 14 },
+  pressed: { opacity: 0.7 },
+
+  // Header
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
   greeting: { color: Colors.navy, fontSize: 26, lineHeight: 32, fontWeight: "800", letterSpacing: -0.4, flex: 1 },
   avatar: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: Colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: Colors.border },
   avatarText: { color: Colors.navy, fontSize: 16, fontWeight: "800" },
-  subtitle: { color: Colors.muted, fontSize: 15, marginTop: -8, marginBottom: 6 },
-  freshness: { color: Colors.navyMuted, fontSize: 13, textAlign: "center", lineHeight: 20 },
-  hero: { alignSelf: "center", alignItems: "center", justifyContent: "center", width: 260, height: 260 },
-  heroText: { position: "absolute", width: 196, alignItems: "center", gap: 6 },
-  heroLabel: { color: Colors.muted, fontSize: 11, letterSpacing: 1.4, fontWeight: "600" },
+  subtitle: { color: Colors.muted, fontSize: 15, marginTop: -6, marginBottom: 4 },
+
+  // Hero
+  heroWrap: { alignItems: "center", gap: 12, paddingVertical: 4 },
+  hero: { alignItems: "center", justifyContent: "center", width: RING_SIZE, height: RING_SIZE },
+  heroText: { position: "absolute", width: 180, alignItems: "center", gap: 4 },
+  heroLabel: { color: Colors.muted, fontSize: 10, fontWeight: "800", letterSpacing: 1.6 },
   amount: { alignSelf: "stretch", textAlign: "center", color: Colors.navy, fontSize: 64, fontWeight: "700", letterSpacing: -2 },
-  label: { color: Colors.navy, fontSize: 15, fontWeight: "600" },
-  morning: { color: Colors.muted, fontSize: 12 },
-  cycle: { color: Colors.navyMuted, fontSize: 14, textAlign: "center", lineHeight: 20 },
-  whyLink: { alignSelf: "center", minHeight: 32, justifyContent: "center", paddingHorizontal: 12, marginTop: -6 },
-  whyText: { color: Colors.navy, fontSize: 14, fontWeight: "700", textDecorationLine: "underline" },
+  heroLeft: { color: Colors.navy, fontSize: 15, fontWeight: "600" },
+  heroMorning: { color: Colors.muted, fontSize: 12, fontWeight: "500" },
+  todayPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    minHeight: 32,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: Colors.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
+  },
+  todayPillOver: { backgroundColor: "rgba(239, 68, 68, 0.08)", borderColor: "rgba(239, 68, 68, 0.25)" },
+  todayPillText: { fontSize: 13, fontWeight: "700", color: Colors.navy, fontVariant: ["tabular-nums"] },
+  todayPillTextOver: { color: Colors.coral },
+  ringSkeleton: { width: 220, height: 220, marginVertical: 20 },
+  pillSkeleton: { width: 150, height: 28 },
+
+  // Quiet strip (matches Profile and the Goals summary row)
+  strip: {
+    flexDirection: "row",
+    padding: 16,
+    borderRadius: 22,
+    backgroundColor: Colors.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
+  },
+  stripCell: { flex: 1, minWidth: 0, paddingHorizontal: 6 },
+  stripDivider: { width: StyleSheet.hairlineWidth, marginHorizontal: 8, backgroundColor: Colors.border },
+  stripLabel: { marginBottom: 6, fontSize: 10, fontWeight: "700", letterSpacing: 1.1, textTransform: "uppercase", color: Colors.muted },
+  stripValue: { fontSize: 20, fontWeight: "800", color: Colors.navy },
+  stripValueAttention: { color: Colors.coral },
+  stripSub: { marginTop: 3, fontSize: 12, color: Colors.muted },
+
+  // Actions
+  actions: { gap: 10 },
+  actionsRow: { flexDirection: "row", gap: 10 },
+  half: { flex: 1 },
+  note: { color: Colors.navyMuted, fontSize: 13, lineHeight: 19, textAlign: "center" },
   button: { minHeight: 52, paddingHorizontal: 16, justifyContent: "center", borderRadius: 18, alignItems: "center", backgroundColor: Colors.gold },
   secondary: { backgroundColor: Colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: Colors.border },
   buttonText: { color: Colors.onAccent, fontSize: 16, fontWeight: "700" },
   secondaryText: { color: Colors.navy, fontSize: 15 },
-  actionsRow: { flexDirection: "row", gap: 10, marginTop: -6 },
-  half: { flex: 1 },
-  card: { padding: 22, backgroundColor: Colors.card, borderRadius: 22, gap: 14, borderWidth: StyleSheet.hairlineWidth, borderColor: Colors.border },
-  cardTitle: { color: Colors.navy, fontSize: 20, fontWeight: "700" },
+
+  // Cards
+  card: { padding: 18, gap: 12, backgroundColor: Colors.card, borderRadius: 22, borderWidth: StyleSheet.hairlineWidth, borderColor: Colors.border },
+  cardTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  cardEyebrow: { fontSize: 10, fontWeight: "800", letterSpacing: 1.6, color: Colors.muted },
+  cardMeta: { fontSize: 12, fontWeight: "600", color: Colors.muted },
   body: { color: Colors.navyMuted, fontSize: 14, lineHeight: 21 },
-  row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 16 },
+  bodyAttention: { color: Colors.coral },
+  noticeTop: { flexDirection: "row", alignItems: "center", gap: 10 },
+  noticeTile: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: Colors.navy50 },
+  noticeTitle: { flex: 1, fontSize: 16, fontWeight: "800", color: Colors.navy },
+
+  // This cycle
+  cycleIncome: { marginTop: -4, fontSize: 24, fontWeight: "800", letterSpacing: -0.5, color: Colors.navy, fontVariant: ["tabular-nums"] },
+  cycleIncomeLabel: { fontSize: 14, fontWeight: "600", letterSpacing: 0, color: Colors.muted },
+  barTrack: { height: 12, borderRadius: 6, overflow: "hidden", backgroundColor: Colors.navy50 },
+  barFill: { height: "100%", flexDirection: "row", gap: 2 },
+  barPart: { height: "100%", borderRadius: 3 },
+  legend: { gap: 9 },
+  legendRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  legendDot: { width: 9, height: 9, borderRadius: 5 },
+  legendLabel: { flex: 1, fontSize: 14, fontWeight: "500", color: Colors.navyMuted },
+  legendValue: { fontSize: 14, fontWeight: "700", color: Colors.navy, fontVariant: ["tabular-nums"] },
+  legendStrong: { color: Colors.navy, fontWeight: "800" },
+  cents: { color: Colors.muted, fontWeight: "600" },
+
+  // "I spent" sheet
   scrim: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.35)" },
-  sheet: { padding: 24, backgroundColor: Colors.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, gap: 18 },
-  input: { borderWidth: 1, borderColor: Colors.border, borderRadius: 14, padding: 16, color: Colors.navy, fontSize: 30 },
+  sheet: { padding: 24, gap: 16, backgroundColor: Colors.card, borderTopLeftRadius: 28, borderTopRightRadius: 28 },
+  sheetTitle: { color: Colors.navy, fontSize: 22, fontWeight: "800", letterSpacing: -0.3 },
+  amountRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingVertical: 8,
+    borderRadius: 18,
+    backgroundColor: Colors.navy50,
+  },
+  amountPrefix: { fontSize: 34, fontWeight: "700", color: Colors.muted },
+  amountInput: { minWidth: 120, paddingVertical: 8, fontSize: 40, fontWeight: "800", color: Colors.navy, fontVariant: ["tabular-nums"] },
+  segment: { flexDirection: "row", padding: 3, borderRadius: 999, backgroundColor: Colors.navy50 },
+  segmentOption: { flex: 1, minHeight: 40, alignItems: "center", justifyContent: "center", borderRadius: 999 },
+  segmentOptionActive: { backgroundColor: Colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: Colors.border },
+  segmentText: { fontSize: 14, fontWeight: "600", color: Colors.muted },
+  segmentTextActive: { color: Colors.navy, fontWeight: "700" },
+  sheetError: { color: Colors.coral, fontSize: 14, lineHeight: 20 },
 });
