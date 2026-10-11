@@ -92,3 +92,67 @@ func TestSyncAtomicRollbackAndRetry(t *testing.T) {
 	}
 
 }
+
+// A Latin-1 bank descriptor keeps its accent on import. A row the old decoder
+// stored as "TRANSACCI�N" is rewritten only when Plaid sends it again.
+func TestSyncKeepsAccentedMerchantNames(t *testing.T) {
+	url := os.Getenv("TEST_DATABASE_URL")
+	if url == "" {
+		t.Skip("TEST_DATABASE_URL is not set")
+	}
+	ctx := context.Background()
+	db, e := pgxpool.New(ctx, url)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer db.Close()
+	var user, item string
+	e = db.QueryRow(ctx, `insert into users(email,password_hash,first_name) values($1,'test','Test') returning id::text`, fmt.Sprintf("accents-%d@example.com", time.Now().UnixNano())).Scan(&user)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer db.Exec(ctx, `delete from users where id=$1`, user)
+	e = db.QueryRow(ctx, `insert into plaid_items(user_id,plaid_item_id,access_token_ciphertext) values($1,$2,'test') returning id::text`, user, "item-"+user).Scan(&item)
+	if e != nil {
+		t.Fatal(e)
+	}
+	_, e = db.Exec(ctx, `insert into plaid_transactions(user_id,item_id,plaid_transaction_id,amount_cents,iso_currency_code,date,name,merchant_name) values($1,$2,$3,1250,'USD','2026-10-02',$4,$4)`, user, item, "old-"+user, "TRANSACCI�N")
+	if e != nil {
+		t.Fatal(e)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/accounts/get" {
+			json.NewEncoder(w).Encode(AccountsBalanceResponse{Accounts: []AccountBalance{{AccountID: "account-" + user, Type: "depository", Subtype: "checking", Name: "Test checking", Balances: Balances{IsoCurrencyCode: "USD"}}}})
+			return
+		}
+		// Raw bytes: json.Encoder would itself turn the Latin-1 0xD3 into U+FFFD.
+		record := func(id string) string {
+			return `{"transaction_id":"` + id + user + `","account_id":"account-` + user + `","amount":12.5,"iso_currency_code":"USD","date":"2026-10-03","name":"TRANSACCI` + "\xd3" + `N","merchant_name":null}`
+		}
+		w.Write([]byte(`{"added":[` + record("new-") + `],"modified":[` + record("old-") + `],"removed":[],"next_cursor":"done"}`))
+	}))
+	defer server.Close()
+	client := &Client{baseURL: server.URL, httpClient: server.Client()}
+	if _, e = syncItem(ctx, db, client, user, item, "token", ""); e != nil {
+		t.Fatal(e)
+	}
+	rows, e := db.Query(ctx, `select plaid_transaction_id, name, merchant_name from plaid_transactions where user_id=$1`, user)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer rows.Close()
+	count := 0
+	for rows.Next() {
+		var id, name, merchant string
+		if e = rows.Scan(&id, &name, &merchant); e != nil {
+			t.Fatal(e)
+		}
+		if name != "TRANSACCIÓN" || merchant != "TRANSACCIÓN" {
+			t.Fatalf("%s stored name=%q merchant=%q", id, name, merchant)
+		}
+		count++
+	}
+	if e = rows.Err(); e != nil || count != 2 {
+		t.Fatal("expected the new and the re-sent transaction", e, count)
+	}
+}
