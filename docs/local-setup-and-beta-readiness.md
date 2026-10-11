@@ -74,8 +74,11 @@ This report replaces the older handoffs; their history remains in Git.
 ## Daily loop (October 11)
 
 Today now follows the launch guide's loop: the number, yesterday's result,
-the last seven days, and the goal. Over days stay calm: no red or amber on
-the number, ring, or spending, and "$9 over. We'll spread it out." copy.
+the last seven days, and the goal. Over days stay calm: no red anywhere and
+no amber on the number or ring, with "$9 over. We'll spread it out." copy.
+The "This cycle" bar keeps a soft honey for spending, the owner's choice
+over the guide's gray. The four-question plan (first setup and "Edit plan")
+uses the onboarding's look: segmented progress, inverted chips, and "$" fields.
 
 - `GET /money/today` adds `recentDays` (finished days of the last week that
   have a stored morning number, oldest first) and `yesterday`. Days come from

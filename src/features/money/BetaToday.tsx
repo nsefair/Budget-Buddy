@@ -62,13 +62,14 @@ const dollars = (cents: number) => (cents % 100 === 0 ? wholeDollars(cents / 100
 // "2026-11-01" → "Nov 1" (parsed at local noon so the day never shifts).
 const shortDate = (isoDay: string) => new Date(`${isoDay}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
-// Static colors only: the bar's size animates, never its colors. Spending is a
-// calm gray: amber and red never touch the number, ring, or spending.
+// Static colors only: the bar's size animates, never its colors. The owner
+// preferred the warm spending tone in this breakdown; it stays a soft honey
+// (not alarm amber), and red never appears on Today.
 const PARTS: Record<BreakdownPart["key"], { label: string; color: string }> = {
   bills: { label: "Bills set aside", color: Colors.navy300 },
   goals: { label: "Goals", color: "#00B4A6" },
   buffer: { label: "10% buffer", color: Colors.accentAlpha35 },
-  spent: { label: "Spent so far", color: "#9AA5B8" },
+  spent: { label: "Spent so far", color: "#F2A93B" },
   left: { label: "Left this cycle", color: Colors.gold },
 };
 
