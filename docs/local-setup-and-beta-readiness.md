@@ -1,6 +1,6 @@
 # Budget Buddy: development and readiness
 
-Updated October 10, 2026. This is a public portfolio repository for an app in active
+Updated October 11, 2026. This is a public portfolio repository for an app in active
 development. User accounts, bank credentials, and financial records remain
 private. There is no public launch, TestFlight release, or tester invitation.
 This report replaces the older handoffs; their history remains in Git.
@@ -53,6 +53,10 @@ This report replaces the older handoffs; their history remains in Git.
 - Budget category limits are display-only for now; the editable starting
   budget was removed. Onboarding uses segmented progress and cascading
   options; launch plays a short ripple-and-dissolve over the app.
+- Profile (October 11) uses the same language: net worth from linked accounts
+  (the Budget figure; the stored `netWorth` field is never written), live
+  financial health out of 500 and quest XP, and a confirmation before sign-out.
+  Streak and level stay hidden until the backend advances them.
 - `babel.config.js` no longer routes JSX through NativeWind. The app styles
   with `StyleSheet` only, and that interop silently dropped `Pressable` style
   callbacks. NativeWind's Metro watcher can still crash Metro when files are
@@ -180,10 +184,11 @@ Still required before inviting testers:
 - Apple Developer enrollment, associated domains/Plaid OAuth return, TestFlight,
   and remote-push credentials remain gated on enrollment.
 - Automatic income-cycle rollover/detection, overnight scheduling, notifications,
-  Bud's real AI integration, and the full score redesign remain future work.
-- Profile-menu polish, scroll-linked motion, and chart value tooltips remain
-  design follow-ups; physical-iPhone acceptance of the October 10 UI pass is
-  owner-reported, not automated.
+  Bud's real AI integration, streak and level progression, and the full score
+  redesign remain future work.
+- Scroll-linked motion and chart value tooltips remain design follow-ups;
+  physical-iPhone acceptance of the October 10–11 UI work is owner-reported,
+  not automated.
 - Review remaining dependency advisories before beta. Do not apply forced
   framework upgrades to silence an audit.
 
