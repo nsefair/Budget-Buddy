@@ -1,10 +1,11 @@
 /**
- * GrowBar — a progress track whose fill grows in from the left.
+ * GrowBar — a progress track whose fill grows in.
  *
  *   <GrowBar progress={0.62} color={Colors.gold} replayKey={focusCount} />
  *
- * Only the fill width animates; track and fill colors stay static styles.
- * Pass `delay` to stagger rows. Honors Reduce Motion.
+ * Only the fill size animates; track and fill colors stay static styles.
+ * `vertical` grows a chart bar up from the bottom (set the track's height via
+ * `style`). Pass `delay` to stagger rows. Honors Reduce Motion.
  */
 
 import React from "react";
@@ -18,10 +19,12 @@ interface GrowBarProps {
   progress: number;
   color: string;
   trackColor?: string;
+  /** Bar thickness: height when horizontal, width when vertical. */
   height?: number;
   delay?: number;
   duration?: number;
   replayKey?: unknown;
+  vertical?: boolean;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -33,11 +36,28 @@ export function GrowBar({
   delay,
   duration,
   replayKey,
+  vertical = false,
   style,
 }: GrowBarProps) {
   const target = Math.max(0, Math.min(1, progress || 0));
   const fill = useEntranceProgress(target, { replayKey, delay, duration });
-  const width = fill.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] });
+  const size = fill.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] });
+
+  if (vertical) {
+    // `height` is the bar thickness here; the track's length comes from `style`.
+    return (
+      <View
+        style={[
+          { width: height, borderRadius: height / 2, backgroundColor: trackColor, overflow: "hidden", justifyContent: "flex-end" },
+          style,
+        ]}
+      >
+        <Animated.View
+          style={{ height: size, width: "100%", borderRadius: height / 2, backgroundColor: color }}
+        />
+      </View>
+    );
+  }
 
   return (
     <View
@@ -47,7 +67,7 @@ export function GrowBar({
       ]}
     >
       <Animated.View
-        style={{ width, height: "100%", borderRadius: height / 2, backgroundColor: color }}
+        style={{ width: size, height: "100%", borderRadius: height / 2, backgroundColor: color }}
       />
     </View>
   );

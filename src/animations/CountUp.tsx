@@ -9,6 +9,7 @@
  *
  * Pass `replayKey` (e.g. from useFocusReplay) to roll in again from `from`
  * when a screen regains focus, and `fit` to keep large amounts on one line.
+ * `centsStyle` renders a trailing ".05" in a quieter style.
  * VoiceOver always hears the final value.
  */
 
@@ -29,6 +30,8 @@ interface CountUpProps {
   replayKey?: unknown;
   /** Keep the number on one line, shrinking it to fit its container. */
   fit?: boolean;
+  /** Style for a trailing two-digit decimal part, e.g. muted cents. */
+  centsStyle?: StyleProp<TextStyle>;
 }
 
 const defaultFormat = (n: number) => Math.round(n).toString();
@@ -46,6 +49,7 @@ export function CountUp({
   accessibilityLabel,
   replayKey,
   fit = false,
+  centsStyle,
 }: CountUpProps) {
   const reduced = useReducedMotion();
 
@@ -108,8 +112,19 @@ export function CountUp({
       adjustsFontSizeToFit={fit}
       minimumFontScale={fit ? 0.45 : undefined}
     >
-      {display}
+      {centsStyle ? <SplitCents text={display} centsStyle={centsStyle} /> : display}
     </Text>
+  );
+}
+
+function SplitCents({ text, centsStyle }: { text: string; centsStyle: StyleProp<TextStyle> }) {
+  const match = /^(.*)(\.\d{2})$/.exec(text);
+  if (!match) return <>{text}</>;
+  return (
+    <>
+      {match[1]}
+      <Text style={centsStyle}>{match[2]}</Text>
+    </>
   );
 }
 

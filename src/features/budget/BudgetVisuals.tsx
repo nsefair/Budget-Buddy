@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, G } from "react-native-svg";
 
+import { CountUp, GrowBar, useEntranceProgress } from "@/animations";
 import { Icon } from "@/components/Icon";
 import { Colors } from "@/constants/colors";
-import type { BudgetCategory, Transaction } from "@/mock/budget";
+import type { BudgetCategory, BudgetMonthOption, Transaction } from "@/mock/budget";
 import { formatCurrency } from "@/utils/security";
 
 const DONUT_SIZE = 166;
@@ -12,6 +13,9 @@ const DONUT_STROKE = 22;
 const DONUT_RADIUS = (DONUT_SIZE - DONUT_STROKE) / 2;
 const DONUT_CIRCUMFERENCE = 2 * Math.PI * DONUT_RADIUS;
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+const BAR_TRACK_HEIGHT = 112;
+const compactCurrency = (value: number) => formatCurrency(value, { compact: true });
 
 type DonutSegment = {
   id: string;
@@ -51,10 +55,18 @@ function donutSegments(categories: BudgetCategory[]): DonutSegment[] {
 export function SpendingDonutChart({
   categories,
   totalSpent,
+  replayKey,
 }: {
   categories: BudgetCategory[];
   totalSpent: number;
+  replayKey?: unknown;
 }) {
+  // A card-colored ring on top un-draws clockwise to reveal the segments.
+  const reveal = useEntranceProgress(1, { replayKey, duration: 820 });
+  const coverOffset = reveal.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -DONUT_CIRCUMFERENCE],
+  });
   const segments = useMemo(() => donutSegments(categories), [categories]);
   const spokenSummary = segments
     .map((segment) => `${segment.name}, ${Math.round((segment.value / totalSpent) * 100)} percent`)
@@ -100,13 +112,28 @@ export function SpendingDonutChart({
                 />
               );
             })}
+            <AnimatedCircle
+              cx={DONUT_SIZE / 2}
+              cy={DONUT_SIZE / 2}
+              r={DONUT_RADIUS}
+              fill="none"
+              stroke={Colors.card}
+              strokeWidth={DONUT_STROKE + 4}
+              strokeDasharray={`${DONUT_CIRCUMFERENCE}`}
+              strokeDashoffset={coverOffset}
+            />
           </G>
         </Svg>
         <View pointerEvents="none" style={styles.donutCenter}>
           <Text style={styles.donutEyebrow}>SPENT</Text>
-          <Text adjustsFontSizeToFit numberOfLines={1} style={styles.donutTotal}>
-            {formatCurrency(totalSpent, { compact: true })}
-          </Text>
+          <CountUp
+            value={totalSpent}
+            from={totalSpent * 0.6}
+            replayKey={replayKey}
+            format={compactCurrency}
+            fit
+            style={styles.donutTotal}
+          />
           <Text style={styles.donutCaption}>this month</Text>
         </View>
       </View>
@@ -131,6 +158,73 @@ export function SpendingDonutChart({
         })}
       </View>
     </View>
+  );
+}
+
+/**
+ * MonthSpendBars — spending per month as tall rounded bars (reference: calm
+ * finance charts). Fills rise from the bottom, staggered; tapping a bar
+ * selects that month. Heights are relative to the highest month shown.
+ */
+export function MonthSpendBars({
+  months,
+  selectedMonthId,
+  onSelect,
+  replayKey,
+}: {
+  months: BudgetMonthOption[];
+  selectedMonthId: string;
+  onSelect: (monthId: string) => void;
+  replayKey?: unknown;
+}) {
+  const scroller = useRef<ScrollView>(null);
+  const peak = Math.max(1, ...months.map((month) => month.totalSpent));
+
+  return (
+    <ScrollView
+      ref={scroller}
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.barsRow}
+      onContentSizeChange={() => scroller.current?.scrollToEnd({ animated: false })}
+    >
+      {months.map((month, index) => {
+        const selected = month.id === selectedMonthId;
+        return (
+          <Pressable
+            key={month.id}
+            accessibilityRole="button"
+            accessibilityState={{ selected }}
+            accessibilityLabel={`${month.label}: ${formatCurrency(month.totalSpent)} spent`}
+            onPress={() => onSelect(month.id)}
+            style={styles.barSlot}
+          >
+            <Text
+              style={[styles.barValue, selected && styles.barValueActive]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}
+            >
+              {compactCurrency(month.totalSpent)}
+            </Text>
+            <GrowBar
+              vertical
+              progress={month.totalSpent / peak}
+              color={selected ? Colors.gold : Colors.accentAlpha35}
+              trackColor={Colors.navy50}
+              height={34}
+              delay={index * 60}
+              duration={640}
+              replayKey={replayKey}
+              style={styles.barTrack}
+            />
+            <Text style={[styles.barLabel, selected && styles.barLabelActive]}>
+              {month.shortLabel}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
   );
 }
 
@@ -380,6 +474,19 @@ function CalendarLegend({ color, label, ring = false }: { color: string; label: 
 }
 
 const styles = StyleSheet.create({
+  barsRow: {
+    flexGrow: 1,
+    justifyContent: "space-between",
+    gap: 6,
+    paddingTop: 4,
+    paddingBottom: 2,
+  },
+  barSlot: { minWidth: 48, alignItems: "center", gap: 8 },
+  barTrack: { height: BAR_TRACK_HEIGHT },
+  barValue: { fontSize: 11, fontWeight: "700", color: Colors.muted, fontVariant: ["tabular-nums"] },
+  barValueActive: { color: Colors.navy },
+  barLabel: { fontSize: 12, fontWeight: "600", color: Colors.muted },
+  barLabelActive: { color: Colors.navy, fontWeight: "800" },
   donutLayout: {
     flexDirection: "row",
     alignItems: "center",
