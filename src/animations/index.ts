@@ -19,3 +19,6 @@ export { PressableScale } from "@/animations/PressableScale";
 export { CountUp } from "@/animations/CountUp";
 export { Shimmer } from "@/animations/Shimmer";
 export { useReducedMotion } from "@/animations/useReducedMotion";
+export { GrowBar } from "@/animations/GrowBar";
+export { useEntranceProgress } from "@/animations/useEntranceProgress";
+export { useFocusReplay } from "@/animations/useFocusReplay";

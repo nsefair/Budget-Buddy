@@ -10,7 +10,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 
-import { FadeInUp, PressableScale, Stagger } from "@/animations";
+import { FadeInUp, GrowBar, PressableScale, Stagger, useFocusReplay } from "@/animations";
 import { BrandLogo } from "@/components/BrandLogo";
 import { Icon } from "@/components/Icon";
 import { Colors } from "@/constants/colors";
@@ -35,6 +35,8 @@ export function QuestHub() {
   const [selectedQuestId, setSelectedQuestId] = useState<string | null>(null);
   const [reward, setReward] = useState<QuestCheckInResult | null>(null);
   const [verificationNotice, setVerificationNotice] = useState<string | null>(null);
+  // Progress bars re-enter each time Quests regains focus.
+  const replay = useFocusReplay();
 
   const selectedQuest = useMemo(
     () => data?.quests.find((quest) => quest.id === selectedQuestId) ?? null,
@@ -96,7 +98,7 @@ export function QuestHub() {
       ) : null}
 
       <FadeInUp>
-        <ProgressHeader leagueTier={data.score.leagueTier} />
+        <ProgressHeader leagueTier={data.score.leagueTier} replayKey={replay} />
       </FadeInUp>
 
       <View style={styles.sectionHeading}>
@@ -116,6 +118,7 @@ export function QuestHub() {
             key={quest.id}
             quest={quest}
             isCheckingIn={checkingIn && checkingInQuestId === quest.id}
+            replayKey={replay}
             onDetails={() => setSelectedQuestId(quest.id)}
             onCheckIn={() => handleCheckIn(quest)}
           />
@@ -137,7 +140,7 @@ export function QuestHub() {
  * All the game state lives here on Quests; the Today tab keeps only the
  * Financial Health score.
  */
-function ProgressHeader({ leagueTier }: { leagueTier: string }) {
+function ProgressHeader({ leagueTier, replayKey }: { leagueTier: string; replayKey: number }) {
   const user = useUser();
   if (!user) return null;
 
@@ -164,9 +167,7 @@ function ProgressHeader({ leagueTier }: { leagueTier: string }) {
             <Text style={styles.leagueChipText}>{leagueTier}</Text>
           </View>
         </View>
-        <View style={styles.xpTrack}>
-          <View style={[styles.xpFill, { width: `${Math.max(3, xpProgress * 100)}%` }]} />
-        </View>
+        <GrowBar progress={Math.max(0.03, xpProgress)} color={Colors.gold} height={7} replayKey={replayKey} />
       </View>
     </View>
   );
@@ -175,16 +176,19 @@ function ProgressHeader({ leagueTier }: { leagueTier: string }) {
 function WeeklyQuestCard({
   quest,
   isCheckingIn,
+  replayKey,
   onDetails,
   onCheckIn,
 }: {
   quest: Quest;
   isCheckingIn: boolean;
+  replayKey: number;
   onDetails: () => void;
   onCheckIn: () => void;
 }) {
   const completed = quest.status === "completed";
   const actionDisabled = completed || quest.checkedInToday || isCheckingIn;
+  const selfReport = quest.verificationType === "self_report";
 
   return (
     <View style={[styles.questCard, completed && styles.questCardComplete]}>
@@ -211,29 +215,24 @@ function WeeklyQuestCard({
           </View>
           <Icon name="chevron-right" size={18} color={Colors.muted} />
         </View>
-        <ProgressTrack progress={quest.progress} total={quest.total} complete={completed} />
-        <View style={styles.questWhyPanel}>
-          <View style={styles.questWhyHeader}>
-            <Text style={styles.questWhyLabel}>WHY THIS MATTERS</Text>
-            <View style={styles.verificationBadge}>
-              <Icon
-                name={quest.verificationType === "self_report" ? "check-circle" : "shield-check"}
-                size={11}
-                color={Colors.teal}
-              />
-              <Text style={styles.verificationBadgeText}>
-                {quest.verificationType === "self_report" ? "CHECK-IN" : "BUD VERIFIED"}
-              </Text>
-            </View>
-          </View>
-          <Text style={styles.questWhy}>{quest.whyItMatters}</Text>
-        </View>
+        <ProgressTrack
+          progress={quest.progress}
+          total={quest.total}
+          complete={completed}
+          replayKey={replayKey}
+        />
+        {/* The full reason lives in the detail sheet; the card keeps a short preview. */}
+        <Text style={styles.questWhy} numberOfLines={2}>
+          {quest.whyItMatters}
+        </Text>
       </Pressable>
 
       <View style={styles.questFooter}>
         <View style={styles.scoreImpactPill}>
-          <Icon name="activity" size={13} color={Colors.teal} />
-          <Text style={styles.scoreImpactText}>up to +{quest.scoreImpact} score</Text>
+          <Icon name={selfReport ? "check-circle" : "shield-check"} size={13} color={Colors.muted} />
+          <Text style={styles.scoreImpactText} numberOfLines={1}>
+            {selfReport ? "Check-in" : "Bud verifies"} · up to +{quest.scoreImpact} score
+          </Text>
         </View>
         <PressableScale
           accessibilityRole="button"
@@ -254,13 +253,13 @@ function WeeklyQuestCard({
         >
           <View style={styles.checkInButtonContent}>
             {isCheckingIn ? (
-              <ActivityIndicator size="small" color={Colors.onAction} />
+              <ActivityIndicator size="small" color={Colors.navy} />
             ) : (
               <>
                 <Icon
                   name={completed || quest.checkedInToday ? "check" : "plus"}
                   size={15}
-                  color={completed ? Colors.emerald : actionDisabled ? Colors.navyMuted : Colors.onAction}
+                  color={completed ? Colors.emerald : actionDisabled ? Colors.navyMuted : Colors.navy}
                   strokeWidth={2.8}
                 />
                 <Text
@@ -444,24 +443,20 @@ function ProgressTrack({
   progress,
   total,
   complete = false,
+  replayKey,
 }: {
   progress: number;
   total: number;
   complete?: boolean;
+  replayKey?: number;
 }) {
-  const percent = total > 0 ? Math.min(100, (progress / total) * 100) : 0;
   return (
-    <View
-      style={styles.progressTrack}
-      accessibilityRole="progressbar"
-      accessibilityValue={{ min: 0, max: total, now: progress }}
-    >
-      <View
-        style={[
-          styles.progressFill,
-          complete && { backgroundColor: Colors.emerald },
-          { width: `${percent}%` },
-        ]}
+    <View accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: total, now: progress }}>
+      <GrowBar
+        progress={total > 0 ? progress / total : 0}
+        color={complete ? Colors.emerald : Colors.gold}
+        height={6}
+        replayKey={replayKey}
       />
     </View>
   );
@@ -512,11 +507,6 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: Colors.gold,
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 4,
   },
   levelBadgeText: { fontSize: 16, fontWeight: "800", color: Colors.onAccent },
   levelBadgeLabel: { fontSize: 9, fontWeight: "800", color: Colors.navyMuted, letterSpacing: 1.2 },
@@ -533,16 +523,14 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.gold50,
   },
   leagueChipText: { fontSize: 11, fontWeight: "800", color: Colors.gold600 },
-  xpTrack: { height: 7, borderRadius: Radius.pill, backgroundColor: Colors.navy50, overflow: "hidden" },
-  xpFill: { height: "100%", borderRadius: Radius.pill, backgroundColor: Colors.gold },
   sectionHeading: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: 12, marginTop: 4 },
-  sectionEyebrow: { ...Type.eyebrow, color: Colors.gold },
+  sectionEyebrow: { ...Type.eyebrow, color: Colors.muted },
   sectionTitle: { ...Type.h2, color: Colors.navy, marginTop: 3 },
   resetPill: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 9, paddingVertical: 7, borderRadius: Radius.pill, backgroundColor: Colors.navy50 },
   resetText: { ...Type.micro, color: Colors.navyMuted },
-  questCard: { backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.xl, overflow: "hidden", ...Shadow.md },
+  questCard: { backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.xl, overflow: "hidden", ...Shadow.sm },
   questCardComplete: { borderColor: Colors.greenBorder, backgroundColor: Colors.greenSurface },
-  questCardMain: { paddingHorizontal: Spacing.md, paddingTop: Spacing.md, paddingBottom: Spacing.lg, gap: 14 },
+  questCardMain: { paddingHorizontal: Spacing.md, paddingTop: Spacing.md, paddingBottom: Spacing.md, gap: 12 },
   pressed: { opacity: 0.78 },
   questCardTop: { flexDirection: "row", alignItems: "center", gap: 12 },
   questIcon: { width: 44, height: 44, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: Colors.gold50 },
@@ -550,22 +538,15 @@ const styles = StyleSheet.create({
   questTitleWrap: { flex: 1 },
   questTitle: { ...Type.h3, color: Colors.navy },
   questMeta: { ...Type.caption, color: Colors.navyMuted, marginTop: 3 },
-  questWhyPanel: { paddingHorizontal: 14, paddingVertical: 13, borderRadius: Radius.md, backgroundColor: Colors.navy50, borderWidth: 1, borderColor: Colors.border, gap: 5 },
-  questWhyHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  questWhyLabel: { ...Type.micro, color: Colors.gold, letterSpacing: 1.1 },
-  verificationBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 7, paddingVertical: 4, borderRadius: Radius.pill, backgroundColor: Colors.greenSurface },
-  verificationBadgeText: { fontSize: 8, fontWeight: "800", color: Colors.teal, letterSpacing: 0.7 },
-  questWhy: { ...Type.body, color: Colors.navyMuted, lineHeight: 22 },
-  progressTrack: { height: 7, borderRadius: Radius.pill, backgroundColor: Colors.navy50, overflow: "hidden" },
-  progressFill: { height: "100%", borderRadius: Radius.pill, backgroundColor: Colors.gold },
-  questFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, paddingHorizontal: Spacing.md, paddingVertical: 14, borderTopWidth: 1, borderTopColor: Colors.border },
+  questWhy: { ...Type.body, color: Colors.muted },
+  questFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, paddingHorizontal: Spacing.md, paddingVertical: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border },
   scoreImpactPill: { flexDirection: "row", alignItems: "center", gap: 5, flexShrink: 1 },
-  scoreImpactText: { ...Type.caption, color: Colors.teal },
-  checkInButton: { minHeight: 40, paddingHorizontal: 13, borderRadius: Radius.pill, backgroundColor: Colors.actionSurface, borderWidth: 1, borderColor: Colors.actionBorder, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
+  scoreImpactText: { ...Type.caption, color: Colors.muted, flexShrink: 1 },
+  checkInButton: { minHeight: 40, paddingHorizontal: 13, borderRadius: Radius.pill, backgroundColor: Colors.greenSurface, borderWidth: 1, borderColor: Colors.greenBorder, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
   checkInButtonContent: { minHeight: 38, paddingHorizontal: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
   checkInButtonDisabled: { backgroundColor: Colors.navy50, borderColor: Colors.border },
   checkInButtonComplete: { backgroundColor: Colors.emerald50, borderColor: Colors.greenBorder },
-  checkInButtonText: { ...Type.caption, color: Colors.onAction },
+  checkInButtonText: { ...Type.caption, color: Colors.navy },
   checkInButtonTextDisabled: { color: Colors.navyMuted },
   rewardBanner: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: Radius.lg, padding: 12, backgroundColor: Colors.actionSurface, borderWidth: 1, borderColor: Colors.actionBorder },
   rewardIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: "rgba(0,0,0,0.10)", alignItems: "center", justifyContent: "center" },

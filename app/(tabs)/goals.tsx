@@ -34,7 +34,7 @@ import { Colors } from "@/constants/colors";
 import { TAB_BAR_HEIGHT } from "@/constants/tokens";
 import { EmptyState, GradientHeader } from "@/components/ui";
 import { Icon, type IconName } from "@/components/Icon";
-import { Stagger } from "@/animations";
+import { GrowBar, Stagger, useFocusReplay } from "@/animations";
 import { goalsService } from "@/services/goalsService";
 import { budgetService } from "@/services/budgetService";
 import type { AccountSummary } from "@/mock/budget";
@@ -156,6 +156,8 @@ const PLAN_OPTIONS: Array<{
 
 export default function GoalsScreen() {
   const insets = useSafeAreaInsets();
+  // Goal bars re-enter each time Goals regains focus.
+  const replay = useFocusReplay();
   const [goals, setGoals] = useState<Goal[]>([]);
   const [summary, setSummary] = useState<GoalsSummary | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -253,7 +255,7 @@ export default function GoalsScreen() {
           <View style={styles.grid}>
             <Stagger gap={80}>
               {goals.map((g) => (
-                <GoalCard key={g.id} goal={g} />
+                <GoalCard key={g.id} goal={g} replayKey={replay} />
               ))}
             </Stagger>
           </View>
@@ -312,15 +314,19 @@ function SummaryCell({
   return (
     <View style={styles.summaryCell}>
       <Text style={styles.summaryLabel}>{label}</Text>
-      <Text style={styles.summaryValue}>{value}</Text>
-      <Text style={styles.summarySub}>{sub}</Text>
+      <Text style={styles.summaryValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+        {value}
+      </Text>
+      <Text style={styles.summarySub} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+        {sub}
+      </Text>
     </View>
   );
 }
 
 // ─── Goal card ──────────────────────────────────────────────────────────────
 
-function GoalCard({ goal }: { goal: Goal }) {
+function GoalCard({ goal, replayKey }: { goal: Goal; replayKey: number }) {
   const meta = KIND_META[goal.kind];
   const duration = DURATION_META[goal.duration];
 
@@ -381,21 +387,23 @@ function GoalCard({ goal }: { goal: Goal }) {
 
       {/* Progress amount + animated bar */}
       <View style={styles.amountRow}>
-        <Text style={styles.amountSaved}>
+        <Text style={styles.amountSaved} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
           {formatCurrency(goal.alreadySaved)}
         </Text>
-        <Text style={styles.amountTarget}>
+        <Text style={styles.amountTarget} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
           of {formatCurrency(goal.targetAmount)}
         </Text>
       </View>
-      <View style={styles.barTrack}>
-        <MotiView
-          from={{ width: "0%" }}
-          animate={{ width: `${pct}%` }}
-          transition={{ type: "timing", duration: 700, delay: 120 }}
-          style={[styles.barFill, { backgroundColor: meta.tint }]}
-        />
-      </View>
+      <GrowBar
+        progress={progress}
+        color={meta.tint}
+        trackColor={Colors.border}
+        height={8}
+        delay={120}
+        duration={700}
+        replayKey={replayKey}
+        style={styles.barTrack}
+      />
 
       {/* Bottom — monthly + deadline */}
       <View style={styles.bottomRow}>
@@ -426,7 +434,9 @@ function BottomCell({
         <Icon name={icon} size={11} color={Colors.muted} strokeWidth={2.2} />
         <Text style={styles.bottomLabel}>{label}</Text>
       </View>
-      <Text style={styles.bottomValue}>{value}</Text>
+      <Text style={styles.bottomValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+        {value}
+      </Text>
     </View>
   );
 }
@@ -1159,7 +1169,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 2,
   },
-  summaryCell: { flex: 1, paddingHorizontal: 6, alignItems: "flex-start" },
+  summaryCell: { flex: 1, minWidth: 0, paddingHorizontal: 6, alignItems: "flex-start" },
   summaryLabel: {
     fontSize: 10,
     fontWeight: "700",
@@ -1300,17 +1310,10 @@ const styles = StyleSheet.create({
   },
 
   amountRow: { flexDirection: "row", alignItems: "baseline", gap: 5, marginBottom: 9 },
-  amountSaved: { fontSize: 22, fontWeight: "800", color: Colors.navy, letterSpacing: -0.3 },
-  amountTarget: { fontSize: 13, fontWeight: "600", color: Colors.muted },
+  amountSaved: { flexShrink: 1, fontSize: 22, fontWeight: "800", color: Colors.navy, letterSpacing: -0.3 },
+  amountTarget: { flexShrink: 0, maxWidth: "55%", fontSize: 13, fontWeight: "600", color: Colors.muted },
 
-  barTrack: {
-    height: 8,
-    borderRadius: 5,
-    backgroundColor: Colors.border,
-    overflow: "hidden",
-    marginBottom: 16,
-  },
-  barFill: { height: 8, borderRadius: 5 },
+  barTrack: { marginBottom: 16 },
 
   bottomRow: {
     flexDirection: "row",
@@ -1318,7 +1321,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 14,
   },
-  bottomCell: { flex: 1, gap: 4 },
+  bottomCell: { flex: 1, minWidth: 0, gap: 4 },
   bottomDivider: { width: 1, backgroundColor: Colors.border, marginHorizontal: 12 },
   bottomLabel: {
     fontSize: 10,
