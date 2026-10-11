@@ -1,6 +1,6 @@
 # Budget Buddy: development and readiness
 
-Updated October 5, 2026. This is a public portfolio repository for an app in active
+Updated October 10, 2026. This is a public portfolio repository for an app in active
 development. User accounts, bank credentials, and financial records remain
 private. There is no public launch, TestFlight release, or tester invitation.
 This report replaces the older handoffs; their history remains in Git.
@@ -42,6 +42,22 @@ This report replaces the older handoffs; their history remains in Git.
   excludes declared fixed bills from flexible spending. Their totals have
   different meanings and are not interchangeable.
 
+## UI pass (October 10)
+
+- Calm, shared visual language across tabs: light glowing headers, 22pt
+  hairline cards, round tinted icon tiles, and thin bars. Numbers roll in and
+  bars grow when a tab regains focus; Reduce Motion keeps them static.
+- Bud is a calm conversation with honest replies: goal pace is arithmetic on
+  goal settings, learning topics are general education, and open questions say
+  the full assistant is not ready. There is still no AI backend (`/bud/ask`).
+- Budget category limits are display-only for now; the editable starting
+  budget was removed. Onboarding uses segmented progress and cascading
+  options; launch plays a short ripple-and-dissolve over the app.
+- `babel.config.js` no longer routes JSX through NativeWind. The app styles
+  with `StyleSheet` only, and that interop silently dropped `Pressable` style
+  callbacks. NativeWind's Metro watcher can still crash Metro when files are
+  added or removed; restart with `npx expo start --dev-client --lan --clear`.
+
 ## Branches and dependencies
 
 The consolidation includes compatible Go, GitHub Actions, browserslist, browser
@@ -50,6 +66,11 @@ are superseded because those packages are absent from the Expo 57 lockfile.
 The old broad production upgrade mixes unsupported React Native, Reanimated,
 Worklets, and Tailwind versions; TypeScript 7 also needs a separate compatibility
 pass. Do not merge those upgrades merely to clear the branch list.
+
+Expo 57 patch releases, Go 1.26.9, and a `shell-quote` 1.11.0 override landed
+on October 10. Expo SDK 58 (which clears a moderate `decode-uri-component`
+advisory) and TypeScript 7 belong to a planned upgrade. The hosted API keeps
+its Go 1.26.6 build until the next guarded deployment.
 
 Dependabot groups routine updates and limits open requests. CI runs database
 integration tests against disposable PostgreSQL, money-input tests, and the AWS
@@ -139,7 +160,9 @@ Still required before inviting testers:
   and remote-push credentials remain gated on enrollment.
 - Automatic income-cycle rollover/detection, overnight scheduling, notifications,
   Bud's real AI integration, and the full score redesign remain future work.
-- Profile-menu polish and the next Quests UI pass remain design follow-ups.
+- Profile-menu polish, scroll-linked motion, and chart value tooltips remain
+  design follow-ups; physical-iPhone acceptance of the October 10 UI pass is
+  owner-reported, not automated.
 - Review remaining dependency advisories before beta. Do not apply forced
   framework upgrades to silence an audit.
 

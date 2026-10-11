@@ -33,7 +33,7 @@ import { Colors } from "@/constants/colors";
 import { TAB_BAR_HEIGHT } from "@/constants/tokens";
 import { BrandHeader } from "@/components/BrandLogo";
 import { GradientHeader } from "@/components/ui";
-import { Icon, hasIcon, type IconName } from "@/components/Icon";
+import { Icon, type IconName } from "@/components/Icon";
 import type {
   AccountSummary,
   BudgetOverview,
@@ -53,21 +53,16 @@ import { goalsService } from "@/services/goalsService";
 import type { GoalsSummary } from "@/mock/goals";
 import { formatCurrency, secureLog } from "@/utils/security";
 import {
+  CategoryIcon,
   MonthSpendBars,
   SpendingDonutChart,
   TransactionCalendar,
+  readableTint,
 } from "@/features/budget/BudgetVisuals";
 
 const AMBER_WASH = "rgba(245, 158, 11, 0.35)";
 const CORAL_WASH = "rgba(239, 68, 68, 0.3)";
 
-// Some category colors (e.g. Housing's navy) disappear on dark surfaces.
-function readableTint(hex: string) {
-  const value = parseInt(hex.replace("#", "").slice(0, 6), 16);
-  if (Number.isNaN(value)) return Colors.navyMuted;
-  const [r, g, b] = [(value >> 16) & 255, (value >> 8) & 255, value & 255];
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b < 70 ? Colors.navyMuted : hex;
-}
 
 /**
  * Predict upcoming bills from synced recurring transactions: the latest
@@ -327,6 +322,7 @@ export default function BudgetScreen() {
             monthId={selectedMonthId}
             monthLabel={overview.month}
             transactions={transactions}
+            categories={overview.categories}
           />
         </Card>
 
@@ -349,7 +345,7 @@ export default function BudgetScreen() {
                   ]}
                 >
                   <Text style={styles.viewAllText}>View all</Text>
-                  <Icon name="chevron-right" size={14} color={Colors.gold} strokeWidth={2.5} />
+                  <Icon name="chevron-right" size={14} color={Colors.navyMuted} strokeWidth={2.5} />
                 </Pressable>
               ) : null
             }
@@ -601,8 +597,8 @@ function StatTile({
 }) {
   return (
     <View style={styles.statTile}>
-      <View style={[styles.statIcon, { backgroundColor: `${tint}1A`, borderColor: `${tint}55` }]}>
-        <Icon name={icon} size={14} color={tint} strokeWidth={2.4} />
+      <View style={[styles.statIcon, { backgroundColor: `${tint}1F` }]}>
+        <Icon name={icon} size={15} color={tint} strokeWidth={2.3} />
       </View>
       <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
         {value}
@@ -739,14 +735,7 @@ function CategoryRow({
       onPress={() => router.push({ pathname: "/transactions", params: { month, category: category.id } })}
       style={({ pressed }) => [styles.catRow, pressed && styles.pressed]}
     >
-      <View style={[styles.catIcon, { backgroundColor: `${category.color}1F` }]}>
-        <Icon
-          name={hasIcon(category.icon) ? category.icon : "receipt"}
-          size={16}
-          color={tint}
-          strokeWidth={2.3}
-        />
-      </View>
+      <CategoryIcon category={category} size={38} />
       <View style={styles.catBody}>
         <View style={styles.catTop}>
           <Text style={styles.catName} numberOfLines={1}>{category.name}</Text>
@@ -807,22 +796,7 @@ function TransactionRow({
   return (
     <View style={styles.txnRow}>
       <View style={styles.txnLeft}>
-        <View style={[styles.txnIconBox, category && { backgroundColor: `${category.color}1F` }]}>
-          {category ? (
-            <Icon
-              name={hasIcon(category.icon) ? category.icon : "receipt"}
-              size={15}
-              color={readableTint(category.color)}
-              strokeWidth={2.3}
-            />
-          ) : (
-            <Icon
-              name={amount < 0 ? "arrow-down-right" : "arrow-up-right"}
-              size={13}
-              color={amount < 0 ? Colors.muted : Colors.emerald}
-            />
-          )}
-        </View>
+        <CategoryIcon category={category} incoming={amount > 0} />
         <View style={styles.rowCopy}>
           <Text style={styles.txnMerchant} numberOfLines={1}>{merchant}</Text>
           <Text style={styles.txnSub} numberOfLines={1}>{sub}</Text>
@@ -953,26 +927,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Colors.muted,
   },
-  header: {
-    marginBottom: 14,
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  eyebrow: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: Colors.gold,
-    letterSpacing: 1.6,
-    marginBottom: 6,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "800",
-    color: Colors.navy,
-    letterSpacing: 0,
-  },
   syncBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -1017,86 +971,24 @@ const styles = StyleSheet.create({
     gap: 10,
     marginBottom: 12,
   },
-  statTile: {
-    flexBasis: "48%",
-    flexGrow: 1,
-    backgroundColor: Colors.card,
-    borderRadius: 14,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    gap: 4,
-  },
-  statIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    marginBottom: 4,
-  },
-  statValue: {
-    fontSize: 19,
-    fontWeight: "800",
-    color: Colors.navy,
-    letterSpacing: 0,
-  },
-  statLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: Colors.navyMuted,
-    letterSpacing: 0.4,
-  },
-  statSub: { fontSize: 10, color: Colors.muted, marginTop: 1 },
+  statTile: { flexBasis: "48%", flexGrow: 1, gap: 4, padding: 14, borderRadius: 20, backgroundColor: Colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: Colors.border },
+  statIcon: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center", marginBottom: 6 },
+  statValue: { fontSize: 22, fontWeight: "800", color: Colors.navy, letterSpacing: -0.4, fontVariant: ["tabular-nums"] },
+  statLabel: { fontSize: 12, fontWeight: "700", color: Colors.navy },
+  statSub: { fontSize: 11, color: Colors.muted, marginTop: 1 },
 
-  card: {
-    backgroundColor: Colors.card,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginBottom: 12,
-  },
+  card: { marginBottom: 12, padding: 18, borderRadius: 22, backgroundColor: Colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: Colors.border },
   cardHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 14,
   },
-  cardTitle: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: Colors.navy,
-    letterSpacing: 0,
-  },
-  cardHint: { fontSize: 11, color: Colors.muted, marginTop: 2 },
-  viewAllButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    paddingHorizontal: 9,
-    paddingVertical: 7,
-    borderRadius: 999,
-    backgroundColor: Colors.accentAlpha08,
-  },
-  viewAllText: { fontSize: 11, fontWeight: "800", color: Colors.gold },
+  cardTitle: { fontSize: 17, fontWeight: "800", color: Colors.navy, letterSpacing: -0.2 },
+  cardHint: { fontSize: 12, color: Colors.muted, marginTop: 2 },
+  viewAllButton: { flexDirection: "row", alignItems: "center", gap: 3, minHeight: 32, paddingHorizontal: 12, borderRadius: 999, backgroundColor: Colors.navy50 },
+  viewAllText: { fontSize: 12, fontWeight: "700", color: Colors.navy },
 
-  // Segmented bar
-  segmentedBar: {
-    flexDirection: "row",
-    height: 14,
-    borderRadius: 7,
-    overflow: "hidden",
-    backgroundColor: Colors.border,
-    marginBottom: 14,
-  },
-  legend: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  legendItem: { flexDirection: "row", alignItems: "center", gap: 6 },
-  legendSwatch: { width: 8, height: 8, borderRadius: 2 },
-  legendText: { fontSize: 11, color: Colors.navyMuted, fontWeight: "600" },
-
-  // Category row
 
   pressed: { opacity: 0.75 },
 
@@ -1143,7 +1035,6 @@ const styles = StyleSheet.create({
   // Categories
   catList: { gap: 4 },
   catRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 8 },
-  catIcon: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
   catBody: { flex: 1, minWidth: 0, gap: 6 },
   catTop: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 10 },
   catName: { flex: 1, minWidth: 0, fontSize: 14, fontWeight: "700", color: Colors.navy },
@@ -1153,22 +1044,11 @@ const styles = StyleSheet.create({
   catStatusOver: { color: Colors.coral },
 
   // Tabs
-  txnTabs: {
-    flexDirection: "row",
-    backgroundColor: Colors.surface,
-    borderRadius: 999,
-    padding: 4,
-    marginBottom: 10,
-    alignSelf: "flex-start",
-  },
-  tabPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 999,
-  },
-  tabPillActive: { backgroundColor: Colors.gold },
-  tabPillText: { fontSize: 12, fontWeight: "700", color: Colors.navyMuted },
-  tabPillTextActive: { color: Colors.onGreen },
+  txnTabs: { flexDirection: "row", alignSelf: "flex-start", padding: 3, marginBottom: 8, borderRadius: 999, backgroundColor: Colors.navy50 },
+  tabPill: { minHeight: 34, justifyContent: "center", paddingHorizontal: 16, borderRadius: 999 },
+  tabPillActive: { backgroundColor: Colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: Colors.border },
+  tabPillText: { fontSize: 13, fontWeight: "600", color: Colors.muted },
+  tabPillTextActive: { color: Colors.navy, fontWeight: "700" },
 
   txnList: { gap: 0 },
   emptyTransactions: {
@@ -1186,14 +1066,6 @@ const styles = StyleSheet.create({
   },
   txnLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1, minWidth: 0, marginRight: 12 },
   rowCopy: { flex: 1, minWidth: 0 },
-  txnIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.navy50,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   txnMerchant: { fontSize: 13, fontWeight: "700", color: Colors.navy },
   txnSub: { fontSize: 11, color: Colors.muted, marginTop: 1 },
   txnAmount: { flexShrink: 0, fontSize: 14, fontWeight: "700" },
@@ -1215,7 +1087,7 @@ const styles = StyleSheet.create({
   emptyInvestmentIcon: {
     width: 34,
     height: 34,
-    borderRadius: 10,
+    borderRadius: 17,
     backgroundColor: Colors.navy50,
     alignItems: "center",
     justifyContent: "center",

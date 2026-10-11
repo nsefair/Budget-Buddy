@@ -7,7 +7,6 @@ import {
   Text,
   View,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 
 import { FadeInUp, GrowBar, PressableScale, Stagger, useFocusReplay } from "@/animations";
@@ -152,9 +151,9 @@ function ProgressHeader({ leagueTier, replayKey }: { leagueTier: string; replayK
   return (
     <View style={styles.progressHeader}>
       <View style={styles.levelBadge}>
-        <LinearGradient colors={[Colors.gold400, Colors.gold600]} style={styles.levelBadgeInner}>
+        <View style={styles.levelBadgeInner}>
           <Text style={styles.levelBadgeText}>{user.level}</Text>
-        </LinearGradient>
+        </View>
         <Text style={styles.levelBadgeLabel}>LEVEL</Text>
       </View>
       <View style={styles.xpBlock}>
@@ -493,12 +492,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 14,
     backgroundColor: Colors.card,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
-    borderRadius: Radius.xl,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 14,
-    ...Shadow.sm,
+    borderRadius: 22,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
   },
   levelBadge: { alignItems: "center", gap: 3 },
   levelBadgeInner: {
@@ -507,6 +505,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: Colors.gold,
   },
   levelBadgeText: { fontSize: 16, fontWeight: "800", color: Colors.onAccent },
   levelBadgeLabel: { fontSize: 9, fontWeight: "800", color: Colors.navyMuted, letterSpacing: 1.2 },
@@ -528,12 +527,12 @@ const styles = StyleSheet.create({
   sectionTitle: { ...Type.h2, color: Colors.navy, marginTop: 3 },
   resetPill: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 9, paddingVertical: 7, borderRadius: Radius.pill, backgroundColor: Colors.navy50 },
   resetText: { ...Type.micro, color: Colors.navyMuted },
-  questCard: { backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.xl, overflow: "hidden", ...Shadow.sm },
+  questCard: { backgroundColor: Colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: Colors.border, borderRadius: 22, overflow: "hidden" },
   questCardComplete: { borderColor: Colors.greenBorder, backgroundColor: Colors.greenSurface },
   questCardMain: { paddingHorizontal: Spacing.md, paddingTop: Spacing.md, paddingBottom: Spacing.md, gap: 12 },
   pressed: { opacity: 0.78 },
   questCardTop: { flexDirection: "row", alignItems: "center", gap: 12 },
-  questIcon: { width: 44, height: 44, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: Colors.gold50 },
+  questIcon: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: Colors.accentAlpha12 },
   questIconComplete: { backgroundColor: Colors.emerald50 },
   questTitleWrap: { flex: 1 },
   questTitle: { ...Type.h3, color: Colors.navy },

@@ -34,7 +34,7 @@ import { Colors } from "@/constants/colors";
 import { TAB_BAR_HEIGHT } from "@/constants/tokens";
 import { EmptyState, GradientHeader } from "@/components/ui";
 import { Icon, type IconName } from "@/components/Icon";
-import { GrowBar, Stagger, useFocusReplay } from "@/animations";
+import { CountUp, GrowBar, Stagger, useFocusReplay } from "@/animations";
 import { goalsService } from "@/services/goalsService";
 import { budgetService } from "@/services/budgetService";
 import type { AccountSummary } from "@/mock/budget";
@@ -345,39 +345,31 @@ function GoalCard({ goal, replayKey }: { goal: Goal; replayKey: number }) {
   }, [goal.deadline]);
 
   const pct = Math.round(progress * 100);
+  const durationText = duration.label.charAt(0) + duration.label.slice(1).toLowerCase();
 
   return (
     <Pressable
-      style={({ pressed }) => [
-        styles.goalCard,
-        { borderLeftColor: meta.tint },
-        pressed && styles.goalCardPressed,
-      ]}
+      accessibilityRole="button"
+      accessibilityLabel={`${goal.name}, ${pct} percent. ${formatCurrency(goal.alreadySaved)} of ${formatCurrency(goal.targetAmount)}.`}
+      style={({ pressed }) => [styles.goalCard, pressed && styles.goalCardPressed]}
       onPress={() => {
         Haptics.selectionAsync();
         router.push(`/goal/${goal.id}`);
       }}
     >
-      {/* Top — kind icon + name + percent badge */}
+      {/* Top — kind icon + name + percent */}
       <View style={styles.goalTop}>
-        <View style={[styles.kindIcon, { backgroundColor: `${meta.tint}1A`, borderColor: `${meta.tint}55` }]}>
+        <View style={[styles.kindIcon, { backgroundColor: `${meta.tint}1F` }]}>
           <Icon name={meta.icon} size={18} color={meta.tint} strokeWidth={2.2} />
         </View>
-        <View style={{ flex: 1 }}>
+        <View style={styles.goalTitle}>
           <Text style={styles.goalName} numberOfLines={1}>{goal.name}</Text>
-          <Text style={[styles.durationLabel, { color: duration.tint }]}>
-            {duration.label}
+          <Text style={styles.goalMeta} numberOfLines={1}>
+            {meta.label} · {durationText}
+            {goal.linkedAccountId ? " · Auto tracking" : ""}
           </Text>
-          {goal.linkedAccountId ? (
-            <View style={styles.autoTrackPill}>
-              <Icon name="activity" size={10} color={Colors.teal} strokeWidth={2.5} />
-              <Text style={styles.autoTrackText}>Auto tracking</Text>
-            </View>
-          ) : null}
         </View>
-        <View style={[styles.percentBadge, { backgroundColor: `${meta.tint}1A` }]}>
-          <Text style={[styles.percentBadgeText, { color: meta.tint }]}>{pct}%</Text>
-        </View>
+        <Text style={styles.percentText}>{pct}%</Text>
       </View>
 
       {/* Reason */}
@@ -387,9 +379,15 @@ function GoalCard({ goal, replayKey }: { goal: Goal; replayKey: number }) {
 
       {/* Progress amount + animated bar */}
       <View style={styles.amountRow}>
-        <Text style={styles.amountSaved} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
-          {formatCurrency(goal.alreadySaved)}
-        </Text>
+        <CountUp
+          value={goal.alreadySaved}
+          from={goal.alreadySaved * 0.9}
+          replayKey={replayKey}
+          format={formatCurrency}
+          fit
+          style={styles.amountSaved}
+          centsStyle={styles.amountCents}
+        />
         <Text style={styles.amountTarget} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
           of {formatCurrency(goal.targetAmount)}
         </Text>
@@ -397,8 +395,8 @@ function GoalCard({ goal, replayKey }: { goal: Goal; replayKey: number }) {
       <GrowBar
         progress={progress}
         color={meta.tint}
-        trackColor={Colors.border}
-        height={8}
+        trackColor={Colors.navy50}
+        height={6}
         delay={120}
         duration={700}
         replayKey={replayKey}
@@ -412,7 +410,6 @@ function GoalCard({ goal, replayKey }: { goal: Goal; replayKey: number }) {
           value={formatCurrency(goal.monthlyCommit)}
           icon="banknote"
         />
-        <View style={styles.bottomDivider} />
         <BottomCell label="Deadline" value={deadlineLabel} icon="calendar" />
       </View>
     </Pressable>
@@ -1155,20 +1152,7 @@ const styles = StyleSheet.create({
   scroll: {},
   body: { paddingHorizontal: 18, paddingTop: 12 },
 
-  summaryRow: {
-    flexDirection: "row",
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 18,
-    padding: 14,
-    marginBottom: 14,
-    shadowColor: Colors.navy,
-    shadowOpacity: 0.04,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
-  },
+  summaryRow: { flexDirection: "row", marginBottom: 14, padding: 16, borderRadius: 22, backgroundColor: Colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: Colors.border },
   summaryCell: { flex: 1, minWidth: 0, paddingHorizontal: 6, alignItems: "flex-start" },
   summaryLabel: {
     fontSize: 10,
@@ -1178,12 +1162,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     textTransform: "uppercase",
   },
-  summaryValue: {
-    fontSize: 19,
-    fontWeight: "800",
-    color: Colors.navy,
-    letterSpacing: 0,
-  },
+  summaryValue: { fontSize: 20, fontWeight: "800", color: Colors.navy, fontVariant: ["tabular-nums"] },
   summarySub: { fontSize: 11, color: Colors.muted, marginTop: 3 },
 
   addBtn: {
@@ -1223,118 +1202,35 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
 
-  grid: { gap: 16 },
+  grid: { gap: 12 },
 
-  goalCard: {
-    backgroundColor: Colors.card,
-    borderRadius: 20,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderLeftWidth: 4,
-    shadowColor: Colors.navy,
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 3,
-  },
-  goalCardPressed: {
-    opacity: 0.95,
-    transform: [{ scale: 0.99 }],
-  },
+  goalCard: { padding: 18, borderRadius: 22, backgroundColor: Colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: Colors.border },
+  goalCardPressed: { opacity: 0.8 },
   goalTop: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
     marginBottom: 12,
   },
-  kindIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-  },
-  goalName: {
-    fontSize: 17,
-    fontWeight: "800",
-    color: Colors.navy,
-    letterSpacing: 0,
-  },
-  durationLabel: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 1.2,
-    marginTop: 3,
-  },
-  autoTrackPill: {
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginTop: 5,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 999,
-    backgroundColor: Colors.greenSurface,
-    borderWidth: 1,
-    borderColor: Colors.greenBorder,
-  },
-  autoTrackText: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Colors.teal,
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
-  },
-  percentBadge: {
-    minWidth: 48,
-    alignItems: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-  },
-  percentBadgeText: {
-    fontSize: 14,
-    fontWeight: "800",
-    letterSpacing: 0,
-  },
+  kindIcon: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
+  goalName: { fontSize: 17, fontWeight: "800", color: Colors.navy },
+  goalTitle: { flex: 1, minWidth: 0 },
+  goalMeta: { marginTop: 2, fontSize: 12, fontWeight: "600", color: Colors.muted },
+  percentText: { fontSize: 15, fontWeight: "800", color: Colors.navy, fontVariant: ["tabular-nums"] },
 
-  goalReason: {
-    fontSize: 13,
-    color: Colors.navyMuted,
-    fontStyle: "italic",
-    lineHeight: 19,
-    marginBottom: 16,
-  },
+  goalReason: { fontSize: 13, lineHeight: 19, fontStyle: "italic", color: Colors.muted, marginBottom: 14 },
 
   amountRow: { flexDirection: "row", alignItems: "baseline", gap: 5, marginBottom: 9 },
-  amountSaved: { flexShrink: 1, fontSize: 22, fontWeight: "800", color: Colors.navy, letterSpacing: -0.3 },
+  amountSaved: { flexShrink: 1, fontSize: 26, fontWeight: "800", color: Colors.navy, letterSpacing: -0.6 },
+  amountCents: { color: Colors.muted, fontWeight: "700" },
   amountTarget: { flexShrink: 0, maxWidth: "55%", fontSize: 13, fontWeight: "600", color: Colors.muted },
 
-  barTrack: { marginBottom: 16 },
+  barTrack: { marginBottom: 14 },
 
-  bottomRow: {
-    flexDirection: "row",
-    backgroundColor: Colors.navy50,
-    borderRadius: 14,
-    padding: 14,
-  },
-  bottomCell: { flex: 1, minWidth: 0, gap: 4 },
-  bottomDivider: { width: 1, backgroundColor: Colors.border, marginHorizontal: 12 },
-  bottomLabel: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: Colors.muted,
-    letterSpacing: 0.8,
-  },
-  bottomValue: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: Colors.navy,
-    letterSpacing: 0,
-  },
+  bottomRow: { flexDirection: "row", gap: 8 },
+  bottomCell: { flex: 1, minWidth: 0, gap: 4, padding: 12, borderRadius: 14, backgroundColor: Colors.navy50 },
+  bottomLabel: { fontSize: 11, fontWeight: "600", color: Colors.muted },
+  bottomValue: { fontSize: 14, fontWeight: "700", color: Colors.navy },
 
   emptyCard: {
     alignItems: "center",
