@@ -1,28 +1,23 @@
 /**
  * Budget Tab — Money Truth + Investments + Accounts
  *
- * Matches the CEO's drawing:
- *   • Top 4 stat cards (Income, Spent, Saving Rate, Avg Daily Spend)
- *   • Spending Breakdown (interactive visual category donut)
- *   • Monthly transaction calendar for recurring bills and income
- *   • Trends placeholder + Budget Detail (category fill bars)
+ *   • Net worth and linked accounts
+ *   • Spending by month (bars that select the month) + this month's plan
+ *   • Categories against their limits (limits are fixed for now)
+ *   • Stat tiles, spending breakdown donut, and the money calendar
  *   • Recent | Upcoming transactions (segmented)
  *   • Investment Portfolio (zero until connected)
- *   • Accounts list (checking / credit / savings / investments + Net Cash)
  *
- * Emojis are reserved for spending categories and transaction context.
- * Everything else stays Lucide/icon-system based.
+ * Every visual is icon-system based; categories use tinted icon tiles.
  */
 
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -38,7 +33,7 @@ import { Colors } from "@/constants/colors";
 import { TAB_BAR_HEIGHT } from "@/constants/tokens";
 import { BrandHeader } from "@/components/BrandLogo";
 import { GradientHeader } from "@/components/ui";
-import { Icon, type IconName } from "@/components/Icon";
+import { Icon, hasIcon, type IconName } from "@/components/Icon";
 import type {
   AccountSummary,
   BudgetOverview,
@@ -63,44 +58,15 @@ import {
   TransactionCalendar,
 } from "@/features/budget/BudgetVisuals";
 
-const CATEGORY_EMOJI: Record<string, string> = {
-  food: "🍔",
-  transport: "🚗",
-  shopping: "🛍️",
-  housing: "🏠",
-  entertainment: "🎬",
-  health: "💊",
-  personal: "✂️",
-  education: "📚",
-  debt: "💳",
-};
+const AMBER_WASH = "rgba(245, 158, 11, 0.35)";
+const CORAL_WASH = "rgba(239, 68, 68, 0.3)";
 
-function emojiForCategory(value: string) {
-  const normalised = value.toLowerCase();
-  if (CATEGORY_EMOJI[normalised]) return CATEGORY_EMOJI[normalised];
-  if (normalised.includes("food")) return CATEGORY_EMOJI.food;
-  if (normalised.includes("transport")) return CATEGORY_EMOJI.transport;
-  if (normalised.includes("shop")) return CATEGORY_EMOJI.shopping;
-  if (normalised.includes("housing")) return CATEGORY_EMOJI.housing;
-  if (normalised.includes("entertainment")) return CATEGORY_EMOJI.entertainment;
-  if (normalised.includes("health")) return CATEGORY_EMOJI.health;
-  if (normalised.includes("debt") || normalised.includes("credit")) return CATEGORY_EMOJI.debt;
-  return "💸";
-}
-
-function moneyInput(value: string) {
-  const cleaned = value.replace(/[^0-9.]/g, "");
-  const [whole, ...decimals] = cleaned.split(".");
-  return decimals.length ? `${whole}.${decimals.join("").slice(0, 2)}` : whole;
-}
-
-function suggestionDraftsFrom(suggestions: BudgetSuggestionSet) {
-  return Object.fromEntries(
-    suggestions.categories.map((category) => [
-      category.categoryId,
-      String(Math.round(category.suggestedLimit * 100) / 100),
-    ])
-  );
+// Some category colors (e.g. Housing's navy) disappear on dark surfaces.
+function readableTint(hex: string) {
+  const value = parseInt(hex.replace("#", "").slice(0, 6), 16);
+  if (Number.isNaN(value)) return Colors.navyMuted;
+  const [r, g, b] = [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b < 70 ? Colors.navyMuted : hex;
 }
 
 /**
@@ -150,9 +116,6 @@ export default function BudgetScreen() {
   const [accounts, setAccounts] = useState<AccountSummary[]>([]);
   const [goalsSummary, setGoalsSummary] = useState<GoalsSummary | null>(null);
   const [suggestions, setSuggestions] = useState<BudgetSuggestionSet | null>(null);
-  const [suggestionDrafts, setSuggestionDrafts] = useState<Record<string, string>>({});
-  const [savingSuggestions, setSavingSuggestions] = useState(false);
-  const [suggestionMessage, setSuggestionMessage] = useState("");
   const [syncing, setSyncing] = useState(false);
 
   const [loadError, setLoadError] = useState("");
@@ -173,7 +136,6 @@ export default function BudgetScreen() {
       if (generation !== loadGeneration.current) return;
       setMonths(nextMonths); setAccounts(nextAccounts); setOverview(nextOverview); setTransactions(nextTransactions);
       setSuggestions(nextSuggestions); setGoalsSummary(nextGoals?.summary ?? null);
-      if (nextSuggestions) setSuggestionDrafts(suggestionDraftsFrom(nextSuggestions));
     } catch (error) {
       if (generation === loadGeneration.current) setLoadError("Couldn’t refresh your budget. Please try again.");
       secureLog.warn("budget.load failed", error);
@@ -214,41 +176,6 @@ export default function BudgetScreen() {
   const selectedMonth = selectedMonthIndex >= 0 ? months[selectedMonthIndex] : null;
   const previousMonth = selectedMonthIndex > 0 ? months[selectedMonthIndex - 1] : null;
 
-  const saveSuggestedBudget = async () => {
-    if (!suggestions?.ready || savingSuggestions) return;
-
-    const categories = suggestions.categories.map((category) => ({
-      categoryId: category.categoryId,
-      amount: Number(suggestionDrafts[category.categoryId] ?? 0),
-    }));
-
-    if (categories.some((category) => !Number.isFinite(category.amount) || category.amount < 0)) {
-      setSuggestionMessage("Enter a valid limit for every category.");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      return;
-    }
-
-    setSavingSuggestions(true);
-    setSuggestionMessage("");
-    try {
-      await budgetService.applySuggestions(categories);
-      const [nextOverview, nextMonths] = await Promise.all([
-        budgetService.getOverview(selectedMonthId),
-        budgetService.getAvailableMonths(),
-      ]);
-      setOverview(nextOverview);
-      setMonths(nextMonths);
-      setSuggestionMessage("Saved. These limits will carry into future months.");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (error) {
-      secureLog.error("budget.suggestions.save failed", error);
-      setSuggestionMessage("Could not save your budget. Try again in a moment.");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } finally {
-      setSavingSuggestions(false);
-    }
-  };
-
   if (!overview) {
     return (
       <View style={styles.container}>
@@ -263,6 +190,9 @@ export default function BudgetScreen() {
 
   const savingsRate = Math.round(overview.savingsRate);
   const recent = transactions.slice(0, 4);
+  // Bills carry a category name, transactions an id; match either for the icon tile.
+  const categoryFor = (key: string) =>
+    overview.categories.find((category) => category.id === key || category.name === key);
   const upcomingBills = upcomingBillsFrom(transactions);
 
   return (
@@ -327,6 +257,25 @@ export default function BudgetScreen() {
           {selectedMonth && <MonthInsight current={selectedMonth} previous={previousMonth} />}
         </Card>
 
+        {/* This month against the plan. Category limits are fixed for now. */}
+        <MonthPlanCard
+          overview={overview}
+          suggestions={suggestions}
+          goalsSummary={goalsSummary}
+          replayKey={replay}
+        />
+
+        <Card>
+          <CardHeader title="Categories" hint="Tap one to see its transactions" />
+          <View style={styles.catList}>
+            {[...overview.categories]
+              .sort((a, b) => b.spent - a.spent)
+              .map((c, index) => (
+                <CategoryRow key={c.id} category={c} month={selectedMonthId} index={index} replayKey={replay} />
+              ))}
+          </View>
+        </Card>
+
         {/* 4 stat tiles */}
         <View style={styles.statGrid}>
           <StatTile
@@ -381,40 +330,6 @@ export default function BudgetScreen() {
           />
         </Card>
 
-        {suggestions && (
-          <RecommendationCard
-            suggestions={suggestions}
-            drafts={suggestionDrafts}
-            saving={savingSuggestions}
-            message={suggestionMessage}
-            goalsSummary={goalsSummary}
-            onChange={(categoryId, value) => {
-              setSuggestionMessage("");
-              setSuggestionDrafts((current) => ({
-                ...current,
-                [categoryId]: moneyInput(value),
-              }));
-            }}
-            onReset={() => {
-              Haptics.selectionAsync();
-              setSuggestionMessage("");
-              setSuggestionDrafts(suggestionDraftsFrom(suggestions));
-            }}
-            onSave={saveSuggestedBudget}
-          />
-        )}
-
-        {/* Budget detail — category fill bars. Limits are managed from Bud's
-            starting budget above: tweak a number and hit "Save my budget". */}
-        <Card>
-          <CardHeader title="Budget detail" hint="Per category" />
-          <View style={{ gap: 12 }}>
-            {overview.categories.map((c, index) => (
-              <CategoryRow key={c.id} category={c} month={selectedMonthId} index={index} replayKey={replay} />
-            ))}
-          </View>
-        </Card>
-
         {/* Transactions — Recent | Upcoming */}
         <Card>
           <CardHeader
@@ -430,7 +345,7 @@ export default function BudgetScreen() {
                   }}
                   style={({ pressed }) => [
                     styles.viewAllButton,
-                    pressed && styles.recommendationPressed,
+                    pressed && styles.pressed,
                   ]}
                 >
                   <Text style={styles.viewAllText}>View all</Text>
@@ -455,7 +370,7 @@ export default function BudgetScreen() {
                     merchant={t.merchant}
                     sub={`${t.category}${t.isPending ? " · Pending" : ""}${t.isRecurring ? " · Recurring" : ""}`}
                     amount={-t.amount}
-                    emoji={emojiForCategory(t.categoryId)}
+                    category={categoryFor(t.categoryId)}
                   />
                   {i < recent.length - 1 && <View style={styles.txnDivider} />}
                 </React.Fragment>
@@ -480,7 +395,7 @@ export default function BudgetScreen() {
                       merchant={b.merchant}
                       sub={`${b.category} · ${days === 0 ? "Today" : days === 1 ? "Tomorrow" : `In ${days} days`}`}
                       amount={-b.amount}
-                      emoji={emojiForCategory(b.category)}
+                      category={categoryFor(b.category)}
                     />
                     {i < upcomingBills.length - 1 && <View style={styles.txnDivider} />}
                   </React.Fragment>
@@ -698,159 +613,97 @@ function StatTile({
   );
 }
 
-function RecommendationCard({
+function MonthPlanCard({
+  overview,
   suggestions,
-  drafts,
-  saving,
-  message,
   goalsSummary,
-  onChange,
-  onReset,
-  onSave,
+  replayKey,
 }: {
-  suggestions: BudgetSuggestionSet;
-  drafts: Record<string, string>;
-  saving: boolean;
-  message: string;
+  overview: BudgetOverview;
+  suggestions: BudgetSuggestionSet | null;
   goalsSummary: GoalsSummary | null;
-  onChange: (categoryId: string, value: string) => void;
-  onReset: () => void;
-  onSave: () => void;
+  replayKey: number;
 }) {
+  const used = overview.totalBudget > 0 ? overview.totalSpent / overview.totalBudget : 0;
+  const status = used > 1 ? "over" : used > 0.85 ? "close" : "good";
+  const meterFill = { good: Colors.accentAlpha35, close: AMBER_WASH, over: CORAL_WASH }[status];
+  const statusLabel = {
+    good: "On plan this month",
+    close: "Close to your plan",
+    over: "Over plan this month",
+  }[status];
+
   return (
-    <Card>
-      <CardHeader
-        title="Bud's starting budget"
-        hint="Personalized from your last 90 days"
-        right={
-          <View style={styles.budBadge}>
-            <Icon name="sparkles" size={12} color={Colors.gold} strokeWidth={2.4} />
-            <Text style={styles.budBadgeText}>BUD RECOMMENDED</Text>
-          </View>
-        }
+    <View style={styles.planCard}>
+      <Text style={styles.planEyebrow}>{overview.month.toUpperCase()}</Text>
+      <CountUp
+        value={overview.totalSpent}
+        from={overview.totalSpent * 0.9}
+        replayKey={replayKey}
+        format={formatCurrency}
+        fit
+        style={styles.planAmount}
+        centsStyle={styles.planCents}
       />
+      <Text style={styles.planOf}>
+        {overview.totalBudget > 0
+          ? `spent of ${formatCurrency(overview.totalBudget)} planned`
+          : "spent this month"}
+      </Text>
 
-      {!suggestions.ready ? (
-        <View style={styles.recommendationEmpty}>
-          <Icon name="activity" size={17} color={Colors.teal} strokeWidth={2.4} />
-          <Text style={styles.recommendationEmptyText}>
-            {suggestions.message ??
-              "Bud needs enough income and transaction history before building your starting limits."}
-          </Text>
+      {overview.totalBudget > 0 ? (
+        <View
+          style={styles.planMeter}
+          accessible
+          accessibilityRole="progressbar"
+          accessibilityLabel={`${statusLabel}. ${Math.round(used * 100)} percent of the plan used.`}
+        >
+          <GrowBar
+            progress={Math.min(1, used)}
+            color={meterFill}
+            trackColor={Colors.navy50}
+            height={44}
+            replayKey={replayKey}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={styles.planMeterLabels} pointerEvents="none">
+            <Text style={styles.planMeterStatus}>{statusLabel}</Text>
+            <Text style={styles.planMeterPercent}>{Math.round(used * 100)}% used</Text>
+          </View>
         </View>
-      ) : (
+      ) : null}
+
+      {suggestions?.ready ? (
         <>
-          <Text style={styles.recommendationIntro}>
-            Based on {formatCurrency(suggestions.detectedMonthlyIncome)} detected monthly income.
-            Adjust any number before saving.
-          </Text>
-
-          <View style={styles.ruleGrid}>
-            <RuleCell label="Needs · 50%" value={suggestions.needsTarget} />
-            <RuleCell label="Wants · 30%" value={suggestions.wantsTarget} />
-            <RuleCell label="Save · 20%" value={suggestions.savingsTarget} />
-          </View>
-
-          <View style={styles.goalBudgetLink}>
-            <View style={styles.goalBudgetIcon}>
-              <Icon name="target" size={15} color={Colors.teal} strokeWidth={2.4} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.goalBudgetTitle}>Goals inside the savings plan</Text>
-              <Text style={styles.goalBudgetBody}>
-                {goalsSummary?.activeCount
-                  ? `${formatCurrency(goalsSummary.monthlyCommittedTotal)} per month is committed across ${goalsSummary.activeCount} active ${goalsSummary.activeCount === 1 ? "goal" : "goals"}.`
-                  : "Create a goal to assign part of this monthly savings target."}
-              </Text>
-            </View>
-            <Text style={styles.goalBudgetAmount}>
-              {formatCurrency(goalsSummary?.monthlyCommittedTotal ?? 0, { compact: true })}
-              <Text style={styles.goalBudgetTarget}>
-                {` / ${formatCurrency(suggestions.savingsTarget, { compact: true })}`}
-              </Text>
-            </Text>
-          </View>
-
-          <View style={styles.recommendationList}>
-            {suggestions.categories.map((category) => (
-              <View key={category.categoryId} style={styles.recommendationRow}>
-                <View style={styles.recommendationNameWrap}>
-                  <View
-                    style={[
-                      styles.recommendationDot,
-                      { backgroundColor: category.color },
-                    ]}
-                  />
-                  <View style={styles.recommendationCopy}>
-                    <Text style={styles.recommendationName}>{category.name}</Text>
-                    <Text style={styles.recommendationAverage}>
-                      90-day average {formatCurrency(category.averageSpend)}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.recommendationInputWrap}>
-                  <Text style={styles.recommendationPrefix}>$</Text>
-                  <TextInput
-                    accessibilityLabel={`${category.name} monthly limit`}
-                    value={drafts[category.categoryId] ?? ""}
-                    onChangeText={(value) => onChange(category.categoryId, value)}
-                    keyboardType="decimal-pad"
-                    selectTextOnFocus
-                    style={styles.recommendationInput}
-                  />
-                </View>
-              </View>
-            ))}
-          </View>
-
-          {message ? (
-            <Text
-              style={[
-                styles.recommendationMessage,
-                message.startsWith("Saved") && styles.recommendationMessageSuccess,
-              ]}
-            >
-              {message}
-            </Text>
-          ) : null}
-
-          <View style={styles.recommendationActions}>
-            <Pressable
-              onPress={onReset}
-              style={({ pressed }) => [
-                styles.recommendationSecondary,
-                pressed && styles.recommendationPressed,
-              ]}
-            >
-              <Text style={styles.recommendationSecondaryText}>Use Bud's numbers</Text>
-            </Pressable>
-            <Pressable
-              onPress={onSave}
-              disabled={saving}
-              style={({ pressed }) => [
-                styles.recommendationPrimary,
-                saving && styles.recommendationDisabled,
-                pressed && !saving && styles.recommendationPressed,
-              ]}
-            >
-              {saving ? (
-                <ActivityIndicator size="small" color={Colors.onAccent} />
-              ) : (
-                <Text style={styles.recommendationPrimaryText}>Save my budget</Text>
-              )}
-            </Pressable>
+          <Text style={styles.planGuide}>Bud's 50/30/20 guide · from your last 90 days</Text>
+          <View style={styles.planSplit}>
+            <PlanCell label="Needs" share="50%" value={suggestions.needsTarget} />
+            <PlanCell label="Wants" share="30%" value={suggestions.wantsTarget} />
+            <PlanCell label="Save" share="20%" value={suggestions.savingsTarget} />
           </View>
         </>
-      )}
-    </Card>
+      ) : null}
+
+      {goalsSummary?.activeCount ? (
+        <View style={styles.planGoals}>
+          <Icon name="target" size={14} color={Colors.navyMuted} strokeWidth={2.3} />
+          <Text style={styles.planGoalsText}>
+            {formatCurrency(goalsSummary.monthlyCommittedTotal)} a month committed across{" "}
+            {goalsSummary.activeCount} {goalsSummary.activeCount === 1 ? "goal" : "goals"}
+          </Text>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
-function RuleCell({ label, value }: { label: string; value: number }) {
+function PlanCell({ label, share, value }: { label: string; share: string; value: number }) {
   return (
-    <View style={styles.ruleCell}>
-      <Text style={styles.ruleLabel}>{label}</Text>
-      <Text style={styles.ruleValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+    <View style={styles.planCell}>
+      <Text style={styles.planCellLabel}>
+        {label} <Text style={styles.planCellShare}>{share}</Text>
+      </Text>
+      <Text style={styles.planCellValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
         {formatCurrency(value, { compact: true })}
       </Text>
     </View>
@@ -868,55 +721,52 @@ function CategoryRow({
   index: number;
   replayKey: number;
 }) {
-  const pct = useMemo(() => {
-    if (category.budgetLimit === 0) return 0;
-    return Math.min(1.2, category.spent / category.budgetLimit);
-  }, [category]);
-  const over = pct > 1;
-  const fillColor = over
-    ? Colors.coral
-    : pct > 0.85
-    ? Colors.amber
-    : category.color;
-
-  const emoji = emojiForCategory(category.id);
+  const limit = category.budgetLimit;
+  const pct = limit > 0 ? category.spent / limit : 0;
+  const over = limit > 0 && category.spent > limit;
+  const tint = readableTint(category.color);
+  const fillColor = over ? Colors.coral : pct > 0.85 ? Colors.amber : tint;
+  const status = limit <= 0
+    ? "No limit set"
+    : over
+      ? `${formatCurrency(category.spent - limit)} over`
+      : `${formatCurrency(limit - category.spent)} left`;
 
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`View ${category.name} transactions`} onPress={() => router.push({ pathname: "/transactions", params: { month, category: category.id } })}>
-      <View style={styles.catRow}>
-        <View style={styles.catLeft}>
-          <View style={[styles.catIcon, { borderColor: `${category.color}55`, backgroundColor: `${category.color}15` }]}>
-            <Text style={styles.catEmoji}>{emoji}</Text>
-          </View>
-          <View style={styles.catNameWrap}>
-            <Text style={styles.catName} numberOfLines={1}>{category.name}</Text>
-            {category.source && category.source !== "default" ? (
-              <Text
-                style={[
-                  styles.catSource,
-                  category.source === "user_adjusted" && styles.catSourceAdjusted,
-                ]}
-              >
-                {category.source === "bud_recommended" ? "Bud plan" : "Adjusted"}
-              </Text>
-            ) : null}
-          </View>
-        </View>
-        <Text style={styles.catNumbers}>
-          {formatCurrency(category.spent, { compact: true })}{" "}
-          <Text style={styles.catBudget}>
-            / {formatCurrency(category.budgetLimit, { compact: true })}
-          </Text>
-        </Text>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${category.name}: ${formatCurrency(category.spent)} spent${limit > 0 ? ` of ${formatCurrency(limit)}` : ""}. ${status}. View transactions.`}
+      onPress={() => router.push({ pathname: "/transactions", params: { month, category: category.id } })}
+      style={({ pressed }) => [styles.catRow, pressed && styles.pressed]}
+    >
+      <View style={[styles.catIcon, { backgroundColor: `${category.color}1F` }]}>
+        <Icon
+          name={hasIcon(category.icon) ? category.icon : "receipt"}
+          size={16}
+          color={tint}
+          strokeWidth={2.3}
+        />
       </View>
-      <GrowBar
-        progress={pct}
-        color={fillColor}
-        trackColor={Colors.border}
-        height={5}
-        delay={index * 45}
-        replayKey={replayKey}
-      />
+      <View style={styles.catBody}>
+        <View style={styles.catTop}>
+          <Text style={styles.catName} numberOfLines={1}>{category.name}</Text>
+          <Text style={styles.catSpent}>
+            {formatCurrency(category.spent)}
+            {limit > 0 ? (
+              <Text style={styles.catLimit}>{` / ${formatCurrency(limit)}`}</Text>
+            ) : null}
+          </Text>
+        </View>
+        <GrowBar
+          progress={pct}
+          color={fillColor}
+          trackColor={Colors.navy50}
+          height={5}
+          delay={index * 45}
+          replayKey={replayKey}
+        />
+        <Text style={[styles.catStatus, over && styles.catStatusOver]}>{status}</Text>
+      </View>
     </Pressable>
   );
 }
@@ -947,19 +797,24 @@ function TransactionRow({
   merchant,
   sub,
   amount,
-  emoji,
+  category,
 }: {
   merchant: string;
   sub: string;
   amount: number;
-  emoji?: string;
+  category?: BudgetCategory;
 }) {
   return (
     <View style={styles.txnRow}>
       <View style={styles.txnLeft}>
-        <View style={styles.txnIconBox}>
-          {emoji ? (
-            <Text style={styles.txnEmoji}>{emoji}</Text>
+        <View style={[styles.txnIconBox, category && { backgroundColor: `${category.color}1F` }]}>
+          {category ? (
+            <Icon
+              name={hasIcon(category.icon) ? category.icon : "receipt"}
+              size={15}
+              color={readableTint(category.color)}
+              strokeWidth={2.3}
+            />
           ) : (
             <Icon
               name={amount < 0 ? "arrow-down-right" : "arrow-up-right"}
@@ -1227,182 +1082,6 @@ const styles = StyleSheet.create({
   },
   viewAllText: { fontSize: 11, fontWeight: "800", color: Colors.gold },
 
-  // Personalized budget recommendations
-  budBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: Colors.accentAlpha08,
-    borderWidth: 1,
-    borderColor: Colors.accentAlpha25,
-  },
-  budBadgeText: {
-    fontSize: 9,
-    fontWeight: "900",
-    color: Colors.gold,
-    letterSpacing: 0.5,
-  },
-  recommendationIntro: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: Colors.navyMuted,
-    lineHeight: 18,
-    marginBottom: 12,
-  },
-  ruleGrid: {
-    flexDirection: "row",
-    gap: 8,
-    marginBottom: 16,
-  },
-  ruleCell: {
-    flex: 1,
-    padding: 10,
-    borderRadius: 12,
-    backgroundColor: Colors.greenSurface,
-    borderWidth: 1,
-    borderColor: Colors.greenBorder,
-  },
-  ruleLabel: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Colors.navyMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-  },
-  ruleValue: {
-    marginTop: 4,
-    fontSize: 14,
-    fontWeight: "900",
-    color: Colors.navy,
-  },
-  goalBudgetLink: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 16,
-    padding: 12,
-    borderRadius: 14,
-    backgroundColor: Colors.greenSurface,
-    borderWidth: 1,
-    borderColor: Colors.greenBorder,
-  },
-  goalBudgetIcon: {
-    width: 32,
-    height: 32,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 10,
-    backgroundColor: Colors.card,
-  },
-  goalBudgetTitle: { fontSize: 11, fontWeight: "800", color: Colors.navy },
-  goalBudgetBody: {
-    marginTop: 2,
-    fontSize: 10,
-    fontWeight: "600",
-    color: Colors.navyMuted,
-    lineHeight: 15,
-  },
-  goalBudgetAmount: { fontSize: 12, fontWeight: "900", color: Colors.navy },
-  goalBudgetTarget: { color: Colors.muted, fontWeight: "700" },
-  recommendationList: { gap: 9 },
-  recommendationRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  recommendationNameWrap: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 9,
-  },
-  recommendationDot: { width: 8, height: 8, borderRadius: 4 },
-  recommendationCopy: { flex: 1 },
-  recommendationName: { fontSize: 12, fontWeight: "800", color: Colors.navy },
-  recommendationAverage: {
-    marginTop: 2,
-    fontSize: 10,
-    fontWeight: "600",
-    color: Colors.muted,
-  },
-  recommendationInputWrap: {
-    width: 96,
-    minHeight: 42,
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surface,
-    paddingHorizontal: 10,
-  },
-  recommendationPrefix: { fontSize: 13, fontWeight: "800", color: Colors.gold },
-  recommendationInput: {
-    flex: 1,
-    paddingVertical: 9,
-    paddingLeft: 4,
-    textAlign: "right",
-    fontSize: 13,
-    fontWeight: "800",
-    color: Colors.navy,
-  },
-  recommendationMessage: {
-    marginTop: 12,
-    fontSize: 11,
-    fontWeight: "700",
-    color: Colors.coral,
-    textAlign: "center",
-  },
-  recommendationMessageSuccess: { color: Colors.teal },
-  recommendationActions: { flexDirection: "row", gap: 10, marginTop: 14 },
-  // Both actions sit on Colors.card — use surfaces that stay visible in dark
-  // mode (Colors.surface goes near-black there, so it is banned here).
-  recommendationSecondary: {
-    flex: 1,
-    minHeight: 46,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Colors.accentAlpha40,
-    backgroundColor: Colors.accentAlpha10,
-  },
-  recommendationPrimary: {
-    flex: 1,
-    minHeight: 46,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 14,
-    backgroundColor: Colors.gold,
-    borderWidth: 1,
-    borderColor: Colors.gold,
-  },
-  recommendationSecondaryText: { fontSize: 12, fontWeight: "800", color: Colors.gold },
-  recommendationPrimaryText: { fontSize: 12, fontWeight: "900", color: Colors.onAccent },
-  recommendationPressed: { opacity: 0.85, transform: [{ scale: 0.99 }] },
-  recommendationDisabled: { opacity: 0.6 },
-  recommendationEmpty: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-    padding: 13,
-    borderRadius: 14,
-    backgroundColor: Colors.greenSurface,
-    borderWidth: 1,
-    borderColor: Colors.greenBorder,
-  },
-  recommendationEmptyText: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: "700",
-    color: Colors.navyMuted,
-    lineHeight: 18,
-  },
-
   // Segmented bar
   segmentedBar: {
     flexDirection: "row",
@@ -1418,35 +1097,60 @@ const styles = StyleSheet.create({
   legendText: { fontSize: 11, color: Colors.navyMuted, fontWeight: "600" },
 
   // Category row
-  catRow: {
+
+  pressed: { opacity: 0.75 },
+
+  // This month's plan
+  planCard: {
+    marginBottom: 12,
+    padding: 18,
+    gap: 6,
+    borderRadius: 22,
+    backgroundColor: Colors.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
+  },
+  planEyebrow: { fontSize: 10, fontWeight: "800", letterSpacing: 1.6, color: Colors.muted },
+  planAmount: { fontSize: 34, fontWeight: "800", letterSpacing: -1, color: Colors.navy },
+  planCents: { color: Colors.muted, fontWeight: "700" },
+  planOf: { fontSize: 13, fontWeight: "600", color: Colors.muted, marginTop: -2 },
+  planMeter: { height: 44, marginTop: 12, justifyContent: "center" },
+  planMeterLabels: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 6,
+    paddingHorizontal: 16,
   },
-  catLeft: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 10, marginRight: 12 },
-  catIcon: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
+  planMeterStatus: { fontSize: 13, fontWeight: "700", color: Colors.navy },
+  planMeterPercent: { fontSize: 13, fontWeight: "700", color: Colors.navy, fontVariant: ["tabular-nums"] },
+  planGuide: { marginTop: 14, fontSize: 11, fontWeight: "700", color: Colors.muted, letterSpacing: 0.3 },
+  planSplit: { flexDirection: "row", gap: 8, marginTop: 4 },
+  planCell: {
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    backgroundColor: Colors.navy50,
+    gap: 2,
   },
-  catEmoji: { fontSize: 15, lineHeight: 18 },
-  catNameWrap: { flexShrink: 1, gap: 2 },
-  catName: { fontSize: 13, fontWeight: "700", color: Colors.navy },
-  catSource: {
-    alignSelf: "flex-start",
-    fontSize: 9,
-    fontWeight: "800",
-    color: Colors.teal,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  catSourceAdjusted: { color: Colors.gold },
-  catNumbers: { flexShrink: 0, fontSize: 13, fontWeight: "700", color: Colors.navy },
-  catBudget: { color: Colors.muted, fontWeight: "600" },
+  planCellLabel: { fontSize: 11, fontWeight: "700", color: Colors.navyMuted },
+  planCellShare: { color: Colors.muted, fontWeight: "600" },
+  planCellValue: { fontSize: 16, fontWeight: "800", color: Colors.navy, fontVariant: ["tabular-nums"] },
+  planGoals: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 },
+  planGoalsText: { flex: 1, fontSize: 12, lineHeight: 17, fontWeight: "600", color: Colors.navyMuted },
+
+  // Categories
+  catList: { gap: 4 },
+  catRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 8 },
+  catIcon: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
+  catBody: { flex: 1, minWidth: 0, gap: 6 },
+  catTop: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 10 },
+  catName: { flex: 1, minWidth: 0, fontSize: 14, fontWeight: "700", color: Colors.navy },
+  catSpent: { flexShrink: 0, fontSize: 14, fontWeight: "800", color: Colors.navy, fontVariant: ["tabular-nums"] },
+  catLimit: { color: Colors.muted, fontWeight: "600" },
+  catStatus: { fontSize: 11, fontWeight: "600", color: Colors.muted },
+  catStatusOver: { color: Colors.coral },
 
   // Tabs
   txnTabs: {
@@ -1483,14 +1187,13 @@ const styles = StyleSheet.create({
   txnLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1, minWidth: 0, marginRight: 12 },
   rowCopy: { flex: 1, minWidth: 0 },
   txnIconBox: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: Colors.navy50,
     alignItems: "center",
     justifyContent: "center",
   },
-  txnEmoji: { fontSize: 16, lineHeight: 20 },
   txnMerchant: { fontSize: 13, fontWeight: "700", color: Colors.navy },
   txnSub: { fontSize: 11, color: Colors.muted, marginTop: 1 },
   txnAmount: { flexShrink: 0, fontSize: 14, fontWeight: "700" },

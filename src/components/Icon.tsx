@@ -134,6 +134,11 @@ interface Props {
   strokeWidth?: number;
 }
 
+/** True when `name` (e.g. a category icon from the API) exists in the icon set. */
+export function hasIcon(name: string): name is IconName {
+  return name in ICONS;
+}
+
 export function Icon({ name, size = 18, color = "#FFFFFF", strokeWidth = 2 }: Props) {
   const Component = ICONS[name];
   return <Component size={size} color={color} strokeWidth={strokeWidth} />;
