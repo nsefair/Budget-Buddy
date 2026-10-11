@@ -3,7 +3,7 @@ import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-n
 import Svg, { Circle, G } from "react-native-svg";
 
 import { CountUp, GrowBar, useEntranceProgress } from "@/animations";
-import { Icon } from "@/components/Icon";
+import { Icon, hasIcon } from "@/components/Icon";
 import { Colors } from "@/constants/colors";
 import type { BudgetCategory, BudgetMonthOption, Transaction } from "@/mock/budget";
 import { formatCurrency } from "@/utils/security";
@@ -14,6 +14,52 @@ const DONUT_RADIUS = (DONUT_SIZE - DONUT_STROKE) / 2;
 const DONUT_CIRCUMFERENCE = 2 * Math.PI * DONUT_RADIUS;
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
+// Some category colors (e.g. Housing's navy) disappear on dark surfaces.
+export function readableTint(hex: string) {
+  const value = parseInt(hex.replace("#", "").slice(0, 6), 16);
+  if (Number.isNaN(value)) return Colors.navyMuted;
+  const [r, g, b] = [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b < 70 ? Colors.navyMuted : hex;
+}
+
+/**
+ * CategoryIcon — the round tinted tile used for categories and transactions.
+ * Without a category it shows a neutral in/out arrow (e.g. income).
+ */
+export function CategoryIcon({
+  category,
+  incoming = false,
+  size = 36,
+}: {
+  category?: Pick<BudgetCategory, "icon" | "color">;
+  incoming?: boolean;
+  size?: number;
+}) {
+  const tile = { width: size, height: size, borderRadius: size / 2 };
+  if (!category) {
+    return (
+      <View style={[styles.categoryIcon, tile, incoming && styles.categoryIconIncoming]}>
+        <Icon
+          name={incoming ? "arrow-down-right" : "arrow-up-right"}
+          size={size * 0.4}
+          color={incoming ? Colors.emerald : Colors.navyMuted}
+          strokeWidth={2.3}
+        />
+      </View>
+    );
+  }
+  return (
+    <View style={[styles.categoryIcon, tile, { backgroundColor: `${category.color}1F` }]}>
+      <Icon
+        name={hasIcon(category.icon) ? category.icon : "receipt"}
+        size={size * 0.44}
+        color={readableTint(category.color)}
+        strokeWidth={2.3}
+      />
+    </View>
+  );
+}
 const BAR_TRACK_HEIGHT = 112;
 const compactCurrency = (value: number) => formatCurrency(value, { compact: true });
 
@@ -93,7 +139,7 @@ export function SpendingDonutChart({
           <G rotation="-90" origin={`${DONUT_SIZE / 2}, ${DONUT_SIZE / 2}`}>
             {segments.map((segment) => {
               const share = totalSpent > 0 ? segment.value / totalSpent : 0;
-              const length = Math.max(0, share * DONUT_CIRCUMFERENCE - 3);
+              const length = Math.max(0, share * DONUT_CIRCUMFERENCE - 2.5);
               const offset = consumed * DONUT_CIRCUMFERENCE;
               consumed += share;
 
@@ -108,7 +154,6 @@ export function SpendingDonutChart({
                   strokeWidth={DONUT_STROKE}
                   strokeDasharray={[length, DONUT_CIRCUMFERENCE - length]}
                   strokeDashoffset={-offset}
-                  strokeLinecap="round"
                 />
               );
             })}
@@ -263,10 +308,12 @@ export function TransactionCalendar({
   monthId,
   monthLabel,
   transactions,
+  categories = [],
 }: {
   monthId: string;
   monthLabel: string;
   transactions: Transaction[];
+  categories?: BudgetCategory[];
 }) {
   const { year, monthIndex } = useMemo(() => monthParts(monthId), [monthId]);
   const transactionsByDay = useMemo(() => {
@@ -309,17 +356,16 @@ export function TransactionCalendar({
       <View style={styles.calendarSummary}>
         <View style={styles.calendarSummaryItem}>
           <View style={styles.calendarSummaryIcon}>
-            <Icon name="calendar" size={15} color={Colors.gold} strokeWidth={2.4} />
+            <Icon name="calendar" size={15} color={Colors.navyMuted} strokeWidth={2.3} />
           </View>
           <View>
             <Text style={styles.calendarSummaryValue}>{activityDays}</Text>
             <Text style={styles.calendarSummaryLabel}>active days</Text>
           </View>
         </View>
-        <View style={styles.calendarSummaryDivider} />
         <View style={styles.calendarSummaryItem}>
-          <View style={[styles.calendarSummaryIcon, styles.calendarRecurringIcon]}>
-            <Icon name="activity" size={15} color={Colors.amber} strokeWidth={2.4} />
+          <View style={styles.calendarSummaryIcon}>
+            <Icon name="activity" size={15} color={Colors.navyMuted} strokeWidth={2.3} />
           </View>
           <View>
             <Text style={styles.calendarSummaryValue}>{recurringCount}</Text>
@@ -403,7 +449,7 @@ export function TransactionCalendar({
 
         {selectedTransactions.length === 0 ? (
           <View style={styles.noActivityRow}>
-            <Icon name="check-circle" size={17} color={Colors.teal} strokeWidth={2.3} />
+            <Icon name="check-circle" size={17} color={Colors.navyMuted} strokeWidth={2.3} />
             <Text style={styles.noActivityText}>No money moved on this day.</Text>
           </View>
         ) : (
@@ -412,19 +458,11 @@ export function TransactionCalendar({
               const incoming = isIncoming(transaction);
               return (
                 <View key={transaction.id} style={styles.dayTransactionRow}>
-                  <View
-                    style={[
-                      styles.dayTransactionIcon,
-                      incoming ? styles.incomeIcon : styles.spendingIcon,
-                    ]}
-                  >
-                    <Icon
-                      name={incoming ? "arrow-down-right" : "receipt"}
-                      size={14}
-                      color={incoming ? Colors.emerald : Colors.coral}
-                      strokeWidth={2.4}
-                    />
-                  </View>
+                  <CategoryIcon
+                    category={incoming ? undefined : categories.find((category) => category.id === transaction.categoryId)}
+                    incoming={incoming}
+                    size={34}
+                  />
                   <View style={styles.dayTransactionCopy}>
                     <Text numberOfLines={1} style={styles.dayTransactionMerchant}>
                       {transaction.merchant}
@@ -434,9 +472,7 @@ export function TransactionCalendar({
                         {transaction.category}
                       </Text>
                       {transaction.isRecurring ? (
-                        <View style={styles.recurringBadge}>
-                          <Text style={styles.recurringBadgeText}>RECURRING</Text>
-                        </View>
+                        <Text style={styles.recurringBadgeText}>· Recurring</Text>
                       ) : null}
                     </View>
                   </View>
@@ -474,6 +510,8 @@ function CalendarLegend({ color, label, ring = false }: { color: string; label: 
 }
 
 const styles = StyleSheet.create({
+  categoryIcon: { alignItems: "center", justifyContent: "center", backgroundColor: Colors.navy50 },
+  categoryIconIncoming: { backgroundColor: Colors.emerald50 },
   barsRow: {
     flexGrow: 1,
     justifyContent: "space-between",
@@ -504,68 +542,32 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 34,
   },
-  donutEyebrow: {
-    fontSize: 8,
-    fontWeight: "900",
-    letterSpacing: 1.2,
-    color: Colors.gold,
-  },
-  donutTotal: {
-    marginTop: 2,
-    fontSize: 22,
-    fontWeight: "900",
-    color: Colors.navy,
-    letterSpacing: -0.7,
-  },
-  donutCaption: {
-    marginTop: 1,
-    fontSize: 9,
-    fontWeight: "700",
-    color: Colors.muted,
-  },
-  donutLegend: { flex: 1, gap: 8 },
+  donutEyebrow: { fontSize: 10, fontWeight: "800", letterSpacing: 1.4, color: Colors.muted },
+  donutTotal: { marginTop: 2, fontSize: 24, fontWeight: "800", color: Colors.navy, letterSpacing: -0.7 },
+  donutCaption: { marginTop: 1, fontSize: 11, fontWeight: "600", color: Colors.muted },
+  donutLegend: { flex: 1, gap: 10 },
   donutLegendRow: {
     minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
     gap: 7,
   },
-  donutSwatch: { width: 8, height: 8, borderRadius: 99 },
+  donutSwatch: { width: 10, height: 10, borderRadius: 5 },
   donutLegendCopy: { flex: 1, minWidth: 0 },
-  donutLegendName: { fontSize: 10, fontWeight: "800", color: Colors.navyMuted },
-  donutLegendAmount: { marginTop: 1, fontSize: 9, fontWeight: "700", color: Colors.muted },
-  donutLegendPercent: { fontSize: 10, fontWeight: "900", color: Colors.navy },
+  donutLegendName: { fontSize: 12, fontWeight: "700", color: Colors.navy },
+  donutLegendAmount: { marginTop: 1, fontSize: 11, fontWeight: "600", color: Colors.muted },
+  donutLegendPercent: { fontSize: 12, fontWeight: "800", color: Colors.navy, fontVariant: ["tabular-nums"] },
 
   calendarContent: { gap: 14 },
-  calendarSummary: {
-    minHeight: 66,
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 15,
-    borderWidth: 1,
-    borderColor: Colors.greenBorder,
-    backgroundColor: Colors.greenSurface,
-    paddingHorizontal: 14,
-  },
-  calendarSummaryItem: { flex: 1, flexDirection: "row", alignItems: "center", gap: 9 },
-  calendarSummaryDivider: { width: 1, height: 30, marginHorizontal: 12, backgroundColor: Colors.greenBorder },
-  calendarSummaryIcon: {
-    width: 32,
-    height: 32,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.accentAlpha25,
-    backgroundColor: Colors.accentAlpha08,
-  },
-  calendarRecurringIcon: { borderColor: "rgba(245, 158, 11, 0.28)", backgroundColor: "rgba(245, 158, 11, 0.10)" },
-  calendarSummaryValue: { fontSize: 17, fontWeight: "900", color: Colors.navy },
-  calendarSummaryLabel: { marginTop: 1, fontSize: 9, fontWeight: "800", color: Colors.navyMuted },
+  calendarSummary: { flexDirection: "row", gap: 8 },
+  calendarSummaryItem: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 14, backgroundColor: Colors.navy50 },
+  calendarSummaryIcon: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: Colors.card },
+  calendarSummaryValue: { fontSize: 18, fontWeight: "800", color: Colors.navy, fontVariant: ["tabular-nums"] },
+  calendarSummaryLabel: { fontSize: 11, fontWeight: "600", color: Colors.muted },
   calendarLegend: { flexDirection: "row", justifyContent: "center", gap: 16 },
   calendarLegendItem: { flexDirection: "row", alignItems: "center", gap: 5 },
   calendarLegendDot: { width: 8, height: 8, borderRadius: 99 },
-  calendarLegendText: { fontSize: 9, fontWeight: "800", color: Colors.muted },
+  calendarLegendText: { fontSize: 11, fontWeight: "600", color: Colors.muted },
   weekdayRow: { flexDirection: "row" },
   weekdayLabel: {
     width: "14.2857%",
@@ -576,62 +578,30 @@ const styles = StyleSheet.create({
   },
   calendarGrid: { flexDirection: "row", flexWrap: "wrap" },
   dayCell: { width: "14.2857%", minHeight: 43, padding: 2 },
-  dayButton: {
-    flex: 1,
-    minHeight: 39,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 11,
-    borderWidth: 1,
-    borderColor: "transparent",
-  },
-  todayButton: { borderColor: Colors.greenBorder },
-  selectedDayButton: { borderColor: Colors.gold, backgroundColor: Colors.greenSurfaceStrong },
+  dayButton: { flex: 1, alignItems: "center", justifyContent: "center", borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: "transparent", paddingVertical: 5 },
+  todayButton: { borderColor: Colors.navy200 },
+  selectedDayButton: { borderColor: Colors.greenSurfaceStrong, backgroundColor: Colors.greenSurfaceStrong },
   dayButtonPressed: { opacity: 0.72, transform: [{ scale: 0.96 }] },
-  dayNumber: { fontSize: 11, fontWeight: "800", color: Colors.navyMuted },
-  selectedDayNumber: { color: Colors.navy, fontWeight: "900" },
+  dayNumber: { fontSize: 13, fontWeight: "600", color: Colors.navyMuted, fontVariant: ["tabular-nums"] },
+  selectedDayNumber: { color: Colors.navy, fontWeight: "800" },
   dayMarkers: { height: 6, marginTop: 3, flexDirection: "row", alignItems: "center", gap: 2 },
-  dayDot: { width: 4, height: 4, borderRadius: 99 },
+  dayDot: { width: 5, height: 5, borderRadius: 3 },
   dayRecurringDot: { borderWidth: 1.2, borderColor: Colors.gold, backgroundColor: "transparent" },
-  selectedDayPanel: {
-    borderRadius: 15,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surface,
-    padding: 13,
-  },
+  selectedDayPanel: { padding: 14, borderRadius: 18, backgroundColor: Colors.navy50 },
   selectedDayHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  selectedDayEyebrow: { fontSize: 8, fontWeight: "900", letterSpacing: 1.1, color: Colors.gold },
-  selectedDayTitle: { marginTop: 3, fontSize: 13, fontWeight: "900", color: Colors.navy },
-  activityCountBadge: {
-    minWidth: 26,
-    height: 26,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 99,
-    backgroundColor: Colors.gold,
-  },
-  activityCountText: { fontSize: 11, fontWeight: "900", color: Colors.onAccent },
+  selectedDayEyebrow: { fontSize: 10, fontWeight: "800", letterSpacing: 1.4, color: Colors.muted },
+  selectedDayTitle: { marginTop: 3, fontSize: 15, fontWeight: "800", color: Colors.navy },
+  activityCountBadge: { minWidth: 28, height: 28, borderRadius: 14, paddingHorizontal: 8, alignItems: "center", justifyContent: "center", backgroundColor: Colors.card },
+  activityCountText: { fontSize: 12, fontWeight: "800", color: Colors.navy },
   noActivityRow: { marginTop: 12, flexDirection: "row", alignItems: "center", gap: 8 },
-  noActivityText: { fontSize: 11, fontWeight: "700", color: Colors.navyMuted },
-  dayTransactionList: { marginTop: 11, gap: 9 },
-  dayTransactionRow: { minWidth: 0, flexDirection: "row", alignItems: "center", gap: 9 },
-  dayTransactionIcon: {
-    width: 30,
-    height: 30,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 9,
-    borderWidth: 1,
-  },
-  spendingIcon: { borderColor: "rgba(239, 68, 68, 0.22)", backgroundColor: "rgba(239, 68, 68, 0.08)" },
-  incomeIcon: { borderColor: Colors.emerald100, backgroundColor: Colors.emerald50 },
+  noActivityText: { fontSize: 13, fontWeight: "600", color: Colors.navyMuted },
+  dayTransactionList: { marginTop: 12, gap: 12 },
+  dayTransactionRow: { minWidth: 0, flexDirection: "row", alignItems: "center", gap: 10 },
   dayTransactionCopy: { flex: 1, minWidth: 0 },
-  dayTransactionMerchant: { fontSize: 11, fontWeight: "800", color: Colors.navy },
+  dayTransactionMerchant: { fontSize: 13, fontWeight: "700", color: Colors.navy },
   dayTransactionMeta: { marginTop: 2, flexDirection: "row", alignItems: "center", gap: 5 },
-  dayTransactionCategory: { flexShrink: 1, fontSize: 9, fontWeight: "600", color: Colors.muted },
-  recurringBadge: { borderRadius: 5, borderWidth: 1, borderColor: "rgba(245, 158, 11, 0.28)", paddingHorizontal: 4, paddingVertical: 2 },
-  recurringBadgeText: { fontSize: 6.5, fontWeight: "900", letterSpacing: 0.5, color: Colors.amber },
-  dayTransactionAmount: { fontSize: 11, fontWeight: "900", color: Colors.navy },
+  dayTransactionCategory: { flexShrink: 1, fontSize: 11, fontWeight: "600", color: Colors.muted },
+  recurringBadgeText: { fontSize: 11, fontWeight: "600", color: Colors.muted },
+  dayTransactionAmount: { flexShrink: 0, fontSize: 13, fontWeight: "800", color: Colors.navy, fontVariant: ["tabular-nums"] },
   dayTransactionIncome: { color: Colors.emerald },
 });
