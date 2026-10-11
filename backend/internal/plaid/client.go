@@ -6,9 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
+
+	"golang.org/x/text/encoding/charmap"
 
 	"budget-buddy/backend/internal/config"
 )
@@ -201,13 +205,42 @@ func (c *Client) post(ctx context.Context, path string, payload, out any) error 
 
 	if response.StatusCode >= 400 {
 		var plaidErr apiError
-		if err := json.NewDecoder(response.Body).Decode(&plaidErr); err != nil {
+		if err := decodeResponse(response.Body, &plaidErr); err != nil {
 			return fmt.Errorf("plaid api returned status %d", response.StatusCode)
 		}
 		return plaidErr
 	}
 
-	return json.NewDecoder(response.Body).Decode(out)
+	return decodeResponse(response.Body, out)
+}
+
+// Repair the body before parsing: encoding/json would silently turn each byte
+// that is not UTF-8 into U+FFFD and lose the letter for good ("TRANSACCI�N").
+func decodeResponse(body io.Reader, out any) error {
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return err
+	}
+	return json.NewDecoder(bytes.NewReader(repairUTF8(data))).Decode(out)
+}
+
+// repairUTF8 keeps valid UTF-8, including a U+FFFD Plaid itself sent, and reads
+// each stray byte as Windows-1252, the Latin-1 superset of legacy bank feeds.
+// JSON syntax is ASCII, so only string contents can change.
+func repairUTF8(data []byte) []byte {
+	if utf8.Valid(data) {
+		return data
+	}
+	repaired := make([]byte, 0, len(data))
+	for len(data) > 0 {
+		r, size := utf8.DecodeRune(data)
+		if r == utf8.RuneError && size == 1 {
+			r = charmap.Windows1252.DecodeByte(data[0])
+		}
+		repaired = utf8.AppendRune(repaired, r)
+		data = data[size:]
+	}
+	return repaired
 }
 
 func environmentBaseURL(env string) (string, error) {

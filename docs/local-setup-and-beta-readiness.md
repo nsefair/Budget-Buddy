@@ -120,6 +120,27 @@ Run the guard immediately before any deployment or provisioning. A failed guard
 blocks that work. Do not print runtime parameters, tokens, account directories,
 or database dumps. Synthetic tests use no real bank Items.
 
+## Bank text encoding (October 11)
+
+In our pipeline, only import could turn `TRANSACCIÓN` into `TRANSACCI�N`: Go's
+JSON decoder silently replaced each byte of a Plaid response that is not valid
+UTF-8, such as a Latin-1 or Windows-1252 bank descriptor, with U+FFFD.
+Synthetic tests show PostgreSQL and the `/v1` JSON keep accented text byte for
+byte, and the screens render `merchant` as received. The Plaid client now reads
+those bytes as Windows-1252. Valid UTF-8 is unchanged, and a U+FFFD that Plaid
+itself sends is kept because the letter is unknown. Client and full-sync
+regression tests use synthetic descriptors. No migration is needed; production
+keeps the old behavior until the next guarded API deployment.
+
+Rows already stored with U+FFFD cannot be repaired in place: the original byte
+was discarded, and `raw` holds the same replaced text. Incremental syncs rewrite
+a row only when Plaid sends it again (modified, or pending replaced by posted).
+Older rows need a deliberate full re-sync from an empty transactions cursor, run
+after a normal sync because a fresh cursor reports no removals. Production admin
+access is read-only, so this needs the owner's approval. If rows imported after
+deployment still contain U+FFFD, Plaid sent it: report the transaction ID and
+institution to Plaid support.
+
 ## Verification and remaining work
 
 October 5 checks passed: TypeScript, 21/21 Expo Doctor checks, iOS JavaScript
