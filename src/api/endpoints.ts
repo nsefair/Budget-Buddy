@@ -15,6 +15,8 @@ export const ENDPOINTS = {
     SPENDING: "/money/spending",
     ALLOCATE_YESTERDAY: "/money/yesterday/allocate",
   },
+  // Beta events (opens and taps the launch guide measures).
+  EVENTS: "/events",
   // ── Auth ────────────────────────────────────────────────────────────────────
   AUTH: {
     LOGIN: "/auth/login",

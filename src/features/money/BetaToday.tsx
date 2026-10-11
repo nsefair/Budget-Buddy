@@ -1,15 +1,17 @@
 /**
- * Today — the safe-to-spend home in the tabs' card language.
+ * Today — the safe-to-spend home and the beta's daily loop (launch guide).
  *
- * The ring and rolling number show what is left today, with today's spending
- * beneath. A quiet strip shows the next income and the bank's freshness.
- * "This cycle" breaks income into bills, goals, buffer, spending, and what is
- * left, using only the money engine's numbers: all arithmetic stays on the
- * backend. "I spent" logs a purchase with the same retry protection as before.
+ * The ring and rolling number show what is left today. Below it: yesterday's
+ * result with one tap to put an underspend toward a goal, the last seven days,
+ * and the goal. A quiet strip shows the next income and the bank's freshness,
+ * and "This cycle" shows the math behind the number, using only the money
+ * engine's figures. Over days stay calm: no red or amber, ever. "I spent" logs
+ * a purchase with the same retry protection as before.
  */
 
 import React, { useCallback, useRef, useState } from "react";
 import {
+  Alert,
   Animated,
   AppState,
   KeyboardAvoidingView,
@@ -39,8 +41,12 @@ import { Icon, type IconName } from "@/components/Icon";
 import { Colors } from "@/constants/colors";
 import { TAB_BAR_HEIGHT } from "@/constants/tokens";
 import { useUser } from "@/hooks/useAuth";
+import type { Goal } from "@/mock/goals";
+import { eventsService } from "@/services/eventsService";
+import { goalsService } from "@/services/goalsService";
 import { moneyService, type MoneySpending, type MoneyToday, type MoneyProfile } from "@/services/moneyService";
 import { MoneySetup } from "./MoneySetup";
+import { GoalBar, WeekDots, YesterdayCard } from "./TodayLoop";
 import { cycleBreakdown, type BreakdownPart } from "./breakdown";
 import { dollarsToCents, money } from "./input";
 
@@ -56,30 +62,40 @@ const dollars = (cents: number) => (cents % 100 === 0 ? wholeDollars(cents / 100
 // "2026-11-01" → "Nov 1" (parsed at local noon so the day never shifts).
 const shortDate = (isoDay: string) => new Date(`${isoDay}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
-// Static colors only: the bar's size animates, never its colors.
+// Static colors only: the bar's size animates, never its colors. Spending is a
+// calm gray: amber and red never touch the number, ring, or spending.
 const PARTS: Record<BreakdownPart["key"], { label: string; color: string }> = {
   bills: { label: "Bills set aside", color: Colors.navy300 },
   goals: { label: "Goals", color: "#00B4A6" },
   buffer: { label: "10% buffer", color: Colors.accentAlpha35 },
-  spent: { label: "Spent so far", color: Colors.amber },
+  spent: { label: "Spent so far", color: "#9AA5B8" },
   left: { label: "Left this cycle", color: Colors.gold },
 };
+
+// Oldest first: the goal from onboarding. Goals that auto-track a savings
+// account count real transfers, so a virtual move could count twice; they
+// never get "Put $X toward".
+function loopGoals(goals: Goal[]) {
+  const byAge = [...goals].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const moveGoal = byAge.find((goal) => !goal.linkedAccountId);
+  return { moveGoal, focusGoal: moveGoal ?? byAge[0] };
+}
 
 function setupRequired(error: unknown) {
   return isAxiosError(error) && error.response?.data?.error?.code === "money_setup_required";
 }
 
-function bankStatus(data: MoneyToday): { value: string; sub: string; attention: boolean } {
-  if (data.bankState === "manual") return { value: "Manual", sub: "Plan and logged spending", attention: false };
-  if (data.bankState === "reconnect_required") return { value: "Reconnect", sub: "Some spending may be missing", attention: true };
-  if (data.bankState === "stale") return { value: "Delayed", sub: "Some spending may be missing", attention: true };
-  if (!data.lastSyncAt) return { value: "Waiting", sub: "First bank update pending", attention: false };
+function bankStatus(data: MoneyToday): { value: string; sub: string } {
+  if (data.bankState === "manual") return { value: "Manual", sub: "Plan and logged spending" };
+  if (data.bankState === "reconnect_required") return { value: "Reconnect", sub: "Some spending may be missing" };
+  if (data.bankState === "stale") return { value: "Delayed", sub: "Some spending may be missing" };
+  if (!data.lastSyncAt) return { value: "Waiting", sub: "First bank update pending" };
   const synced = new Date(data.lastSyncAt);
   const sameDay = synced.toDateString() === new Date().toDateString();
   const time = synced.toLocaleString(undefined, sameDay
     ? { hour: "numeric", minute: "2-digit" }
     : { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-  return { value: "Up to date", sub: `Updated ${time}`, attention: false };
+  return { value: "Up to date", sub: `Updated ${time}` };
 }
 
 export function BetaToday() {
@@ -101,6 +117,45 @@ export function BetaToday() {
   const [actionMessage, setActionMessage] = useState("");
   const [editProfile, setEditProfile] = useState<MoneyProfile | null>(null);
   const [loadingPlan, setLoadingPlan] = useState(false);
+  const goalsQuery = useQuery({ queryKey: ["goals", user?.id, "today"], queryFn: goalsService.list, enabled: Boolean(user), staleTime: 60_000 });
+  const [moving, setMoving] = useState(false);
+  const [moveMessage, setMoveMessage] = useState("");
+  const [reported, setReported] = useState(false);
+  const scroller = useRef<ScrollView>(null);
+  const cycleY = useRef(0);
+
+  // "Put $X toward goal": the server moves exactly the amount Today showed, once.
+  const moveYesterday = async (goal: Goal, cents: number) => {
+    if (moving) return;
+    eventsService.log("goal_move_tap", { amountCents: cents });
+    setMoving(true); setMoveMessage("");
+    try {
+      await moneyService.allocateYesterday(goal.id);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await Promise.all([refetch(), client.invalidateQueries({ queryKey: ["goals"] })]);
+    } catch (error) {
+      setMoveMessage(isAxiosError(error) && error.response?.status === 409 ? "Nothing left to move from yesterday." : "Couldn't move it. Please try again.");
+      void refetch();
+    } finally { setMoving(false); }
+  };
+  // Tapping the number (or "Why $X?") shows the math behind it.
+  const showWhy = () => {
+    eventsService.log("number_tap");
+    Haptics.selectionAsync();
+    scroller.current?.scrollTo({ y: Math.max(0, cycleY.current - 12), animated: true });
+  };
+  const reportNumber = (result: TodayResult) => {
+    Alert.alert("Report today's number?", "We'll check the math behind it. Nothing in your plan changes.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Report",
+        onPress: () => {
+          eventsService.log("number_report", { date: result.inputs.date, displayDollars: result.displayDollars });
+          setReported(true);
+        },
+      },
+    ]);
+  };
 
   const recalculate = async () => {
     if (refreshBusy.current) return;
@@ -155,11 +210,15 @@ export function BetaToday() {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const showContent = Boolean(data && result && !editProfile);
+  const goals = goalsQuery.data?.goals ?? [];
+  const { moveGoal, focusGoal } = loopGoals(goals);
+  const movedGoalName = goals.find((goal) => goal.id === data?.yesterday?.goalId)?.name;
 
   return (
     <KeyboardAvoidingView style={styles.page} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <LinearGradient pointerEvents="none" colors={[Colors.accentAlpha14, Colors.accentAlpha05, "transparent"]} style={styles.glow} />
       <ScrollView
+        ref={scroller}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 20, paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 24 }]}
         refreshControl={<RefreshControl refreshing={query.isRefetching} onRefresh={() => void refetch()} tintColor={Colors.navy} />}
@@ -204,19 +263,46 @@ export function BetaToday() {
         {showContent && data && result && (
           <>
             <FadeInUp>
-              <Hero result={result} replay={replay} ringOffset={ringOffset} />
+              <Hero result={result} replay={replay} ringOffset={ringOffset} onWhy={showWhy} />
             </FadeInUp>
 
-            <FadeInUp delay={60}>
+            {data.yesterday ? (
+              <FadeInUp delay={60}>
+                <YesterdayCard
+                  yesterday={data.yesterday}
+                  goal={moveGoal}
+                  movedGoalName={movedGoalName}
+                  moving={moving}
+                  message={moveMessage}
+                  onMove={(goal, cents) => void moveYesterday(goal, cents)}
+                />
+              </FadeInUp>
+            ) : null}
+
+            {data.recentDays ? (
+              <FadeInUp delay={100}>
+                <WeekDots today={result.inputs.date} days={data.recentDays} />
+              </FadeInUp>
+            ) : null}
+
+            {focusGoal ? (
+              <FadeInUp delay={140}>
+                <GoalBar goal={focusGoal} replayKey={replay} />
+              </FadeInUp>
+            ) : null}
+
+            <FadeInUp delay={180}>
               <StatusStrip data={data} result={result} />
             </FadeInUp>
 
-            <FadeInUp delay={120} style={styles.actions}>
+            <FadeInUp delay={220} style={styles.actions}>
               {data.bankState === "reconnect_required" && (
                 <Button title="Reconnect bank" secondary onPress={() => router.push("/(tabs)/budget")} />
               )}
+              {/* The main input before a bank is linked; afterwards a quiet button for cash. */}
               <Button
                 title="I spent"
+                secondary={data.bankState !== "manual"}
                 disabled={recalculating || loadingPlan}
                 onPress={() => {
                   Haptics.selectionAsync();
@@ -244,9 +330,11 @@ export function BetaToday() {
               {!!actionMessage && <Text accessibilityRole="alert" style={styles.note}>{actionMessage}</Text>}
             </FadeInUp>
 
-            <FadeInUp delay={180}>
-              <CycleCard result={result} replay={replay} />
-            </FadeInUp>
+            <View onLayout={(event) => { cycleY.current = event.nativeEvent.layout.y; }}>
+              <FadeInUp delay={260}>
+                <CycleCard result={result} replay={replay} reported={reported} onReport={() => reportNumber(result)} />
+              </FadeInUp>
+            </View>
           </>
         )}
       </ScrollView>
@@ -291,11 +379,12 @@ export function BetaToday() {
 
 // ─── Hero ───────────────────────────────────────────────────────────────────
 
-function Hero({ result, replay, ringOffset }: { result: TodayResult; replay: number; ringOffset: Animated.AnimatedInterpolation<number> }) {
+function Hero({ result, replay, ringOffset, onWhy }: { result: TodayResult; replay: number; ringOffset: Animated.AnimatedInterpolation<number>; onWhy: () => void }) {
   const spentToday = result.inputs.spentTodayCents;
   const over = result.overCents;
+  // Over days look almost like normal days: neutral ring, "handled" copy.
   const pill: { icon: IconName; text: string } = over > 0
-    ? { icon: "alert-circle", text: `${money(over)} over today's number` }
+    ? { icon: "activity", text: `${dollars(over)} over. We'll spread it out.` }
     : spentToday > 0
       ? { icon: "receipt", text: `${money(spentToday)} spent today` }
       : spentToday < 0
@@ -304,13 +393,15 @@ function Hero({ result, replay, ringOffset }: { result: TodayResult; replay: num
 
   return (
     <View style={styles.heroWrap}>
-      <View
-        style={styles.hero}
-        accessible
+      <Pressable
+        style={({ pressed }) => [styles.hero, pressed && styles.pressed]}
+        onPress={onWhy}
+        accessibilityRole="button"
         accessibilityLabel={`${money(result.remainingCents)} safe to spend today, of ${dollars(result.morningCents)} this morning.`}
+        accessibilityHint="Shows how today's number is made"
       >
         <Svg width={RING_SIZE} height={RING_SIZE} viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`} accessible={false}>
-          <Circle cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={RING_RADIUS} stroke={Colors.accentAlpha12} strokeWidth={10} fill="none" />
+          <Circle cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={RING_RADIUS} stroke={over > 0 ? Colors.navy100 : Colors.accentAlpha12} strokeWidth={10} fill="none" />
           <AnimatedCircle
             cx={RING_SIZE / 2}
             cy={RING_SIZE / 2}
@@ -344,11 +435,15 @@ function Hero({ result, replay, ringOffset }: { result: TodayResult; replay: num
             of {dollars(result.morningCents)} this morning
           </Text>
         </View>
+      </Pressable>
+      <View style={styles.todayPill}>
+        <Icon name={pill.icon} size={13} color={Colors.navyMuted} strokeWidth={2.4} />
+        <Text style={styles.todayPillText}>{pill.text}</Text>
       </View>
-      <View style={[styles.todayPill, over > 0 && styles.todayPillOver]}>
-        <Icon name={pill.icon} size={13} color={over > 0 ? Colors.coral : Colors.navyMuted} strokeWidth={2.4} />
-        <Text style={[styles.todayPillText, over > 0 && styles.todayPillTextOver]}>{pill.text}</Text>
-      </View>
+      <Pressable accessibilityRole="button" hitSlop={8} onPress={onWhy} style={({ pressed }) => [styles.whyLink, pressed && styles.pressed]}>
+        <Text style={styles.whyText}>Why {wholeDollars(result.displayDollars)}?</Text>
+        <Icon name="chevron-down" size={14} color={Colors.navyMuted} strokeWidth={2.4} />
+      </Pressable>
     </View>
   );
 }
@@ -387,7 +482,7 @@ function StatusStrip({ data, result }: { data: MoneyToday; result: TodayResult }
         style={({ pressed }) => [styles.stripCell, pressed && styles.pressed]}
       >
         <Text style={styles.stripLabel}>Bank</Text>
-        <Text style={[styles.stripValue, bank.attention && styles.stripValueAttention]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+        <Text style={styles.stripValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
           {bank.value}
         </Text>
         <Text style={styles.stripSub}>{bank.sub}</Text>
@@ -398,7 +493,7 @@ function StatusStrip({ data, result }: { data: MoneyToday; result: TodayResult }
 
 // ─── This cycle ─────────────────────────────────────────────────────────────
 
-function CycleCard({ result, replay }: { result: TodayResult; replay: number }) {
+function CycleCard({ result, replay, reported, onReport }: { result: TodayResult; replay: number; reported: boolean; onReport: () => void }) {
   const breakdown = cycleBreakdown(result);
   const { cycle } = result.inputs;
   // The whole bar grows in from the left; its segments keep exact proportions.
@@ -407,10 +502,11 @@ function CycleCard({ result, replay }: { result: TodayResult; replay: number }) 
   const visible = breakdown.parts.filter((part) => part.cents > 0);
   const spokenParts = breakdown.parts.map((part) => `${PARTS[part.key].label} ${money(part.cents)}`).join(", ");
 
-  const explanation = result.overCents > 0
-    ? "Today ran over its starting number. Tomorrow adjusts across the days left in your cycle."
-    : breakdown.overCents > 0
-      ? `Spending is ${money(breakdown.overCents)} past this cycle's flexible money, so there's nothing safe to spend until your next income.`
+  // Calm copy for every state: handled, never punished (launch guide).
+  const explanation = breakdown.overCents > 0
+    ? "$0 until your next income. Your bills are still set aside."
+    : result.overCents > 0
+      ? `${dollars(result.overCents)} over today. We'll spread it across the days left in your cycle.`
       : `Each morning, what's left is spread over the days until your next income and rounded down to whole dollars. This morning that was ${dollars(result.morningCents)}.`;
 
   return (
@@ -449,9 +545,16 @@ function CycleCard({ result, replay }: { result: TodayResult; replay: number }) 
         })}
       </View>
 
-      <Text style={[styles.body, (result.overCents > 0 || breakdown.overCents > 0) && styles.bodyAttention]}>
-        {explanation}
-      </Text>
+      <Text style={styles.body}>{explanation}</Text>
+
+      {reported ? (
+        <Text accessibilityRole="alert" style={styles.reportDone}>Thanks. We'll check the math behind today's number.</Text>
+      ) : (
+        <Pressable accessibilityRole="button" hitSlop={8} onPress={onReport} style={({ pressed }) => [styles.reportLink, pressed && styles.pressed]}>
+          <Icon name="alert-circle" size={13} color={Colors.muted} strokeWidth={2.4} />
+          <Text style={styles.reportText}>This number looks wrong</Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -533,9 +636,9 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
   },
-  todayPillOver: { backgroundColor: "rgba(239, 68, 68, 0.08)", borderColor: "rgba(239, 68, 68, 0.25)" },
   todayPillText: { fontSize: 13, fontWeight: "700", color: Colors.navy, fontVariant: ["tabular-nums"] },
-  todayPillTextOver: { color: Colors.coral },
+  whyLink: { flexDirection: "row", alignItems: "center", gap: 4, minHeight: 32, paddingHorizontal: 10, marginTop: -4 },
+  whyText: { fontSize: 14, fontWeight: "700", color: Colors.navyMuted },
   ringSkeleton: { width: 220, height: 220, marginVertical: 20 },
   pillSkeleton: { width: 150, height: 28 },
 
@@ -552,7 +655,6 @@ const styles = StyleSheet.create({
   stripDivider: { width: StyleSheet.hairlineWidth, marginHorizontal: 8, backgroundColor: Colors.border },
   stripLabel: { marginBottom: 6, fontSize: 10, fontWeight: "700", letterSpacing: 1.1, textTransform: "uppercase", color: Colors.muted },
   stripValue: { fontSize: 20, fontWeight: "800", color: Colors.navy },
-  stripValueAttention: { color: Colors.coral },
   stripSub: { marginTop: 3, fontSize: 12, color: Colors.muted },
 
   // Actions
@@ -571,7 +673,9 @@ const styles = StyleSheet.create({
   cardEyebrow: { fontSize: 10, fontWeight: "800", letterSpacing: 1.6, color: Colors.muted },
   cardMeta: { fontSize: 12, fontWeight: "600", color: Colors.muted },
   body: { color: Colors.navyMuted, fontSize: 14, lineHeight: 21 },
-  bodyAttention: { color: Colors.coral },
+  reportLink: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", minHeight: 32 },
+  reportText: { fontSize: 13, fontWeight: "600", color: Colors.muted },
+  reportDone: { fontSize: 13, color: Colors.navyMuted },
   noticeTop: { flexDirection: "row", alignItems: "center", gap: 10 },
   noticeTile: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: Colors.navy50 },
   noticeTitle: { flex: 1, fontSize: 16, fontWeight: "800", color: Colors.navy },
@@ -610,5 +714,5 @@ const styles = StyleSheet.create({
   segmentOptionActive: { backgroundColor: Colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: Colors.border },
   segmentText: { fontSize: 14, fontWeight: "600", color: Colors.muted },
   segmentTextActive: { color: Colors.navy, fontWeight: "700" },
-  sheetError: { color: Colors.coral, fontSize: 14, lineHeight: 20 },
+  sheetError: { color: Colors.navy, fontSize: 14, fontWeight: "600", lineHeight: 20 },
 });

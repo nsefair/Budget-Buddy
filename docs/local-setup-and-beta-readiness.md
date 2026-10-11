@@ -65,12 +65,33 @@ This report replaces the older handoffs; their history remains in Git.
   strip, and a "This cycle" card. Its bar splits income into bills, goals, the
   10% buffer, spending so far, and what is left, using only engine numbers
   that add back up to income (unit-tested). The "I spent" sheet notes that cash
-  entries are never matched to bank transactions. Moving yesterday's leftover
-  to a goal stays off Today: the API moves money before showing the amount.
+  entries are never matched to bank transactions.
 - `babel.config.js` no longer routes JSX through NativeWind. The app styles
   with `StyleSheet` only, and that interop silently dropped `Pressable` style
   callbacks. NativeWind's Metro watcher can still crash Metro when files are
   added or removed; restart with `npx expo start --dev-client --lan --clear`.
+
+## Daily loop (October 11)
+
+Today now follows the launch guide's loop: the number, yesterday's result,
+the last seven days, and the goal. Over days stay calm: no red or amber on
+the number, ring, or spending, and "$9 over. We'll spread it out." copy.
+
+- `GET /money/today` adds `recentDays` (finished days of the last week that
+  have a stored morning number, oldest first) and `yesterday`. Days come from
+  `money_daily_snapshots` and the same `Spending` rule as the number, so a day
+  the app was not opened is absent, never guessed. `yesterday.movableCents`
+  uses the shared `MovableCents` rule that `/money/yesterday/allocate` now
+  uses, so "Put $14 toward Miami" always moves exactly the amount shown, once.
+- Move-to-goal is a virtual set-aside (no bank transfer). Today offers it only
+  for the oldest goal without auto-tracking, because a goal that tracks a
+  savings account would count a real transfer twice.
+- `POST /events` records the five beta events (`app_open`, `number_tap`,
+  `goal_move_tap`, `score_tap`, `number_report`) in `app_events`
+  (migration 18). Results stay a fixed read-only query, like
+  `infra/aws/view-users.py`; there is no public reading endpoint.
+- The app hides the new cards until the server sends these fields, so it is
+  safe before the next guarded API deployment, which also applies migration 18.
 
 ## Branches and dependencies
 

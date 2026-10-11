@@ -125,6 +125,10 @@ type todayResponse struct {
 	Ledger     Ledger     `json:"ledger"`
 	LastSyncAt *time.Time `json:"lastSyncAt"`
 	BankState  string     `json:"bankState"`
+	// Finished days from the last week that have a stored morning number,
+	// oldest first; days the app was not opened are absent, not guessed.
+	RecentDays []DayResult `json:"recentDays"`
+	Yesterday  *Yesterday  `json:"yesterday,omitempty"`
 }
 
 func (h *Handler) today(w http.ResponseWriter, r *http.Request) {
@@ -201,6 +205,9 @@ func (h *Handler) calculate(ctx context.Context, tx pgx.Tx, user string) (todayR
 			return out, e
 		}
 	}
+	if out.RecentDays, out.Yesterday, e = h.history(ctx, tx, user, p, c, today, out); e != nil {
+		return out, e
+	}
 	var count, unhealthy, never int
 	e = tx.QueryRow(ctx, `select count(*),count(*) filter(where status<>'active'),count(*) filter(where last_sync_at is null),min(last_sync_at) from plaid_items where user_id=$1 and archived_at is null`, user).Scan(&count, &unhealthy, &never, &out.LastSyncAt)
 	if e != nil {
@@ -217,6 +224,74 @@ func (h *Handler) calculate(ctx context.Context, tx pgx.Tx, user string) (todayR
 		}
 	}
 	return out, nil
+}
+
+// history reads the six finished days before today from their stored morning
+// numbers. Current-cycle days use the same ledger as today's number and as
+// move-to-goal, so yesterday's movable amount matches what allocate moves.
+func (h *Handler) history(ctx context.Context, tx pgx.Tx, user string, p Profile, c Cycle, today string, current todayResponse) ([]DayResult, *Yesterday, error) {
+	day, e := date(today)
+	if e != nil {
+		return nil, nil, e
+	}
+	type snapshot struct {
+		date, cycleStart string
+		morning          int64
+	}
+	rows, e := tx.Query(ctx, `select date::text,cycle_start::text,morning_cents from money_daily_snapshots where user_id=$1 and date>=$2 and date<$3 order by date`, user, day.AddDate(0, 0, -6).Format("2006-01-02"), today)
+	if e != nil {
+		return nil, nil, e
+	}
+	snapshots := []snapshot{}
+	earliest := c.Start
+	for rows.Next() {
+		var s snapshot
+		if e = rows.Scan(&s.date, &s.cycleStart, &s.morning); e != nil {
+			rows.Close()
+			return nil, nil, e
+		}
+		snapshots = append(snapshots, s)
+		earliest = min(earliest, s.cycleStart)
+	}
+	e = rows.Err()
+	rows.Close()
+	if e != nil {
+		return nil, nil, e
+	}
+	previous := current.Ledger
+	if earliest < c.Start {
+		// Days from the previous cycle need that cycle's transactions as well.
+		entries, e := loadLedger(ctx, tx, user, earliest, today)
+		if e != nil {
+			return nil, nil, e
+		}
+		previous = Reconcile(entries, p.Bills)
+	}
+	days := make([]DayResult, 0, len(snapshots))
+	var yesterday *Yesterday
+	yesterdayDate := day.AddDate(0, 0, -1).Format("2006-01-02")
+	for _, s := range snapshots {
+		ledger := current.Ledger
+		if s.cycleStart != c.Start {
+			ledger = previous
+		}
+		result := DayResultFor(ledger, s.cycleStart, s.date, s.morning)
+		days = append(days, result)
+		if s.date != yesterdayDate {
+			continue
+		}
+		yesterday = &Yesterday{DayResult: result}
+		e = tx.QueryRow(ctx, `select amount_cents,coalesce(goal_id::text,'') from money_goal_allocations where user_id=$1 and date=$2`, user, yesterdayDate).Scan(&yesterday.AllocatedCents, &yesterday.GoalID)
+		if errors.Is(e, pgx.ErrNoRows) {
+			// Same rule as allocate: only a day in the current cycle can move.
+			if s.cycleStart == c.Start {
+				yesterday.MovableCents = MovableCents(result, current.Result)
+			}
+		} else if e != nil {
+			return nil, nil, e
+		}
+	}
+	return days, yesterday, nil
 }
 
 // Classification only uses supported checking/card accounts. Transfers are excluded
@@ -377,8 +452,7 @@ func (h *Handler) allocate(w http.ResponseWriter, r *http.Request) {
 		respond.Error(w, 409, "cycle_closed", "The previous income cycle is closed.")
 		return
 	}
-	_, spent := Spending(current.Ledger, cycleStart, yesterday)
-	amount := min(max(0, morning-spent), max(0, current.Result.FlexibleBalanceCents-current.Result.Inputs.SpentTodayCents))
+	amount := MovableCents(DayResultFor(current.Ledger, cycleStart, yesterday, morning), current.Result)
 	if amount <= 0 {
 		respond.Error(w, 409, "no_underspend", "There is no unallocated underspend available.")
 		return
