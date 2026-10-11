@@ -12,7 +12,7 @@
  */
 
 import "../global.css";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useColorScheme } from "react-native";
@@ -66,7 +66,9 @@ export default function RootLayout() {
     }
   }, [fontsLoaded, isLoading]);
 
-  // Show branded splash instead of a white flash
+  // Until ready, hold the native splash frame; then the launch animation plays
+  // over the already-rendered app and removes itself.
+  const [launchVisible, setLaunchVisible] = useState(true);
   if (!fontsLoaded || isLoading) return <AppSplash />;
 
   return (
@@ -120,6 +122,7 @@ export default function RootLayout() {
             </Stack>
           </QueryProvider>
         </SafeAreaProvider>
+        {launchVisible ? <AppSplash ready onDone={() => setLaunchVisible(false)} /> : null}
       </GestureHandlerRootView>
     </ErrorBoundary>
   );
