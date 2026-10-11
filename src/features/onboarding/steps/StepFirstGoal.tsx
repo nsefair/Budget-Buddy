@@ -340,19 +340,18 @@ const styles = StyleSheet.create({
   },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: {
+    minHeight: 40,
+    justifyContent: "center",
     paddingHorizontal: 14,
-    paddingVertical: 9,
     borderRadius: 999,
-    borderWidth: 1.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
     backgroundColor: Colors.card,
   },
-  chipActive: {
-    borderColor: Colors.gold,
-    backgroundColor: Colors.accentAlpha15,
-  },
+  // Selected chips invert like the onboarding option rows.
+  chipActive: { borderColor: Colors.navy, backgroundColor: Colors.navy },
   chipText: { fontSize: 13, fontWeight: "600", color: Colors.navyMuted },
-  chipTextActive: { color: Colors.gold },
+  chipTextActive: { color: Colors.card },
 
   paceBox: {
     backgroundColor: Colors.accentAlpha08,

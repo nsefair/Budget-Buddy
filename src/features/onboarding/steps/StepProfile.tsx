@@ -7,7 +7,8 @@
  */
 
 import React from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import * as Haptics from "expo-haptics";
 import { BudBubble } from "../components/BudBubble";
 import { Headline, Subheadline } from "../components/Headline";
 import { OptionCard } from "../components/OptionCard";
@@ -63,14 +64,18 @@ export function StepProfile({
           {AGE_RANGES.map((a) => {
             const selected = ageRange === a.id;
             return (
-              <Text
+              <Pressable
                 key={a.id}
-                onPress={() => onChangeAge(a.id)}
-                suppressHighlighting
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  onChangeAge(a.id);
+                }}
                 style={[styles.chip, selected && styles.chipActive]}
               >
-                {a.label}
-              </Text>
+                <Text style={[styles.chipText, selected && styles.chipTextActive]}>{a.label}</Text>
+              </Pressable>
             );
           })}
         </View>
@@ -80,9 +85,10 @@ export function StepProfile({
       <View>
         <Text style={styles.fieldLabel}>Where are you in life right now?</Text>
         <View style={{ gap: 10 }}>
-          {SITUATIONS.map((s) => (
+          {SITUATIONS.map((s, index) => (
             <OptionCard
               key={s.id}
+              index={index}
               icon={s.icon}
               label={s.label}
               sub={s.sub}
@@ -117,20 +123,16 @@ const styles = StyleSheet.create({
   },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: {
+    minHeight: 44,
+    justifyContent: "center",
     paddingHorizontal: 16,
-    paddingVertical: 10,
     borderRadius: 999,
-    borderWidth: 1.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
     backgroundColor: Colors.card,
-    color: Colors.navyMuted,
-    fontSize: 14,
-    fontWeight: "600",
-    overflow: "hidden",
   },
-  chipActive: {
-    backgroundColor: Colors.accentAlpha15,
-    borderColor: Colors.gold,
-    color: Colors.gold,
-  },
+  // Selected chips invert like OptionCard rows.
+  chipActive: { backgroundColor: Colors.navy, borderColor: Colors.navy },
+  chipText: { fontSize: 14, fontWeight: "600", color: Colors.navyMuted },
+  chipTextActive: { color: Colors.card },
 });

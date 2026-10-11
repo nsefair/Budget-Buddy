@@ -34,9 +34,10 @@ export function StepGoals({ selected, customLabel, onToggle, onChangeCustom }: P
       </Subheadline>
 
       <View style={{ gap: 10 }}>
-        {GOAL_OPTIONS.map((g) => (
+        {GOAL_OPTIONS.map((g, index) => (
           <OptionCard
             key={g.id}
+            index={index}
             icon={g.icon}
             label={g.label}
             sub={g.sub}

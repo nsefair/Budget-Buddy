@@ -2,11 +2,11 @@
  * OnboardingShell — the consistent chrome around every onboarding step.
  *
  * Provides:
- *   • Branded gradient background
- *   • Progress dots (per-step) + current/total label
+ *   • Calm surface with a soft brand glow (matches Bud)
+ *   • Segmented progress; the current segment fills in on each step
  *   • Optional back button
  *   • Safe-area aware padding
- *   • Slide-in transition when the step index changes
+ *   • Slide-in transition that follows the direction of travel
  *
  * Each step renders its own content as children. The shell never
  * decides UI per step — it stays content-agnostic.
@@ -21,7 +21,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  useColorScheme,
   View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -29,7 +28,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { Colors } from "@/constants/colors";
 import { Icon } from "@/components/Icon";
-import { useReducedMotion } from "@/animations";
+import { GrowBar, useReducedMotion } from "@/animations";
 import { Motion } from "@/constants/tokens";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -57,21 +56,23 @@ export function OnboardingShell({
   footer,
 }: Props) {
   const insets = useSafeAreaInsets();
-  const isDark = useColorScheme() === "dark";
 
-  // Slide-in + cross-fade transition each time `step` changes — gives the
-  // conversation feel. Reduce Motion users get a static swap.
+  // Slide-in + cross-fade each time `step` changes, from the side the user is
+  // heading toward. Reduce Motion users get a static swap.
   const reducedMotion = useReducedMotion();
   const slide = useRef(new Animated.Value(0)).current;
   const fade = useRef(new Animated.Value(1)).current;
+  const previousStep = useRef(step);
 
   useEffect(() => {
+    const direction = step < previousStep.current ? -1 : 1;
+    previousStep.current = step;
     if (reducedMotion) {
       slide.setValue(0);
       fade.setValue(1);
       return;
     }
-    slide.setValue(SCREEN_WIDTH * 0.06);
+    slide.setValue(SCREEN_WIDTH * 0.08 * direction);
     fade.setValue(0);
     Animated.parallel([
       Animated.timing(slide, {
@@ -88,10 +89,12 @@ export function OnboardingShell({
   }, [step, reducedMotion, slide, fade]);
 
   return (
-    <LinearGradient
-      colors={isDark ? [Colors.navy900, Colors.navy700] : [Colors.white, Colors.greenSoft]}
-      style={{ flex: 1 }}
-    >
+    <View style={styles.page}>
+      <LinearGradient
+        pointerEvents="none"
+        colors={[Colors.accentAlpha14, Colors.accentAlpha05, "transparent"]}
+        style={styles.glow}
+      />
       {/* Top bar — back + progress */}
       <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
         <View style={styles.backSlot}>
@@ -111,7 +114,7 @@ export function OnboardingShell({
 
         {!hideProgress && (
           <View style={styles.progressWrap}>
-            <ProgressDots step={step} total={totalSteps} />
+            <ProgressSegments step={step} total={totalSteps} />
           </View>
         )}
 
@@ -154,34 +157,38 @@ export function OnboardingShell({
           </View>
         )}
       </KeyboardAvoidingView>
-    </LinearGradient>
+    </View>
   );
 }
 
-// ─── Progress dots ──────────────────────────────────────────────────────────
+// ─── Progress segments ──────────────────────────────────────────────────────
 
-function ProgressDots({ step, total }: { step: number; total: number }) {
+function ProgressSegments({ step, total }: { step: number; total: number }) {
   return (
-    <View style={styles.dots}>
-      {Array.from({ length: total }).map((_, i) => {
-        const isActive = i === step;
-        const isPast = i < step;
-        return (
-          <View
-            key={i}
-            style={[
-              styles.dot,
-              isActive && styles.dotActive,
-              isPast && styles.dotPast,
-            ]}
-          />
-        );
-      })}
+    <View
+      style={styles.segments}
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityLabel={`Step ${step + 1} of ${total}`}
+    >
+      {Array.from({ length: total }).map((_, i) => (
+        <GrowBar
+          key={i}
+          progress={i <= step ? 1 : 0}
+          color={Colors.gold}
+          trackColor={Colors.navy100}
+          height={3}
+          duration={i === step ? 520 : 0}
+          style={styles.segment}
+        />
+      ))}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  page: { flex: 1, backgroundColor: Colors.surface },
+  glow: { position: "absolute", top: 0, left: 0, right: 0, height: 380 },
   topBar: {
     flexDirection: "row",
     alignItems: "center",
@@ -201,16 +208,9 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
 
-  progressWrap: { flex: 1, alignItems: "center" },
-  dots: { flexDirection: "row", gap: 6 },
-  dot: {
-    width: 22,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: Colors.border,
-  },
-  dotActive: { backgroundColor: Colors.gold, width: 28 },
-  dotPast: { backgroundColor: Colors.accentAlpha45 },
+  progressWrap: { flex: 1, paddingHorizontal: 8 },
+  segments: { flexDirection: "row", gap: 4 },
+  segment: { flex: 1 },
 
   content: { paddingHorizontal: 24, paddingTop: 16, flexGrow: 1, zIndex: 1 },
   contentCentered: { justifyContent: "center" },
