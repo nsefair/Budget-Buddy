@@ -1,3 +1,10 @@
+/**
+ * Transactions — a month's bank history in Budget's card language: a calm
+ * glow header, rows grouped under quiet date headers, Budget's tinted
+ * category tiles, and amounts with muted cents. Month and category filters,
+ * search, and pagination behave as before.
+ */
+
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -11,47 +18,68 @@ import {
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
+import { useQuery } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 
-import { BrandHeader } from "@/components/BrandLogo";
+import { FadeInUp, Shimmer } from "@/animations";
 import { Icon } from "@/components/Icon";
 import { Colors } from "@/constants/colors";
-import type { Transaction } from "@/mock/budget";
-import { budgetService } from "@/services/budgetService";
+import { CategoryIcon } from "@/features/budget/BudgetVisuals";
+import { useUser } from "@/hooks/useAuth";
+import type { BudgetCategory, Transaction } from "@/mock/budget";
+import { BUDGET_KEYS, budgetService } from "@/services/budgetService";
 import { formatCurrency, secureLog } from "@/utils/security";
 
 const PAGE_SIZE = 30;
+const SIDE = 18;
 
-function TransactionDivider() {
-  return <View style={styles.divider} />;
-}
-
-const CATEGORY_EMOJI: Record<string, string> = {
-  food: "🍔",
-  transport: "🚗",
-  shopping: "🛍️",
-  housing: "🏠",
-  entertainment: "🎬",
-  health: "💊",
-  personal: "✂️",
-  education: "📚",
-  debt: "💳",
-};
-
-function emojiForCategory(value: string) {
-  const normalized = value.toLowerCase();
-  return CATEGORY_EMOJI[normalized] ?? "💸";
-}
+type DayGroup = { key: string; transactions: Transaction[] };
 
 function labelForMonth(month?: string) {
-  if (!month) return "All transactions";
+  if (!month) return null;
   const parsed = new Date(`${month}-01T12:00:00`);
-  if (Number.isNaN(parsed.getTime())) return "Transactions";
+  if (Number.isNaN(parsed.getTime())) return null;
   return parsed.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+}
+
+function localDayKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+// Same day boundary as the Budget calendar: the date part of the bank date.
+function dayLabel(key: string) {
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (key === localDayKey(today)) return "Today";
+  if (key === localDayKey(yesterday)) return "Yesterday";
+  const date = new Date(`${key}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return key;
+  return date.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    ...(date.getFullYear() === today.getFullYear() ? {} : { year: "numeric" }),
+  });
+}
+
+function groupByDay(transactions: Transaction[]): DayGroup[] {
+  const groups = new Map<string, Transaction[]>();
+  for (const transaction of transactions) {
+    const key = transaction.date.slice(0, 10);
+    const day = groups.get(key);
+    if (day) day.push(transaction);
+    else groups.set(key, [transaction]);
+  }
+  return [...groups.entries()]
+    .sort(([a], [b]) => (a < b ? 1 : a > b ? -1 : 0))
+    .map(([key, items]) => ({ key, transactions: items }));
 }
 
 export default function TransactionsScreen() {
   const insets = useSafeAreaInsets();
+  const user = useUser();
   const params = useLocalSearchParams<{ month?: string | string[]; category?: string | string[] }>();
   const month = Array.isArray(params.month) ? params.month[0] : params.month;
   const category = Array.isArray(params.category) ? params.category[0] : params.category;
@@ -62,6 +90,19 @@ export default function TransactionsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+
+  // Budget's categories give each row the same icon tile. Keyed by user.
+  const categories = useQuery({
+    queryKey: [...BUDGET_KEYS.all, "categories", user?.id, month ?? "current"],
+    queryFn: () => budgetService.getCategories(month),
+    enabled: Boolean(user),
+    staleTime: 1000 * 60 * 5,
+  });
+  const categoryFor = useCallback(
+    (key: string): BudgetCategory | undefined =>
+      categories.data?.find((item) => item.id === key || item.name === key),
+    [categories.data]
+  );
 
   const loadFirstPage = useCallback(async () => {
     const next = await budgetService.getTransactions({
@@ -138,56 +179,55 @@ export default function TransactionsScreen() {
       `${transaction.merchant} ${transaction.category}`.toLowerCase().includes(value)
     );
   }, [query, transactions]);
+  const groups = useMemo(() => groupByDay(filtered), [filtered]);
+
+  const monthLabel = labelForMonth(month);
+  const title = category
+    ? categoryFor(category)?.name ?? transactions[0]?.category ?? "Transactions"
+    : "Transactions";
+  const searching = Boolean(query.trim());
 
   return (
     <View style={styles.container}>
-      <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Back to budget"
-          onPress={() => {
-            Haptics.selectionAsync();
-            router.back();
-          }}
-          hitSlop={10}
-          style={styles.iconButton}
-        >
-          <Icon name="arrow-left" size={18} color={Colors.navy} strokeWidth={2.4} />
-        </Pressable>
-        <BrandHeader style={styles.brandHeader} />
-        <View style={styles.iconButtonGhost} />
-      </View>
-
       <FlatList
-        data={filtered}
-        keyExtractor={(transaction) => transaction.id}
+        data={loading ? [] : groups}
+        keyExtractor={(group) => group.key}
         contentContainerStyle={[
           styles.listContent,
           { paddingBottom: insets.bottom + 32 },
-          !loading && filtered.length === 0 ? styles.emptyListContent : null,
         ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={refresh}
-            tintColor={Colors.gold}
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={Colors.navy} />
         }
         onEndReached={loadMore}
         onEndReachedThreshold={0.35}
-        ItemSeparatorComponent={TransactionDivider}
         ListHeaderComponent={
-          <View>
-            <View style={styles.hero}>
-              <Text style={styles.eyebrow}>MONEY ACTIVITY</Text>
-              <Text style={styles.title}>All transactions</Text>
-              <Text style={styles.subtitle}>
-                {labelForMonth(month)} · {transactions.length} loaded
-              </Text>
-            </View>
-            <View style={styles.searchWrap}>
+          <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+            <LinearGradient
+              pointerEvents="none"
+              colors={[Colors.accentAlpha14, Colors.accentAlpha05, "transparent"]}
+              style={styles.glow}
+            />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Back to budget"
+              hitSlop={8}
+              onPress={() => {
+                Haptics.selectionAsync();
+                router.back();
+              }}
+              style={({ pressed }) => [styles.backBtn, pressed && styles.pressed]}
+            >
+              <Icon name="arrow-left" size={18} color={Colors.navy} strokeWidth={2.4} />
+            </Pressable>
+            <Text style={styles.eyebrow}>{(monthLabel ?? "All months").toUpperCase()}</Text>
+            <Text style={styles.title} accessibilityRole="header" maxFontSizeMultiplier={1.3}>
+              {title}
+            </Text>
+            <View style={styles.search}>
               <Icon name="search" size={17} color={Colors.muted} strokeWidth={2.4} />
               <TextInput
                 accessibilityLabel="Search transactions"
@@ -198,23 +238,38 @@ export default function TransactionsScreen() {
                 returnKeyType="search"
                 style={styles.searchInput}
               />
+              {searching ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear search"
+                  hitSlop={10}
+                  onPress={() => setQuery("")}
+                  style={styles.clearBtn}
+                >
+                  <Icon name="x" size={13} color={Colors.navyMuted} strokeWidth={2.6} />
+                </Pressable>
+              ) : null}
             </View>
           </View>
         }
         ListEmptyComponent={
           loading ? (
-            <View style={styles.stateCard}>
-              <ActivityIndicator color={Colors.gold} />
-              <Text style={styles.stateText}>Loading transactions...</Text>
-            </View>
+            <LoadingDay />
           ) : (
-            <View style={styles.stateCard}>
-              <Icon name="receipt" size={20} color={Colors.gold} strokeWidth={2.4} />
-              <Text style={styles.emptyTitle}>
-                {query.trim() ? "No matching transactions" : "No transactions yet"}
+            <View style={[styles.card, styles.stateCard]}>
+              <View style={styles.stateTile}>
+                <Icon
+                  name={searching ? "search" : "receipt"}
+                  size={18}
+                  color={Colors.navyMuted}
+                  strokeWidth={2.3}
+                />
+              </View>
+              <Text style={styles.stateTitle}>
+                {searching ? "No matching transactions" : "No transactions yet"}
               </Text>
               <Text style={styles.stateText}>
-                {query.trim()
+                {searching
                   ? "Try another merchant or category."
                   : "Transactions will appear after the next bank sync."}
               </Text>
@@ -224,152 +279,253 @@ export default function TransactionsScreen() {
         ListFooterComponent={
           loadingMore ? (
             <View style={styles.footerLoading}>
-              <ActivityIndicator size="small" color={Colors.gold} />
-              <Text style={styles.footerText}>Loading more...</Text>
+              <ActivityIndicator size="small" color={Colors.navyMuted} />
+              <Text style={styles.footerText}>Loading more…</Text>
             </View>
-          ) : !hasMore && transactions.length > 0 && !query.trim() ? (
-            <Text style={styles.endText}>You reached the end of this month.</Text>
+          ) : !hasMore && transactions.length > 0 && !searching ? (
+            <Text style={styles.endText}>
+              {monthLabel ? `That's everything for ${monthLabel}.` : "That's everything."}
+            </Text>
           ) : null
         }
-        renderItem={({ item }) => <TransactionHistoryRow transaction={item} />}
+        renderItem={({ item, index }) => (
+          <FadeInUp delay={index < 5 ? index * 60 : 0}>
+            <DayCard group={item} categoryFor={categoryFor} />
+          </FadeInUp>
+        )}
       />
     </View>
   );
 }
 
-function TransactionHistoryRow({ transaction }: { transaction: Transaction }) {
-  const date = new Date(`${transaction.date.slice(0, 10)}T12:00:00`).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
+function DayCard({
+  group,
+  categoryFor,
+}: {
+  group: DayGroup;
+  categoryFor: (key: string) => BudgetCategory | undefined;
+}) {
+  return (
+    <View style={styles.day}>
+      <Text style={styles.dayLabel} accessibilityRole="header">
+        {dayLabel(group.key)}
+      </Text>
+      <View style={styles.card}>
+        {group.transactions.map((transaction, index) => (
+          <TransactionRow
+            key={transaction.id}
+            transaction={transaction}
+            category={categoryFor(transaction.categoryId)}
+            last={index === group.transactions.length - 1}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function TransactionRow({
+  transaction,
+  category,
+  last,
+}: {
+  transaction: Transaction;
+  category?: BudgetCategory;
+  last: boolean;
+}) {
+  // Spending is positive in the ledger; money in is negative.
+  const incoming = transaction.amount < 0;
+  const meta = [
+    transaction.category,
+    transaction.isPending ? "Pending" : "",
+    transaction.isRecurring ? "Recurring" : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
-    <View style={styles.row}>
-      <View style={styles.rowIcon}>
-        <Text style={styles.rowEmoji}>{emojiForCategory(transaction.categoryId)}</Text>
+    <>
+      <View
+        style={styles.row}
+        accessible
+        accessibilityLabel={`${transaction.merchant}, ${meta}, ${incoming ? "plus" : "minus"} ${formatCurrency(Math.abs(transaction.amount))}`}
+      >
+        <CategoryIcon category={category} incoming={incoming} size={38} />
+        {/* Two lines each so large text wraps instead of clipping names. */}
+        <View style={styles.rowCopy}>
+          <Text style={styles.merchant} numberOfLines={2}>
+            {transaction.merchant}
+          </Text>
+          <Text style={styles.meta} numberOfLines={2}>
+            {meta}
+          </Text>
+        </View>
+        <Amount value={-transaction.amount} incoming={incoming} />
       </View>
-      <View style={styles.rowCopy}>
-        <Text style={styles.rowMerchant} numberOfLines={1}>
-          {transaction.merchant}
-        </Text>
-        <Text style={styles.rowMeta} numberOfLines={1}>
-          {transaction.category} · {date}
-          {transaction.isPending ? " · Pending" : ""}
-          {transaction.isRecurring ? " · Recurring" : ""}
-        </Text>
+      {last ? null : <View style={styles.divider} />}
+    </>
+  );
+}
+
+// Cents sit quieter than dollars, as in Budget's hero numbers. The amount
+// grows with Dynamic Type only so far, leaving the merchant room to read.
+function Amount({ value, incoming }: { value: number; incoming: boolean }) {
+  const text = formatCurrency(value, { sign: true });
+  const match = /^(.*)(\.\d{2})$/.exec(text);
+  return (
+    <Text style={[styles.amount, incoming && styles.amountIncoming]} maxFontSizeMultiplier={1.4}>
+      {match ? match[1] : text}
+      {match ? (
+        <Text style={incoming ? styles.centsIncoming : styles.cents}>{match[2]}</Text>
+      ) : null}
+    </Text>
+  );
+}
+
+function LoadingDay() {
+  return (
+    <View style={styles.day} accessibilityLabel="Loading transactions">
+      <Shimmer style={styles.dayLabelSkeleton} radius={5} />
+      <View style={styles.card}>
+        {[0, 1, 2, 3].map((index) => (
+          <View key={index} style={styles.row}>
+            <Shimmer style={styles.tileSkeleton} radius={19} />
+            <View style={styles.rowCopy}>
+              <Shimmer style={styles.lineSkeleton} radius={6} />
+              <Shimmer style={styles.lineSkeletonShort} radius={6} />
+            </View>
+          </View>
+        ))}
       </View>
-      <Text style={styles.rowAmount}>
-        {formatCurrency(-transaction.amount, { sign: true })}
-      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.surface },
-  topBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-  },
-  brandHeader: { marginBottom: 0 },
-  iconButton: {
+  listContent: { paddingHorizontal: SIDE },
+  pressed: { opacity: 0.7 },
+
+  // Header — the tabs' calm glow with back, month, and title.
+  header: { paddingBottom: 8 },
+  glow: { position: "absolute", top: 0, left: -SIDE, right: -SIDE, height: 360 },
+  backBtn: {
     width: 38,
     height: 38,
+    borderRadius: 19,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 999,
-    backgroundColor: Colors.navy50,
+    marginBottom: 20,
+    backgroundColor: Colors.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
   },
-  iconButtonGhost: { width: 38, height: 38 },
-  listContent: { paddingHorizontal: 18 },
-  emptyListContent: { flexGrow: 1 },
-  hero: { paddingTop: 16, paddingBottom: 18 },
-  eyebrow: {
-    fontSize: 11,
-    fontWeight: "900",
-    color: Colors.gold,
-    letterSpacing: 1.4,
-  },
+  eyebrow: { fontSize: 10, fontWeight: "800", letterSpacing: 1.6, color: Colors.muted },
   title: {
-    marginTop: 6,
-    fontSize: 28,
-    fontWeight: "900",
+    marginTop: 4,
+    fontSize: 34,
+    lineHeight: 40,
+    fontWeight: "800",
+    letterSpacing: -0.8,
     color: Colors.navy,
-    letterSpacing: -0.3,
   },
-  subtitle: {
-    marginTop: 6,
-    fontSize: 12,
-    fontWeight: "700",
-    color: Colors.navyMuted,
-  },
-  searchWrap: {
-    minHeight: 50,
+  search: {
+    minHeight: 48,
     flexDirection: "row",
     alignItems: "center",
     gap: 9,
-    marginBottom: 12,
+    marginTop: 16,
     paddingHorizontal: 14,
-    borderRadius: 15,
+    borderRadius: 16,
     backgroundColor: Colors.card,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
   },
   searchInput: {
     flex: 1,
     paddingVertical: 12,
-    fontSize: 14,
-    fontWeight: "700",
+    fontSize: 15,
+    fontWeight: "600",
     color: Colors.navy,
   },
+  clearBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.navy50,
+  },
+
+  // Day groups
+  day: { marginTop: 18 },
+  dayLabel: {
+    marginBottom: 8,
+    marginLeft: 4,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1.4,
+    textTransform: "uppercase",
+    color: Colors.muted,
+  },
+  card: {
+    borderRadius: 22,
+    backgroundColor: Colors.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
+  },
   row: {
-    minHeight: 68,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    paddingVertical: 10,
+    minHeight: 64,
+    paddingHorizontal: 16,
+    paddingVertical: 11,
   },
-  rowIcon: {
-    width: 38,
-    height: 38,
+  rowCopy: { flex: 1, minWidth: 0 },
+  merchant: { fontSize: 15, fontWeight: "700", color: Colors.navy },
+  meta: { marginTop: 2, fontSize: 12, fontWeight: "500", color: Colors.muted },
+  amount: {
+    flexShrink: 0,
+    marginLeft: 8,
+    fontSize: 15,
+    fontWeight: "700",
+    color: Colors.navy,
+    fontVariant: ["tabular-nums"],
+  },
+  amountIncoming: { color: Colors.emerald },
+  cents: { color: Colors.muted, fontWeight: "600" },
+  centsIncoming: { color: `${Colors.emerald}B3`, fontWeight: "600" },
+  // Hairlines start under the text, like grouped iOS lists.
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: 16 + 38 + 12,
+    backgroundColor: Colors.border,
+  },
+
+  // States
+  stateCard: { alignItems: "center", gap: 8, marginTop: 18, paddingVertical: 28, paddingHorizontal: 20 },
+  stateTile: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 12,
+    marginBottom: 4,
     backgroundColor: Colors.navy50,
   },
-  rowEmoji: { fontSize: 18, lineHeight: 22 },
-  rowCopy: { flex: 1, minWidth: 0 },
-  rowMerchant: { fontSize: 14, fontWeight: "800", color: Colors.navy },
-  rowMeta: {
-    marginTop: 3,
-    fontSize: 11,
-    fontWeight: "600",
-    color: Colors.muted,
-  },
-  rowAmount: { flexShrink: 0, marginLeft: 10, fontSize: 14, fontWeight: "800", color: Colors.navy },
-  divider: { height: 1, backgroundColor: Colors.border },
-  stateCard: {
-    minHeight: 170,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 9,
-    padding: 20,
-    borderRadius: 18,
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  emptyTitle: { fontSize: 15, fontWeight: "900", color: Colors.navy },
+  stateTitle: { fontSize: 16, fontWeight: "800", color: Colors.navy },
   stateText: {
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "500",
     color: Colors.navyMuted,
     textAlign: "center",
-    lineHeight: 18,
   },
+  dayLabelSkeleton: { width: 90, height: 10, marginBottom: 10, marginLeft: 4 },
+  tileSkeleton: { width: 38, height: 38 },
+  lineSkeleton: { width: "60%", height: 12 },
+  lineSkeletonShort: { width: "35%", height: 10, marginTop: 8 },
   footerLoading: {
     flexDirection: "row",
     alignItems: "center",
@@ -377,12 +533,12 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 20,
   },
-  footerText: { fontSize: 11, fontWeight: "700", color: Colors.navyMuted },
+  footerText: { fontSize: 12, fontWeight: "600", color: Colors.navyMuted },
   endText: {
-    paddingVertical: 20,
+    paddingVertical: 22,
     textAlign: "center",
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "600",
     color: Colors.muted,
   },
 });

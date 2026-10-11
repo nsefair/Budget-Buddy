@@ -57,6 +57,10 @@ This report replaces the older handoffs; their history remains in Git.
   (the Budget figure; the stored `netWorth` field is never written), live
   financial health out of 500 and quest XP, and a confirmation before sign-out.
   Streak and level stay hidden until the backend advances them.
+- Transactions group rows by day with Budget's category tiles and muted cents.
+  There are no per-day totals, because raw rows would not match Budget's
+  spending rules. Goal detail rolls in the saved amount, shows milestones, and
+  keeps edit and delete as quiet rows.
 - `babel.config.js` no longer routes JSX through NativeWind. The app styles
   with `StyleSheet` only, and that interop silently dropped `Pressable` style
   callbacks. NativeWind's Metro watcher can still crash Metro when files are
