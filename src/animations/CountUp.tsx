@@ -32,6 +32,8 @@ interface CountUpProps {
   fit?: boolean;
   /** Style for a trailing two-digit decimal part, e.g. muted cents. */
   centsStyle?: StyleProp<TextStyle>;
+  /** Cap Dynamic Type growth when the number sits inside a fixed shape. */
+  maxFontSizeMultiplier?: number;
 }
 
 const defaultFormat = (n: number) => Math.round(n).toString();
@@ -50,6 +52,7 @@ export function CountUp({
   replayKey,
   fit = false,
   centsStyle,
+  maxFontSizeMultiplier,
 }: CountUpProps) {
   const reduced = useReducedMotion();
 
@@ -111,6 +114,7 @@ export function CountUp({
       numberOfLines={fit ? 1 : undefined}
       adjustsFontSizeToFit={fit}
       minimumFontScale={fit ? 0.45 : undefined}
+      maxFontSizeMultiplier={maxFontSizeMultiplier}
     >
       {centsStyle ? <SplitCents text={display} centsStyle={centsStyle} /> : display}
     </Text>

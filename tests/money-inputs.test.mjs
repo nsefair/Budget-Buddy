@@ -17,6 +17,33 @@ test('arrival validates real calendar dates and rejects passed or distant payday
     assert.equal(isFutureDate(input, '2026-10-04'), false, input);
   }
 });
+test('cycle breakdown adds back up to income and reports overspend exactly', async () => {
+  const { cycleBreakdown } = await import('../src/features/money/breakdown.ts');
+  const result = (spentBeforeTodayCents, spentTodayCents, allocatedGoalCents = 1_000) => {
+    const cycle = { incomeCents: 380_000, billsCents: 120_000, plannedGoalCents: 20_000 };
+    const bufferCents = 38_000;
+    const flexibleBalanceCents = cycle.incomeCents - cycle.billsCents - cycle.plannedGoalCents
+      - bufferCents - allocatedGoalCents - spentBeforeTodayCents;
+    return { inputs: { cycle, spentBeforeTodayCents, spentTodayCents, allocatedGoalCents }, bufferCents, flexibleBalanceCents };
+  };
+  const cents = (breakdown) => Object.fromEntries(breakdown.parts.map((part) => [part.key, part.cents]));
+
+  const normal = cycleBreakdown(result(50_000, 2_500));
+  assert.deepEqual(cents(normal), { bills: 120_000, goals: 21_000, buffer: 38_000, spent: 52_500, left: 148_500 });
+  assert.equal(normal.totalCents, 380_000);
+  assert.equal(normal.overCents, 0);
+
+  // A refund today adds back to what is left; the parts still equal income.
+  const refund = cycleBreakdown(result(50_000, -1_500));
+  assert.equal(cents(refund).spent, 48_500);
+  assert.equal(refund.totalCents, 380_000);
+
+  // Spending past the flexible money: nothing left, and the overspend is exact.
+  const over = cycleBreakdown(result(195_000, 8_000));
+  assert.equal(cents(over).left, 0);
+  assert.equal(over.overCents, 2_000);
+  assert.equal(over.totalCents, 382_000);
+});
 test('compact currency steps up to millions and billions without "1000K"', async () => {
   const { formatCurrency } = await import('../src/utils/security.ts');
   const compact = (value) => formatCurrency(value, { compact: true });
