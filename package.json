@@ -48,8 +48,8 @@
     "lucide-react-native": "^1.14.0",
     "moti": "^0.30.0",
     "nativewind": "^4.2.3",
-    "react": "19.2.3",
-    "react-dom": "19.2.3",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "react-native": "0.86.3",
     "react-native-gesture-handler": "~2.32.0",
     "react-native-plaid-link-sdk": "^12.8.2",
@@ -62,7 +62,7 @@
     "zustand": "^5.0.13"
   },
   "devDependencies": {
-    "@types/react": "~19.2.0",
+    "@types/react": "~19.3.0",
     "typescript": "~6.0.3"
   },
   "overrides": {
